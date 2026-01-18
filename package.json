@@ -12,9 +12,11 @@
     "zip:firefox": "wxt zip -b firefox",
     "postinstall": "wxt prepare",
     "test": "vitest",
+    "test:e2e": "playwright test",
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@sveltejs/vite-plugin-svelte": "5.1.1",
     "@wxt-dev/module-svelte": "2.0.4",
     "happy-dom": "^20.3.1",

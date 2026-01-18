@@ -23,6 +23,8 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+playwright-report/
+test-results/
 
 # Environment
 .env
