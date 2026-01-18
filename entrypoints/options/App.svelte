@@ -158,7 +158,9 @@
           <label class="toggle-row">
             <div class="toggle-content">
               <span class="toggle-label">Enable on all sites</span>
-              <span class="toggle-description">Activate video speed control globally</span>
+              <span class="toggle-description"
+                >Activate video speed control globally</span
+              >
             </div>
             <div class="toggle-switch">
               <input
@@ -173,7 +175,9 @@
           <label class="toggle-row">
             <div class="toggle-content">
               <span class="toggle-label">Include audio-only media</span>
-              <span class="toggle-description">Control audio elements in addition to video</span>
+              <span class="toggle-description"
+                >Control audio elements in addition to video</span
+              >
             </div>
             <div class="toggle-switch">
               <input
@@ -188,7 +192,9 @@
           <label class="toggle-row">
             <div class="toggle-content">
               <span class="toggle-label">Start with controller hidden</span>
-              <span class="toggle-description">Hide controller by default on page load</span>
+              <span class="toggle-description"
+                >Hide controller by default on page load</span
+              >
             </div>
             <div class="toggle-switch">
               <input
@@ -210,7 +216,9 @@
           <div class="slider-row">
             <div class="slider-label-group">
               <label for="opacity">Controller opacity</label>
-              <span class="slider-description">Transparency when not hovering</span>
+              <span class="slider-description"
+                >Transparency when not hovering</span
+              >
             </div>
             <div class="slider-control">
               <input
@@ -222,7 +230,9 @@
                 value={settings.controllerOpacity}
                 oninput={handleOpacityChange}
               />
-              <span class="slider-value">{settings.controllerOpacity.toFixed(1)}</span>
+              <span class="slider-value"
+                >{settings.controllerOpacity.toFixed(1)}</span
+              >
             </div>
           </div>
 
@@ -241,7 +251,8 @@
                 value={settings.controllerButtonSize}
                 oninput={handleSizeChange}
               />
-              <span class="slider-value">{settings.controllerButtonSize}px</span>
+              <span class="slider-value">{settings.controllerButtonSize}px</span
+              >
             </div>
           </div>
         </section>
@@ -271,7 +282,8 @@
 
       {#if conflictWarning}
         <div class="conflict-warning">
-          <strong>Warning:</strong> {MESSAGES.SETTINGS_CONFLICT}
+          <strong>Warning:</strong>
+          {MESSAGES.SETTINGS_CONFLICT}
         </div>
       {/if}
 
@@ -298,18 +310,36 @@
 </div>
 
 <style>
+  :global(html),
   :global(body) {
     margin: 0;
     padding: 0;
+    background: #1a1a1a;
+    min-height: 100%;
+  }
+
+  /* Fixed background to cover full viewport without causing growth loop */
+  :global(body)::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     background: linear-gradient(165deg, #1e1e1e 0%, #1a1a1a 100%);
-    min-height: 100vh;
+    z-index: -1;
   }
 
   .options {
     max-width: 1000px;
     margin: 0 auto;
     padding: 32px 24px 100px;
-    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family:
+      "DM Sans",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
     color: #f0f0f0;
   }
 
@@ -554,7 +584,7 @@
   .slider-value {
     min-width: 45px;
     text-align: right;
-    font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
     font-variant-numeric: tabular-nums;
     font-size: 14px;
     font-weight: 600;
