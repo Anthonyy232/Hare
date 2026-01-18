@@ -1,5 +1,6 @@
 import { OBSERVER } from './constants';
 import { getShadowRoot } from './shadow-dom';
+import { BrowserFeatures } from './browser-detect';
 
 type MediaFoundCallback = (media: HTMLMediaElement) => void;
 type MediaRemovedCallback = (media: HTMLMediaElement) => void;
@@ -13,7 +14,7 @@ export class ObserverPool {
   private observer: MutationObserver;
   private pendingMutations: MutationRecord[] = [];
   private flushScheduled = false;
-  private flushTimeoutId: number | null = null;
+  private flushTimeoutId: number | NodeJS.Timeout | null = null;
   private observedShadowRoots = new WeakSet<ShadowRoot>();
   private trackedMedia = new WeakSet<HTMLMediaElement>();
   private onMediaFound: MediaFoundCallback;
@@ -45,10 +46,10 @@ export class ObserverPool {
 
   disconnect(): void {
     if (this.flushTimeoutId !== null) {
-      if (typeof cancelIdleCallback === 'function') {
-        cancelIdleCallback(this.flushTimeoutId);
+      if (BrowserFeatures.hasRequestIdleCallback) {
+        cancelIdleCallback(this.flushTimeoutId as number);
       } else {
-        clearTimeout(this.flushTimeoutId);
+        clearTimeout(this.flushTimeoutId as NodeJS.Timeout);
       }
       this.flushTimeoutId = null;
     }
@@ -65,11 +66,12 @@ export class ObserverPool {
 
     if (!this.flushScheduled) {
       this.flushScheduled = true;
-      // Prefer requestIdleCallback to avoid interfering with high-priority UI tasks.
-      if (typeof requestIdleCallback === 'function') {
+      // requestIdleCallback added in Firefox 55+ (2017), Safari 13+ (2019)
+      // Fallback to setTimeout for older browsers
+      if (BrowserFeatures.hasRequestIdleCallback) {
         this.flushTimeoutId = requestIdleCallback(() => this.flush(), { timeout: OBSERVER.IDLE_TIMEOUT_MS });
       } else {
-        this.flushTimeoutId = setTimeout(() => this.flush(), OBSERVER.DEBOUNCE_MS) as unknown as number;
+        this.flushTimeoutId = setTimeout(() => this.flush(), OBSERVER.DEBOUNCE_MS);
       }
     }
   }

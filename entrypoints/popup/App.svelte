@@ -53,8 +53,17 @@
       return (await browser.tabs.sendMessage(tabId, message, {
         frameId,
       })) as StatusResponse;
-    } catch {
-      // Frame may not have content script (e.g., cross-origin, about:blank)
+    } catch (error) {
+      // Expected: Frame without content script (cross-origin, sandboxed, about:blank)
+      if (
+        error instanceof Error &&
+        (error.message.includes("Could not establish connection") ||
+          error.message.includes("Receiving end does not exist"))
+      ) {
+        return null; // Expected error
+      }
+      // Unexpected error - log for debugging
+      logger.warn("Unexpected error querying frame:", frameId, error);
       return null;
     }
   }

@@ -7,12 +7,16 @@
 import { logger } from './logger';
 
 /**
- * Retrieves the shadow root of an element, including closed shadow roots when
- * the extension API is available.
+ * Get shadow root (including closed shadow roots) with cross-browser support
  *
- * - Chrome 88+: `chrome.dom.openOrClosedShadowRoot()`
- * - Firefox: `browser.dom.openOrClosedShadowRoot()` (via WXT's `browser` global)
- * - Fallback: `element.shadowRoot` (open shadows only)
+ * Fallback chain:
+ * 1. Chrome extension API: chrome.dom.openOrClosedShadowRoot()
+ * 2. Firefox extension API: browser.dom.openOrClosedShadowRoot()
+ * 3. Firefox element property: element.openOrClosedShadowRoot
+ * 4. Standard API (open shadows only): element.shadowRoot
+ *
+ * @param element - Element to get shadow root from
+ * @returns ShadowRoot if found, null otherwise
  */
 export function getShadowRoot(element: Element): ShadowRoot | null {
     // Try Chrome API (globalThis.chrome is provided by extension environment)

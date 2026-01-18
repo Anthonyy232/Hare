@@ -105,7 +105,7 @@ Hare/
 
 - **Framework**: WXT (Web eXtension Tooling)
 - **UI**: Svelte 5
-- **Language**: TypeScrip
+- **Language**: TypeScript
 - **Manifest**: V3
 
 ### Build
