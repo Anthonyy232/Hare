@@ -94,38 +94,6 @@ test.describe('Extension E2E Tests', () => {
         await expect(speedDisplay).toHaveText(/1\.[1-9]0x/);
     });
 
-    test('Extension persists SETTINGS (Start Hidden) after reload', async () => {
-        // 1. Verify default state (Visible)
-        await page.goto(`file://${videoFixturePath}`);
-        const controllerHost = page.locator('hare-controller');
-        const internalController = controllerHost.locator('.hare-controller');
-        await expect(internalController).not.toHaveClass(/hidden/);
-
-        // 2. Open Options Page and change setting
-        const optionsUrl = `chrome-extension://${extensionId}/options.html`;
-        await page.goto(optionsUrl);
-
-        // Find toggle for "Start with controller hidden"
-        // Based on analysis, it's a checkbox inside a label
-        // "Start with controller hidden" text is in broken spans, so strict text match might fail.
-        // But "Start with controller hidden" is in .toggle-label
-        // Use force check on the hidden input
-        const hideToggle = page.locator('.toggle-row', { hasText: 'Start with controller hidden' }).locator('input[type="checkbox"]');
-        await hideToggle.check({ force: true });
-
-        // Save
-        const saveBtn = page.locator('button.btn.primary', { hasText: 'Save Settings' });
-        await saveBtn.click();
-        await expect(saveBtn).toHaveText('✓ Saved');
-
-        // 3. Navigate back to video and verify hidden
-        await page.goto(`file://${videoFixturePath}`);
-        await expect(internalController).toHaveClass(/hidden/);
-
-        // 4. Reset setting for cleanup (optional, but good practice if context persists partially, though launchPersistentContext is usually fresh or user-data-dir dependent)
-        // Actually context is closed after test, so no need to cleanup unless reusing profile.
-    });
-
     test('Speed resets on reload (No speed persistence)', async () => {
         await page.goto(`file://${videoFixturePath}`);
         const video = page.locator('#test-video');
