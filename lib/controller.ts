@@ -186,7 +186,16 @@ export class VideoController {
     this.wrapper.id = this.id;
 
     this.shadow = this.wrapper.attachShadow({ mode: 'open' });
-    this.shadow.adoptedStyleSheets = [getStyleSheet()];
+
+    // Firefox content scripts may throw "Accessing from Xray wrapper" on adoptedStyleSheets
+    try {
+      this.shadow.adoptedStyleSheets = [getStyleSheet()];
+    } catch {
+      // Fallback: inject styles via <style> tag (Firefox compatibility)
+      const styleEl = document.createElement('style');
+      styleEl.textContent = controllerCSS;
+      this.shadow.appendChild(styleEl);
+    }
 
     this.controllerEl = document.createElement('div');
     this.controllerEl.className = 'hare-controller';

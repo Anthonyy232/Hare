@@ -41,6 +41,14 @@ export function getShadowRoot(element: Element): ShadowRoot | null {
         }
     }
 
+    // Firefox also exposes this as a direct property on elements (available in content scripts)
+    const elementWithFirefoxAPI = element as Element & {
+        openOrClosedShadowRoot?: ShadowRoot | null;
+    };
+    if ('openOrClosedShadowRoot' in element) {
+        return elementWithFirefoxAPI.openOrClosedShadowRoot ?? null;
+    }
+
     // Standard fallback for open shadow roots
     return element.shadowRoot;
 }
