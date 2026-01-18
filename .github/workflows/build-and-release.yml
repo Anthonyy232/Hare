@@ -96,32 +96,19 @@ jobs:
         run: npx wxt zip -b ${{ matrix.browser }} --mv3
         continue-on-error: ${{ matrix.browser == 'safari' }}
 
-      - name: Prepare artifacts
+      - name: Prepare loadable artifact
         id: prepare
         shell: bash
         run: |
-          # Find the extension folder (handling -mv2 or -mv3)
+          # Find the extension folder (handling different manifest versions)
           EXT_DIR=$(find .output -maxdepth 1 -type d -name "${{ matrix.browser }}-mv*" | head -n 1)
           echo "ext_dir=$EXT_DIR" >> $GITHUB_OUTPUT
-          
-          # Find the extension zip (excluding sources)
-          ZIP_FILE=$(ls .output/hare-*-${{ matrix.browser }}.zip | grep -v "sources" | head -n 1)
-          cp "$ZIP_FILE" "${{ matrix.browser }}-release.zip"
-          echo "zip_file=${{ matrix.browser }}-release.zip" >> $GITHUB_OUTPUT
 
-      - name: Upload loadable folder (Manual Test)
+      - name: Upload ${{ matrix.browser }} extension
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.browser }}-extension-v${{ steps.version.outputs.version }}
           path: ${{ steps.prepare.outputs.ext_dir }}/
-          if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
-          retention-days: 30
-
-      - name: Upload extension zip (Release Asset)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.browser }}-release-v${{ steps.version.outputs.version }}
-          path: ${{ steps.prepare.outputs.zip_file }}
           if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
           retention-days: 30
 
@@ -139,17 +126,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download release artifacts
+      - name: Download extension artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts/
-          pattern: '*-release-v*'
+          pattern: '*-extension-v*'
           merge-multiple: true
 
       - name: Create Draft Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*.zip
+          files: artifacts/**/*
           draft: true
           generate_release_notes: true
         env:
