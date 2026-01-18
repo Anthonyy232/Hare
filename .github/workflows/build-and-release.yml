@@ -96,18 +96,11 @@ jobs:
         run: npx wxt zip -b ${{ matrix.browser }}
         continue-on-error: ${{ matrix.browser == 'safari' }}
 
-      - name: Debug - List output directory
-        run: |
-          echo "Contents of .output directory:"
-          ls -la .output/ || echo ".output directory not found"
-          echo "Searching for zip files:"
-          find .output -name "*.zip" -type f || echo "No zip files found"
-
       - name: Upload ${{ matrix.browser }} extension artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.browser }}-extension-v${{ steps.version.outputs.version }}
-          path: .output/*.zip
+          path: .output/hare-*.zip
           if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
           retention-days: 30
 
