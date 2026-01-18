@@ -19,5 +19,10 @@ export default defineConfig({
         38: 'icons/icon38.png',
       },
     },
+    browser_specific_settings: {
+      gecko: {
+        id: 'hare@anthonyy232.github.io',
+      },
+    },
   },
 });
