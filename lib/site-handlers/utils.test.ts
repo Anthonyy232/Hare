@@ -6,12 +6,15 @@ describe('matchesDomains', () => {
     const originalLocation = window.location;
 
     beforeEach(() => {
-        // @ts-ignore - Happy-DOM allows rewriting location
+        // Mock window.location for testing
+        // @ts-expect-error - Happy-DOM allows rewriting location
         delete window.location;
-        window.location = { hostname: '' } as Location;
+        // @ts-expect-error - Partial Location mock for testing
+        window.location = { hostname: '' };
     });
 
     afterEach(() => {
+        // @ts-expect-error - Restoring original location
         window.location = originalLocation;
     });
 

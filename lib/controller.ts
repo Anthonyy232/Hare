@@ -3,6 +3,7 @@ import type { Settings, SiteHandler, ControllerPosition } from './types';
 import controllerCSS from '../assets/controller.css?raw';
 import { logger } from './logger';
 import { MESSAGES } from './messages';
+import { BrowserFeatures } from './browser-detect';
 
 let sharedStyleSheet: CSSStyleSheet | null = null;
 
@@ -187,11 +188,13 @@ export class VideoController {
 
     this.shadow = this.wrapper.attachShadow({ mode: 'open' });
 
-    // Firefox content scripts may throw "Accessing from Xray wrapper" on adoptedStyleSheets
+    // Firefox content scripts throw "Accessing from Xray wrapper" when setting adoptedStyleSheets
+    // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1411641
+    // Workaround: Fall back to <style> tag injection
     try {
       this.shadow.adoptedStyleSheets = [getStyleSheet()];
-    } catch {
-      // Fallback: inject styles via <style> tag (Firefox compatibility)
+    } catch (error) {
+      logger.debug('adoptedStyleSheets not available, using <style> fallback:', error);
       const styleEl = document.createElement('style');
       styleEl.textContent = controllerCSS;
       this.shadow.appendChild(styleEl);
@@ -215,7 +218,7 @@ export class VideoController {
     this.speedDisplay.setAttribute('aria-label', 'Current playback speed');
     this.speedDisplay.setAttribute('tabindex', '0');
 
-    if ('PointerEvent' in window) {
+    if (BrowserFeatures.hasPointerEvents) {
       this.speedDisplay.addEventListener('pointerdown', this.handleDragStart as EventListener);
     } else {
       this.speedDisplay.addEventListener('mousedown', this.handleDragStart as EventListener);
@@ -362,6 +365,12 @@ export class VideoController {
     const parent = this.wrapper?.parentElement;
     if (!parent) return;
 
+    // ResizeObserver not available in older Safari/mobile browsers
+    if (!BrowserFeatures.hasResizeObserver) {
+      logger.debug('ResizeObserver not available - controller position may not adjust on resize');
+      return;
+    }
+
     try {
       this.resizeObserver = new ResizeObserver(() => {
         if (this.resizeDebounceTimeout) {
@@ -375,7 +384,7 @@ export class VideoController {
       });
       this.resizeObserver.observe(parent);
     } catch (error) {
-      console.warn('[Hare] ResizeObserver failed:', error);
+      logger.warn('ResizeObserver failed:', error);
     }
   }
 
@@ -679,7 +688,7 @@ export class VideoController {
     this.media.removeEventListener('ratechange', this.handleRateChange, { capture: true });
     this.media.removeEventListener('play', this.handlePlay);
 
-    if ('PointerEvent' in window) {
+    if (BrowserFeatures.hasPointerEvents) {
       this.speedDisplay?.removeEventListener('pointerdown', this.handleDragStart as EventListener);
     } else {
       this.speedDisplay?.removeEventListener('mousedown', this.handleDragStart as EventListener);

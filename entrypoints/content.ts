@@ -8,6 +8,7 @@ import type { Settings, SiteHandler, StatusResponse, HareMessage } from '../lib/
 import { CLEANUP } from '../lib/constants';
 import type { Browser } from 'wxt/browser';
 import { logger } from '../lib/logger';
+import { isTopFrame } from '../lib/browser-detect';
 
 /**
  * Tracks event listeners for cleanup without preventing garbage collection of the media element.
@@ -26,11 +27,12 @@ export default defineContentScript({
     const controllers = new Map<HTMLMediaElement, VideoController>();
 
     let settings = await loadSettings();
+
     logger.debug('Content script initialized', {
       enabled: settings.enabled,
       hostname: location.hostname,
       isBlacklisted: isBlacklisted(settings.blacklist, location.hostname),
-      isTopFrame: window === window.top
+      isTopFrame: isTopFrame()
     });
 
     let siteHandler: SiteHandler | null = null;
@@ -135,7 +137,8 @@ export default defineContentScript({
       isActive = true;
       siteHandler = getSiteHandler();
 
-      if (window === window.top) {
+      // Keybindings only work in top frame to avoid duplicate execution
+      if (isTopFrame()) {
         keybindHandler = createKeybindHandler(
           () => [...controllers.values()],
           () => settings
