@@ -1,0 +1,31 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Primary Blue Gradient (Based on #2596be) -->
+    <linearGradient id="globalWarm" x1="0" y1="0" x2="512" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2596be" />
+      <stop offset="50%" stop-color="#48cae4" />
+      <stop offset="100%" stop-color="#2596be" />
+    </linearGradient>
+
+    <!-- Deep Contrast Gradient (Darker Tones of #2596be) -->
+    <linearGradient id="globalCool" x1="0" y1="0" x2="512" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1a6b8a" />
+      <stop offset="50%" stop-color="#0d3545" />
+      <stop offset="100%" stop-color="#1a6b8a" />
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(16, 31) scale(1.5)">
+    
+    <!-- First Arrow -->
+    <path d="M 0,0 C 60,80 120,130 180,150 L 110,150 C 70,130 40,80 0,0 Z" fill="url(#globalWarm)" />
+    <path d="M 0,300 C 60,220 120,170 180,150 L 110,150 C 70,170 40,220 0,300 Z" fill="url(#globalCool)" />
+
+    <!-- Second Arrow -->
+    <g transform="translate(140, 0)">
+        <path d="M 0,0 C 60,80 120,130 180,150 L 110,150 C 70,130 40,80 0,0 Z" fill="url(#globalWarm)" />
+        <path d="M 0,300 C 60,220 120,170 180,150 L 110,150 C 70,170 40,220 0,300 Z" fill="url(#globalCool)" />
+    </g>
+    
+  </g>
+</svg>

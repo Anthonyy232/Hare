@@ -1,0 +1,204 @@
+:host {
+  all: initial;
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: var(--hare-z-index, 2147483647);
+  font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  pointer-events: auto !important;
+  touch-action: none;
+  width: fit-content;
+  height: fit-content;
+}
+
+.hare-controller {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: rgba(26, 26, 26, 0.85);
+  backdrop-filter: blur(12px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: #f0f0f0;
+  font-size: var(--hare-font-size, 14px);
+  font-weight: 500;
+  pointer-events: auto !important;
+  user-select: none;
+  opacity: var(--hare-opacity, 0.3);
+  transition: opacity 0.15s ease, backdrop-filter 0.15s ease, border-color 0.15s ease;
+  /** Performance optimization for frequently updated elements. */
+  contain: layout style paint;
+}
+
+.hare-controller:hover {
+  opacity: 1;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.hare-controller.dragging {
+  opacity: 1 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.6),
+              0 8px 24px rgba(0, 0, 0, 0.6),
+              0 0 32px rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.6);
+  cursor: grabbing;
+}
+
+.hare-controller.hidden {
+  display: none;
+}
+
+.hare-speed {
+  min-width: 3.5em;
+  text-align: center;
+  cursor: grab;
+  padding: 2px 6px;
+  touch-action: none;
+  font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hare-speed:active,
+.dragging .hare-speed {
+  cursor: grabbing;
+}
+
+.hare-controls {
+  display: none;
+  gap: 2px;
+  align-items: center;
+  /** Decouple button size from its own font-size to ensure consistency. */
+  --hare-btn-size: 2em;
+}
+
+.hare-controller:hover .hare-controls {
+  display: flex;
+}
+
+.hare-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /** Relative sizing based on controller font size, stored in variable. */
+  width: var(--hare-btn-size);
+  height: var(--hare-btn-size);
+  padding: 0;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  background: rgba(40, 40, 40, 0.6);
+  color: #f0f0f0;
+  font-size: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.hare-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.hare-btn:active {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+.hare-btn:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.8);
+  outline-offset: 2px;
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.hare-speed:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.8);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.hare-btn svg {
+  width: 1.1em;
+  height: 1.1em;
+  pointer-events: none;
+}
+
+.hare-btn svg,
+.hare-btn svg * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hare-btn-hide {
+  opacity: 0.8;
+}
+
+/**
+ * Centered OSD feedback with technical readout styling.
+ * Rationale: `position: fixed` ensures centering relative to the viewport/player
+ * unless a containing transform is present on a parent.
+ */
+.hare-osd {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 24px 48px;
+  background: linear-gradient(165deg, rgba(30, 30, 30, 0.95) 0%, rgba(26, 26, 26, 0.95) 100%);
+  backdrop-filter: blur(16px) saturate(1.3);
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  border-radius: 8px;
+  color: #f0f0f0;
+  font-size: 56px;
+  font-weight: 700;
+  font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  z-index: 999999;
+  opacity: 0;
+  transition: opacity 0.2s ease,
+              transform 0.2s ease;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15),
+              0 8px 32px rgba(0, 0, 0, 0.7),
+              0 0 64px rgba(59, 130, 246, 0.2);
+}
+
+.hare-osd::before,
+.hare-osd::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(59, 130, 246, 0.8);
+}
+
+/* Top-left corner bracket */
+.hare-osd::before {
+  top: -2px;
+  left: -2px;
+  border-right: none;
+  border-bottom: none;
+}
+
+/* Bottom-right corner bracket */
+.hare-osd::after {
+  bottom: -2px;
+  right: -2px;
+  border-left: none;
+  border-top: none;
+}
+
+.hare-osd.show {
+  opacity: 1;
+}
+
+/** Specific override for Amazon SDK. */
+.atvwebplayersdk-video-surface .hare-controller {
+  height: 0;
+}
