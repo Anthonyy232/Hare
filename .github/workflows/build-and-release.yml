@@ -93,28 +93,35 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build and zip ${{ matrix.browser }} extension
-        run: npx wxt zip -b ${{ matrix.browser }}
+        run: npx wxt zip -b ${{ matrix.browser }} --mv3
         continue-on-error: ${{ matrix.browser == 'safari' }}
+
+      - name: Prepare artifacts
+        id: prepare
+        shell: bash
+        run: |
+          # Find the extension folder (handling -mv2 or -mv3)
+          EXT_DIR=$(find .output -maxdepth 1 -type d -name "${{ matrix.browser }}-mv*" | head -n 1)
+          echo "ext_dir=$EXT_DIR" >> $GITHUB_OUTPUT
+          
+          # Find the extension zip (excluding sources)
+          ZIP_FILE=$(ls .output/hare-*-${{ matrix.browser }}.zip | grep -v "sources" | head -n 1)
+          cp "$ZIP_FILE" "${{ matrix.browser }}-release.zip"
+          echo "zip_file=${{ matrix.browser }}-release.zip" >> $GITHUB_OUTPUT
 
       - name: Upload loadable folder (Manual Test)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.browser }}-extension-v${{ steps.version.outputs.version }}
-          path: .output/${{ matrix.browser }}-mv3/
+          path: ${{ steps.prepare.outputs.ext_dir }}/
           if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
           retention-days: 30
-
-      - name: Prepare extension zip for release
-        shell: bash
-        run: |
-          ZIP_FILE=$(ls .output/hare-*-${{ matrix.browser }}.zip | grep -v "sources" | head -n 1)
-          cp "$ZIP_FILE" "${{ matrix.browser }}-release.zip"
 
       - name: Upload extension zip (Release Asset)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.browser }}-release-v${{ steps.version.outputs.version }}
-          path: ${{ matrix.browser }}-release.zip
+          path: ${{ steps.prepare.outputs.zip_file }}
           if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
           retention-days: 30
 
