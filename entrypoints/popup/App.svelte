@@ -234,6 +234,8 @@
 
   .popup {
     width: 320px;
+    max-height: 600px;
+    overflow-y: auto;
     font-family:
       "DM Sans",
       -apple-system,
@@ -243,7 +245,9 @@
     background: linear-gradient(165deg, #1e1e1e 0%, #1a1a1a 100%);
     color: #f0f0f0;
     position: relative;
-    overflow: hidden;
+    /* Hide scrollbar but allow scrolling */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
   }
 
   .popup::before {
