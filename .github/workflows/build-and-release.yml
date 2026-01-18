@@ -1,21 +1,22 @@
 # ===================================================================
 # Hare Browser Extension CI/CD Pipeline
 #
-# Automates the building and release process for the Hare browser extension.
+# Automates testing, building, and releasing the Hare browser extension.
 #
 # Workflow Architecture:
-#   1. Build: Compiles extensions for Chrome, Firefox, and Safari
-#   2. Release: Creates a draft GitHub Release with extension artifacts
+#   1. Test: Runs unit tests to validate code quality
+#   2. Build: Compiles extensions for Chrome, Firefox, and Safari in parallel
+#   3. Release: Creates a draft GitHub Release with extension artifacts
 #
 # Triggering Conditions:
 #   - On push to `main`:
-#     - Executes the `build` job
+#     - Executes `test` and `build` jobs
 #     - Produces versioned build artifacts
 #   - On push of a tag (e.g., `v1.0.0`):
-#     - Executes `build` and `release` jobs
+#     - Executes `test`, `build`, and `release` jobs
 #     - Creates a formal draft release with all browser extensions
 #   - On pull requests to `main`:
-#     - Executes only the `build` job to validate changes
+#     - Executes `test` and `build` jobs to validate changes
 # ===================================================================
 
 name: Build & Release
@@ -29,16 +30,46 @@ on:
 
 jobs:
   # ===================================================================
-  # JOB: build
+  # JOB: test
   #
-  # Compiles and packages browser extensions for Chrome, Firefox, and Safari.
-  # Produces ZIP artifacts for distribution.
+  # Runs unit tests to ensure code quality before building.
   # ===================================================================
-  build:
-    name: Build Browser Extensions
+  test:
+    name: Run Unit Tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository source code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  # ===================================================================
+  # JOB: build
+  #
+  # Compiles and packages browser extensions using a matrix strategy.
+  # Each browser builds in parallel on its own runner, preventing
+  # artifact conflicts and improving performance.
+  # ===================================================================
+  build:
+    name: Build ${{ matrix.browser }} Extension
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox, safari]
+    steps:
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Node.js
@@ -51,7 +82,6 @@ jobs:
         run: npm ci
 
       - name: Get version
-        # Determines version for artifact naming from git tag or package.json
         id: version
         shell: bash
         run: |
@@ -62,45 +92,16 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build Chrome extension
-        run: |
-          npm run build
-          npm run zip
+      - name: Build and zip ${{ matrix.browser }} extension
+        run: npx wxt zip -b ${{ matrix.browser }}
+        continue-on-error: ${{ matrix.browser == 'safari' }}
 
-      - name: Build Firefox extension
-        run: |
-          npm run build:firefox
-          npm run zip:firefox
-
-      - name: Build Safari extension
-        # Safari builds may require additional setup, continue on error
-        run: |
-          npx wxt build -b safari
-          npx wxt zip -b safari
-        continue-on-error: true
-
-      - name: Upload Chrome extension artifact
+      - name: Upload ${{ matrix.browser }} extension artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chrome-extension-v${{ steps.version.outputs.version }}
+          name: ${{ matrix.browser }}-extension-v${{ steps.version.outputs.version }}
           path: .output/*.zip
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload Firefox extension artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: firefox-extension-v${{ steps.version.outputs.version }}
-          path: .output/*-firefox.zip
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload Safari extension artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: safari-extension-v${{ steps.version.outputs.version }}
-          path: .output/*-safari.zip
-          if-no-files-found: ignore
+          if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
           retention-days: 30
 
   # ===================================================================
@@ -127,8 +128,7 @@ jobs:
       - name: Create Draft Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/*.zip
+          files: artifacts/*.zip
           draft: true
           generate_release_notes: true
         env:
