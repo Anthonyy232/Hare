@@ -26,6 +26,13 @@ export default defineContentScript({
     const controllers = new Map<HTMLMediaElement, VideoController>();
 
     let settings = await loadSettings();
+    logger.debug('Content script initialized', {
+      enabled: settings.enabled,
+      hostname: location.hostname,
+      isBlacklisted: isBlacklisted(settings.blacklist, location.hostname),
+      isTopFrame: window === window.top
+    });
+
     let siteHandler: SiteHandler | null = null;
     let observerPool: ObserverPool | null = null;
     let keybindHandler: KeybindHandler | null = null;
@@ -71,6 +78,11 @@ export default defineContentScript({
 
       const controller = new VideoController(media, settings, siteHandler);
       controllers.set(media, controller);
+      logger.debug('Controller created for media element', {
+        tagName: media.tagName,
+        src: media.src || media.currentSrc,
+        totalControllers: controllers.size
+      });
 
       const loadstartHandler = () => {
         if (controllers.has(media) && !isValidMedia(media)) {
@@ -133,6 +145,10 @@ export default defineContentScript({
       observerPool = new ObserverPool(handleMediaFound, handleMediaRemoved, settings.enableAudio);
 
       const existingMedia = findAllMedia(document, settings.enableAudio);
+      logger.debug('Initial media scan complete', {
+        foundCount: existingMedia.length,
+        siteHandler: siteHandler?.constructor.name || 'none'
+      });
       for (const media of existingMedia) {
         handleMediaFound(media);
       }
