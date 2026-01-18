@@ -30,6 +30,7 @@
 
   /**
    * Dispatches commands to the content script of the currently active tab.
+   * Sends to all frames and aggregates results for GET_STATUS.
    */
   async function sendMessage(message: HareMessage): Promise<unknown> {
     const [tab] = await browser.tabs.query({
@@ -40,11 +41,80 @@
     return browser.tabs.sendMessage(tab.id, message);
   }
 
+  /**
+   * Sends a message to a specific frame within a tab.
+   */
+  async function sendToFrame(
+    tabId: number,
+    frameId: number,
+    message: HareMessage,
+  ): Promise<StatusResponse | null> {
+    try {
+      return (await browser.tabs.sendMessage(tabId, message, {
+        frameId,
+      })) as StatusResponse;
+    } catch {
+      // Frame may not have content script (e.g., cross-origin, about:blank)
+      return null;
+    }
+  }
+
+  /**
+   * Aggregates status from all frames in the active tab.
+   * Videos can be in iframes (common on YouTube), so querying only the top frame
+   * would miss them and show 0 detected.
+   */
   async function loadStatus() {
     try {
       loading = true;
       error = null;
-      status = (await sendMessage({ type: "GET_STATUS" })) as StatusResponse;
+
+      const [tab] = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+
+      if (!tab?.id) {
+        throw new Error(MESSAGES.NO_ACTIVE_TAB);
+      }
+
+      // Get all frames in the tab
+      const frames = await browser.webNavigation.getAllFrames({
+        tabId: tab.id,
+      });
+      if (!frames || frames.length === 0) {
+        throw new Error(MESSAGES.NO_VIDEOS_FOUND);
+      }
+
+      // Query all frames in parallel
+      const responses = await Promise.all(
+        frames.map((frame) =>
+          sendToFrame(tab.id!, frame.frameId, { type: "GET_STATUS" }),
+        ),
+      );
+
+      // Aggregate results from all frames
+      let totalVideoCount = 0;
+      let latestSpeed: number = SPEED.DEFAULT;
+      let hasAnyVideos = false;
+
+      for (const response of responses) {
+        if (response && response.videoCount > 0) {
+          totalVideoCount += response.videoCount;
+          latestSpeed = response.currentSpeed;
+          hasAnyVideos = true;
+        }
+      }
+
+      if (!hasAnyVideos) {
+        throw new Error(MESSAGES.NO_VIDEOS_FOUND);
+      }
+
+      status = {
+        hasVideos: true,
+        currentSpeed: latestSpeed,
+        videoCount: totalVideoCount,
+      };
     } catch (e) {
       error = MESSAGES.NO_VIDEOS_FOUND;
       status = null;
@@ -97,7 +167,9 @@
       {#if status}
         <div class="status-indicator">
           <div class="status-dot"></div>
-          <span class="status-text">{MESSAGES.VIDEO_COUNT(status.videoCount)}</span>
+          <span class="status-text"
+            >{MESSAGES.VIDEO_COUNT(status.videoCount)}</span
+          >
         </div>
       {/if}
     </div>
@@ -153,7 +225,12 @@
 
   .popup {
     width: 320px;
-    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family:
+      "DM Sans",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
     background: linear-gradient(165deg, #1e1e1e 0%, #1a1a1a 100%);
     color: #f0f0f0;
     position: relative;
@@ -161,14 +238,16 @@
   }
 
   .popup::before {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-image:
-      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    background-image: linear-gradient(
+        rgba(255, 255, 255, 0.02) 1px,
+        transparent 1px
+      ),
       linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
     background-size: 20px 20px;
     pointer-events: none;
@@ -225,7 +304,8 @@
   }
 
   @keyframes statusPulse {
-    0%, 100% {
+    0%,
+    100% {
       opacity: 1;
       transform: scale(1);
     }
@@ -282,7 +362,7 @@
   .speed-display {
     font-size: 48px;
     font-weight: 700;
-    font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
     font-variant-numeric: tabular-nums;
     color: #f0f0f0;
     line-height: 1;
@@ -312,7 +392,9 @@
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
