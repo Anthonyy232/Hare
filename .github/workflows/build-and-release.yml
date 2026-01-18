@@ -104,11 +104,17 @@ jobs:
           if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
           retention-days: 30
 
+      - name: Prepare extension zip for release
+        shell: bash
+        run: |
+          ZIP_FILE=$(ls .output/hare-*-${{ matrix.browser }}.zip | grep -v "sources" | head -n 1)
+          cp "$ZIP_FILE" "${{ matrix.browser }}-release.zip"
+
       - name: Upload extension zip (Release Asset)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.browser }}-release-v${{ steps.version.outputs.version }}
-          path: .output/hare-*-${{ matrix.browser }}.zip
+          path: ${{ matrix.browser }}-release.zip
           if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
           retention-days: 30
 
