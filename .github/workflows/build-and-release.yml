@@ -100,7 +100,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.browser }}-extension-v${{ steps.version.outputs.version }}
-          path: .output/*.zip
+          path: .output/**/*.zip
           if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
           retention-days: 30
 
