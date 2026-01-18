@@ -96,17 +96,19 @@ jobs:
         run: npx wxt zip -b ${{ matrix.browser }}
         continue-on-error: ${{ matrix.browser == 'safari' }}
 
-      - name: Prepare artifact for upload
-        run: |
-          mkdir -p artifacts
-          cp .output/*.zip artifacts/ 2>/dev/null || true
-          ls -la artifacts/
-
-      - name: Upload ${{ matrix.browser }} extension artifact
+      - name: Upload loadable folder (Manual Test)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.browser }}-extension-v${{ steps.version.outputs.version }}
-          path: artifacts/
+          path: .output/${{ matrix.browser }}-mv3/
+          if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
+          retention-days: 30
+
+      - name: Upload extension zip (Release Asset)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.browser }}-release-v${{ steps.version.outputs.version }}
+          path: .output/hare-*-${{ matrix.browser }}.zip
           if-no-files-found: ${{ matrix.browser == 'safari' && 'ignore' || 'error' }}
           retention-days: 30
 
@@ -124,11 +126,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download all extension artifacts
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts/
-          pattern: '*-extension-v*'
+          pattern: '*-release-v*'
           merge-multiple: true
 
       - name: Create Draft Release
