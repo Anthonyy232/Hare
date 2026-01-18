@@ -5,7 +5,6 @@ export default defineConfig({
   manifest: {
     name: 'Hare',
     description: 'Control HTML5 video/audio playback speed with keyboard shortcuts',
-    version: '1.0.0',
     permissions: ['storage'],
     host_permissions: ['http://*/*', 'https://*/*', 'file:///*'],
     icons: {
