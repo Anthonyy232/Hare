@@ -7,5 +7,10 @@ export default defineConfig({
         alias: {
             '#imports': path.resolve(__dirname, './tests/__mocks__/wxt-imports.ts'),
         },
+        exclude: [
+            '**/node_modules/**',
+            '**/dist/**',
+            '**/e2e/**', // Exclude Playwright E2E tests
+        ],
     },
 });
