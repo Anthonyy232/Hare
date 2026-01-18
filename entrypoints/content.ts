@@ -87,10 +87,16 @@ export default defineContentScript({
       });
 
       const loadstartHandler = () => {
-        if (controllers.has(media) && !isValidMedia(media)) {
+        const controller = controllers.get(media);
+
+        if (controller && !isValidMedia(media)) {
           handleMediaRemoved(media);
-        } else if (!controllers.has(media) && isValidMedia(media)) {
+        } else if (!controller && isValidMedia(media)) {
           handleMediaFound(media);
+        } else if (controller && isValidMedia(media)) {
+          // Media source changed but element is reused (common on SPAs like YouTube)
+          // Sync the display to reflect the new video's playback rate
+          controller.updateSpeedDisplay();
         }
       };
       media.addEventListener('loadstart', loadstartHandler);

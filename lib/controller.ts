@@ -389,7 +389,9 @@ export class VideoController {
   }
 
   /**
-   * Calculates valid move boundaries, accounting for boundary padding.
+   * Calculates valid move boundaries for all four borders (top, left, right, bottom).
+   * Uses the collapsed controller size to ensure consistent boundary detection
+   * regardless of whether the controls are currently expanded or hidden.
    */
   private getClampedBounds(): { minX: number; maxX: number; minY: number; maxY: number } | null {
     if (!this.wrapper || !this.controllerEl) return null;
@@ -410,20 +412,30 @@ export class VideoController {
 
     if (parentWidth === 0 || parentHeight === 0) return null;
 
-    // Measure collapsed size for accurate boundary checks when controls are hidden.
+    // Measure collapsed size for accurate boundary checks.
+    // This ensures all borders (top, left, right, bottom) use the same reference dimensions,
+    // preventing the controller from moving out of bounds when controls are hidden.
     const controlsEl = this.controllerEl.querySelector('.hare-controls') as HTMLElement | null;
     if (controlsEl) controlsEl.style.display = 'none';
 
     const controllerRect = this.controllerEl.getBoundingClientRect();
+    const collapsedWidth = controllerRect.width;
+    const collapsedHeight = controllerRect.height;
+
     if (controlsEl) controlsEl.style.display = '';
 
     const padding = CONTROLLER.BOUNDARY_PADDING;
 
+    // All four boundaries use the collapsed dimensions for consistency:
+    // - Left border (minX): padding from left edge
+    // - Right border (maxX): parent width minus collapsed width minus padding
+    // - Top border (minY): padding from top edge
+    // - Bottom border (maxY): parent height minus collapsed height minus padding
     return {
       minX: padding,
-      maxX: Math.max(padding, parentWidth - controllerRect.width - padding),
+      maxX: Math.max(padding, parentWidth - collapsedWidth - padding),
       minY: padding,
-      maxY: Math.max(padding, parentHeight - controllerRect.height - padding),
+      maxY: Math.max(padding, parentHeight - collapsedHeight - padding),
     };
   }
 
@@ -560,7 +572,7 @@ export class VideoController {
     window.removeEventListener('blur', this.handleDragEnd);
   }
 
-  private updateSpeedDisplay(): void {
+  updateSpeedDisplay(): void {
     if (this.speedDisplay) {
       this.speedDisplay.textContent = this.formatSpeed(this.media.playbackRate);
     }
