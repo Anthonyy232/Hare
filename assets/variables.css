@@ -1,0 +1,76 @@
+/**
+ * Hare Design System
+ * Design Philosophy: "Precision Media Control"
+ *
+ * Aesthetic inspired by professional media control interfaces
+ * and high-end video editing software.
+ */
+
+:root {
+  /* ===== Color Palette ===== */
+
+  /* Backgrounds & Surfaces */
+  --hare-gray-950: #1a1a1a;
+  --hare-gray-900: #1e1e1e;
+  --hare-gray-800: #282828;
+  --hare-gray-700: #333333;
+  --hare-gray-600: #3d3d3d;
+
+  /* Blue Accents */
+  --hare-accent-600: #2563eb;
+  --hare-accent-500: #3b82f6;
+  --hare-accent-400: #60a5fa;
+  --hare-accent-300: #93c5fd;
+
+  /* Semantic Colors */
+  --hare-green-500: #10b981;
+  --hare-red-500: #ef4444;
+
+  /* Text */
+  --hare-text-primary: #f0f0f0;
+  --hare-text-secondary: #999999;
+  --hare-text-muted: #666666;
+
+  /* ===== Typography ===== */
+
+  /* UI Text Font Stack */
+  --hare-font-ui: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Technical/Monospace Font Stack */
+  --hare-font-mono: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', monospace;
+
+  /* ===== Spacing Scale ===== */
+  --hare-space-1: 4px;
+  --hare-space-2: 8px;
+  --hare-space-3: 12px;
+  --hare-space-4: 16px;
+  --hare-space-5: 20px;
+  --hare-space-6: 24px;
+  --hare-space-8: 32px;
+  --hare-space-10: 40px;
+  --hare-space-12: 48px;
+
+  /* ===== Border Radius ===== */
+  --hare-radius-sm: 2px;
+  --hare-radius-md: 4px;
+  --hare-radius-lg: 6px;
+
+  /* ===== Transitions ===== */
+  --hare-transition-fast: 0.1s ease;
+  --hare-transition-base: 0.15s ease;
+  --hare-transition-slow: 0.3s ease;
+
+  /* Elastic easing for playful moments */
+  --hare-easing-elastic: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+  /* ===== Shadows ===== */
+  --hare-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --hare-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --hare-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --hare-shadow-glow: 0 0 32px rgba(59, 130, 246, 0.15);
+
+  /* Blue glow effect */
+  --hare-glow-blue: 0 0 0 2px rgba(59, 130, 246, 0.6),
+                     0 8px 24px rgba(0, 0, 0, 0.6),
+                     0 0 32px rgba(59, 130, 246, 0.15);
+}

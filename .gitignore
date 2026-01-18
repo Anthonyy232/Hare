@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# WXT outputs
+.wxt/
+.output/
+dist/
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.zip
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# Agent files
+.claude/
+.agent/
+CLAUDE*.md
+.AGENT.md
+local/
