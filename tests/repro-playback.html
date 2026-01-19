@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hare Playback Repro</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .log { background: #f0f0f0; padding: 10px; max-height: 200px; overflow-y: auto; border: 1px solid #ccc; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Playback Issues Reproduction</h1>
+    <p>This page simulates a "hostile" video player environment.</p>
+    
+    <video id="video" controls width="640" height="360" src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"></video>
+    
+    <div class="controls">
+        <label>
+            <input type="checkbox" id="blockKeys" checked> Block Key Events (Document Capture)
+        </label>
+        <br>
+        <label>
+            <input type="checkbox" id="resetSpeed" checked> Reset Speed on Change
+        </label>
+        <br>
+        <label>
+            <input type="checkbox" id="pauseOnSpeed" checked> Pause on Speed Change
+        </label>
+    </div>
+
+    <div id="log" class="log"></div>
+
+    <script>
+        const video = document.getElementById('video');
+        const logEl = document.getElementById('log');
+        
+        function log(msg) {
+            const div = document.createElement('div');
+            div.textContent = `${new Date().toLocaleTimeString()} - ${msg}`;
+            logEl.prepend(div);
+            console.log(msg);
+        }
+
+        // Hostile 1: Block keys at document level (capture phase)
+        document.addEventListener('keydown', (e) => {
+            if (document.getElementById('blockKeys').checked) {
+                log(`[Hostile] Keydown captured on document: ${e.code}. Stopping propagation.`);
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true);
+
+        // Hostile 2: Reset speed
+        video.addEventListener('ratechange', (e) => {
+            if (document.getElementById('resetSpeed').checked && video.playbackRate !== 1) {
+                log(`[Hostile] Speed change detected: ${video.playbackRate}. Resetting to 1.`);
+                // video.playbackRate = 1; // This causes infinite loops without care
+                // Let's simulate a "delayed" reset to be realistic
+                // setTimeout(() => video.playbackRate = 1, 10);
+            }
+        });
+
+        // Hostile 3: Pause on speed change
+        video.addEventListener('ratechange', (e) => {
+            if (document.getElementById('pauseOnSpeed').checked && video.playbackRate !== 1 && !video.paused) {
+                log(`[Hostile] Speed change detected. Pausing video.`);
+                video.pause();
+            }
+        });
+
+        // Log events
+        video.addEventListener('play', () => log('Video Play'));
+        video.addEventListener('pause', () => log('Video Pause'));
+        video.addEventListener('seeked', () => log(`Video Seeked to ${video.currentTime}`));
+        video.addEventListener('ratechange', () => log(`Video PlaybackRate: ${video.playbackRate}`));
+    </script>
+</body>
+</html>
