@@ -74,6 +74,11 @@ export class VideoController {
   private lastEnforcementTime = 0;
   private static readonly ENFORCEMENT_DEBOUNCE_MS = 500;
 
+  // Pause Recovery: detects if the site forces a pause after we change speed
+  private lastSpeedSetTime = 0;
+  private static readonly PAUSE_RECOVERY_WINDOW_MS = 300;
+  private isRecoveringFromPause = false;
+
   constructor(
     media: HTMLMediaElement,
     settings: Settings,
@@ -111,6 +116,7 @@ export class VideoController {
 
     this.media.addEventListener('ratechange', this.handleRateChange, { capture: true });
     this.media.addEventListener('play', this.handlePlay);
+    this.media.addEventListener('pause', this.handlePause);
 
     if (this.media.playbackRate !== SPEED.DEFAULT) {
       this.updateSpeedDisplay();
@@ -479,6 +485,30 @@ export class VideoController {
     }
   };
 
+  private handlePause = (): void => {
+    // If the video pauses shortly after we set the speed, it's likely a site restriction.
+    const now = Date.now();
+    if (
+      this.lastSpeedSetTime > 0 &&
+      now - this.lastSpeedSetTime < VideoController.PAUSE_RECOVERY_WINDOW_MS
+    ) {
+      if (!this.isRecoveringFromPause) {
+        logger.debug('Detected potential forced pause after speed change. Attempting recovery...');
+        this.isRecoveringFromPause = true;
+
+        // Brief delay to let the site's logic finish before we resume
+        setTimeout(() => {
+          this.media.play()
+            .catch(e => logger.warn('Failed to recover from forced pause:', e))
+            .finally(() => {
+              // Reset flag after a moment to allow legitimate pauses again
+              setTimeout(() => this.isRecoveringFromPause = false, 500);
+            });
+        }, 50);
+      }
+    }
+  };
+
   private handleDragStart = (e: MouseEvent | PointerEvent): void => {
     if (!this.wrapper) return;
 
@@ -588,6 +618,8 @@ export class VideoController {
 
     this.targetSpeed = roundedSpeed;
     this.isEnforcingSpeed = roundedSpeed !== SPEED.DEFAULT;
+    this.lastSpeedSetTime = Date.now();
+
     const previousSpeed = this.media.playbackRate;
     this.media.playbackRate = roundedSpeed;
 
@@ -649,7 +681,17 @@ export class VideoController {
     if (this.media.readyState < SEEK.MIN_READY_STATE) return;
 
     try {
-      this.media.currentTime += seconds;
+      const targetTime = this.media.currentTime + seconds;
+
+      // Use fastSeek if available (mostly Firefox) for better performance/reliability on streams
+      // Type assertion needed as fastSeek might not be in the standard TS lib definitions yet
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ('fastSeek' in this.media && typeof (this.media as any).fastSeek === 'function') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (this.media as any).fastSeek(targetTime);
+      } else {
+        this.media.currentTime = targetTime;
+      }
     } catch (error) {
       logger.error('Seek failed:', error);
     }
@@ -699,6 +741,7 @@ export class VideoController {
 
     this.media.removeEventListener('ratechange', this.handleRateChange, { capture: true });
     this.media.removeEventListener('play', this.handlePlay);
+    this.media.removeEventListener('pause', this.handlePause);
 
     if (BrowserFeatures.hasPointerEvents) {
       this.speedDisplay?.removeEventListener('pointerdown', this.handleDragStart as EventListener);

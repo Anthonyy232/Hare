@@ -69,6 +69,8 @@ export function createKeybindHandler(
 ): KeybindHandler {
   const handleKeyDown = (event: KeyboardEvent): void => {
     const target = event.target;
+    // Allow typing in inputs unless it's a modifier-only event or special case? 
+    // No, standard behavior is to ignore inputs.
     if (!target || !(target instanceof Element) || isInputElement(target)) return;
 
     // Ignore commands with active system modifiers.
@@ -83,21 +85,33 @@ export function createKeybindHandler(
     const binding = findBinding(event, settings.keyBindings);
     if (!binding) return;
 
+    // Execute our action
     executeAction(binding.action, binding, controllers);
 
+    // If forced, blocking the site from seeing this event
     if (binding.force) {
       event.preventDefault();
-      event.stopPropagation();
+      event.stopImmediatePropagation();
+    } else {
+      // Even if not forced, we might want to prevent default browser behaviors 
+      // (like scrolling for space/arrows) if we handled it?
+      // For now, adhere to "force" setting for side-effects, 
+      // but "rewind/advance" on arrow keys usually requires prevention to stop scrolling.
+      // However, making that assumption might annoy users who map non-standard keys.
+      // Let's stick to the "force" flag as the source of truth for suppression.
     }
   };
 
-  /** Use capture phase to intercept keys before site-specific listeners. */
-  document.addEventListener('keydown', handleKeyDown, true);
+  /** 
+   * Use capture phase on WINDOW to intercept keys before ANY site scripts. 
+   * This ensures we see the event even if the site stops propagation on document/body.
+   */
+  window.addEventListener('keydown', handleKeyDown, { capture: true });
 
   return {
     handleKeyDown,
     destroy: () => {
-      document.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
     },
   };
 }
