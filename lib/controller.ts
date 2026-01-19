@@ -4,6 +4,7 @@ import controllerCSS from '../assets/controller.css?raw';
 import { logger } from './logger';
 import { MESSAGES } from './messages';
 import { BrowserFeatures } from './browser-detect';
+import { safeMedia } from './safe-media';
 
 let sharedStyleSheet: CSSStyleSheet | null = null;
 
@@ -118,7 +119,7 @@ export class VideoController {
     this.media.addEventListener('play', this.handlePlay);
     this.media.addEventListener('pause', this.handlePause);
 
-    if (this.media.playbackRate !== SPEED.DEFAULT) {
+    if (safeMedia.getPlaybackRate(this.media) !== SPEED.DEFAULT) {
       this.updateSpeedDisplay();
     }
 
@@ -218,7 +219,7 @@ export class VideoController {
 
     this.speedDisplay = document.createElement('span');
     this.speedDisplay.className = 'hare-speed';
-    this.speedDisplay.textContent = this.formatSpeed(this.media.playbackRate);
+    this.speedDisplay.textContent = this.formatSpeed(safeMedia.getPlaybackRate(this.media));
     this.speedDisplay.setAttribute('role', 'status');
     this.speedDisplay.setAttribute('aria-live', 'polite');
     this.speedDisplay.setAttribute('aria-label', 'Current playback speed');
@@ -498,7 +499,7 @@ export class VideoController {
 
         // Brief delay to let the site's logic finish before we resume
         setTimeout(() => {
-          this.media.play()
+          safeMedia.play(this.media)
             .catch(e => logger.warn('Failed to recover from forced pause:', e))
             .finally(() => {
               // Reset flag after a moment to allow legitimate pauses again
@@ -604,7 +605,7 @@ export class VideoController {
 
   updateSpeedDisplay(): void {
     if (this.speedDisplay) {
-      this.speedDisplay.textContent = this.formatSpeed(this.media.playbackRate);
+      this.speedDisplay.textContent = this.formatSpeed(safeMedia.getPlaybackRate(this.media));
     }
   }
 
@@ -620,11 +621,11 @@ export class VideoController {
     this.isEnforcingSpeed = roundedSpeed !== SPEED.DEFAULT;
     this.lastSpeedSetTime = Date.now();
 
-    const previousSpeed = this.media.playbackRate;
-    this.media.playbackRate = roundedSpeed;
+    const previousSpeed = safeMedia.getPlaybackRate(this.media);
+    safeMedia.setPlaybackRate(this.media, roundedSpeed);
 
     requestAnimationFrame(() => {
-      const actualSpeed = this.media.playbackRate;
+      const actualSpeed = safeMedia.getPlaybackRate(this.media);
       const tolerance = SPEED.TOLERANCE;
 
       if (Math.abs(actualSpeed - roundedSpeed) > tolerance) {
@@ -638,7 +639,7 @@ export class VideoController {
   }
 
   adjustSpeed(delta: number): void {
-    this.setSpeed(this.media.playbackRate + delta);
+    this.setSpeed(safeMedia.getPlaybackRate(this.media) + delta);
   }
 
   resetSpeed(): void {
@@ -662,10 +663,10 @@ export class VideoController {
     }
 
     const tolerance = SPEED.TOLERANCE;
-    if (Math.abs(this.media.playbackRate - this.targetSpeed) > tolerance) {
+    if (Math.abs(safeMedia.getPlaybackRate(this.media) - this.targetSpeed) > tolerance) {
       try {
         this.lastEnforcementTime = now;
-        this.media.playbackRate = this.targetSpeed;
+        safeMedia.setPlaybackRate(this.media, this.targetSpeed);
       } catch (error) {
         // Some browsers/DRM systems may reject speed changes
         logger.debug('Speed enforcement failed (may be DRM-protected):', error);
@@ -681,7 +682,7 @@ export class VideoController {
     if (this.media.readyState < SEEK.MIN_READY_STATE) return;
 
     try {
-      const targetTime = this.media.currentTime + seconds;
+      const targetTime = safeMedia.getCurrentTime(this.media) + seconds;
 
       // Use fastSeek if available (mostly Firefox) for better performance/reliability on streams
       // Type assertion needed as fastSeek might not be in the standard TS lib definitions yet
@@ -690,7 +691,7 @@ export class VideoController {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (this.media as any).fastSeek(targetTime);
       } else {
-        this.media.currentTime = targetTime;
+        safeMedia.setCurrentTime(this.media, targetTime);
       }
     } catch (error) {
       logger.error('Seek failed:', error);
@@ -716,7 +717,7 @@ export class VideoController {
   }
 
   get speed(): number {
-    return this.media.playbackRate;
+    return safeMedia.getPlaybackRate(this.media);
   }
 
   /**
