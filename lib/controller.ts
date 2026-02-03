@@ -35,6 +35,9 @@ const ICONS = {
 
 let controllerIdCounter = 0;
 
+// Cache parsed SVGs to avoid repetitive DOMParser usage
+const svgCache: Record<string, SVGElement> = {};
+
 /**
  * Manages the speed control UI and playback interaction for a specific media element.
  */
@@ -79,6 +82,8 @@ export class VideoController {
   private lastSpeedSetTime = 0;
   private static readonly PAUSE_RECOVERY_WINDOW_MS = 300;
   private isRecoveringFromPause = false;
+
+  private dragBounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null;
 
   constructor(
     media: HTMLMediaElement,
@@ -259,11 +264,14 @@ export class VideoController {
   }
 
   /**
-   * Safely creates an SVG element from a string using DOMParser.
-   * Uses 'text/html' parsing to ensure the SVG and its children are created
-   * in a way that renders correctly when inserted into Shadow DOM.
+   * Safely creates an SVG element from a string.
+   * Uses caching to avoid overhead of DOMParser for repeated icons.
    */
   private createSVGFromString(svgString: string): SVGElement | null {
+    if (svgCache[svgString]) {
+      return svgCache[svgString].cloneNode(true) as SVGElement;
+    }
+
     const parser = new DOMParser();
     // Parsing as HTML ensures we get elements that work correctly in our DOM context
     const doc = parser.parseFromString(`<body>${svgString}</body>`, 'text/html');
@@ -271,7 +279,9 @@ export class VideoController {
 
     if (svgElement) {
       // Import the node into current document to ensure it's properly adopted
-      return document.importNode(svgElement, true) as SVGElement;
+      const importedNode = document.importNode(svgElement, true) as SVGElement;
+      svgCache[svgString] = importedNode;
+      return importedNode.cloneNode(true) as SVGElement;
     }
     return null;
   }
@@ -525,6 +535,7 @@ export class VideoController {
 
     this.isDragging = true;
     this.controllerEl?.classList.add('dragging');
+    this.dragBounds = this.getClampedBounds();
 
     if (!this.hasInitializedDragPosition) {
       const rect = this.wrapper.getBoundingClientRect();
@@ -570,7 +581,7 @@ export class VideoController {
     if (!parent) return;
 
     const parentRect = parent.getBoundingClientRect();
-    const bounds = this.getClampedBounds();
+    const bounds = this.dragBounds;
     if (!bounds) return;
 
     const clientX = 'clientX' in e ? e.clientX : 0;
@@ -589,6 +600,7 @@ export class VideoController {
     if (!this.isDragging) return;
 
     this.isDragging = false;
+    this.dragBounds = null;
     this.controllerEl?.classList.remove('dragging');
 
     this.cleanupDragListeners();
@@ -684,15 +696,7 @@ export class VideoController {
     try {
       const targetTime = safeMedia.getCurrentTime(this.media) + seconds;
 
-      // Use fastSeek if available (mostly Firefox) for better performance/reliability on streams
-      // Type assertion needed as fastSeek might not be in the standard TS lib definitions yet
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ('fastSeek' in this.media && typeof (this.media as any).fastSeek === 'function') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (this.media as any).fastSeek(targetTime);
-      } else {
-        safeMedia.setCurrentTime(this.media, targetTime);
-      }
+      safeMedia.setCurrentTime(this.media, targetTime);
     } catch (error) {
       logger.error('Seek failed:', error);
     }
