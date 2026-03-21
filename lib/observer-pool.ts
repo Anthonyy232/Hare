@@ -20,6 +20,7 @@ export class ObserverPool {
   private onMediaFound: MediaFoundCallback;
   private onMediaRemoved: MediaRemovedCallback;
   private includeAudio: boolean;
+  private readonly mediaSelector: string;
 
   constructor(
     onMediaFound: MediaFoundCallback,
@@ -29,6 +30,7 @@ export class ObserverPool {
     this.onMediaFound = onMediaFound;
     this.onMediaRemoved = onMediaRemoved;
     this.includeAudio = includeAudio;
+    this.mediaSelector = includeAudio ? 'video, audio' : 'video';
     this.observer = new MutationObserver(this.handleMutations.bind(this));
   }
 
@@ -87,7 +89,7 @@ export class ObserverPool {
 
     const foundMedia = new Set<HTMLMediaElement>();
     const removedMedia = new Set<HTMLMediaElement>();
-    const selector = this.includeAudio ? 'video, audio' : 'video';
+    const selector = this.mediaSelector;
 
     for (const mutation of mutations) {
       for (const node of mutation.removedNodes) {

@@ -453,10 +453,6 @@
 
   .toggle-row:hover {
     background: rgba(255, 255, 255, 0.02);
-    padding-left: 8px;
-    padding-right: 8px;
-    margin-left: -8px;
-    margin-right: -8px;
     border-radius: 6px;
   }
 

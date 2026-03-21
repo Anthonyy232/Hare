@@ -550,8 +550,9 @@ export class VideoController {
     const clientX = 'clientX' in e ? e.clientX : 0;
     const clientY = 'clientY' in e ? e.clientY : 0;
 
-    this.dragOffsetX = clientX - this.wrapper.getBoundingClientRect().left;
-    this.dragOffsetY = clientY - this.wrapper.getBoundingClientRect().top;
+    const wrapperRect = this.wrapper.getBoundingClientRect();
+    this.dragOffsetX = clientX - wrapperRect.left;
+    this.dragOffsetY = clientY - wrapperRect.top;
 
     this.cleanupDragListeners();
 

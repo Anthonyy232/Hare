@@ -65,6 +65,7 @@
 
   .blacklist-input {
     width: 100%;
+    box-sizing: border-box;
     padding: 14px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 4px;
