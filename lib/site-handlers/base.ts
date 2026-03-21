@@ -10,19 +10,16 @@ export class BaseSiteHandler implements SiteHandler {
   }
 
   getControllerPosition(video: HTMLVideoElement): ControllerPosition | null {
-    const selectors = [
-      '.video-js', '.vjs-tech', '.plyr', '.mejs-container',
-      '.flowplayer', '.jw-wrapper', '.jwplayer', '.theoplayer-container',
-      '.bitmovinplayer-container', '.video-container', '.player-container',
-      '.player-wrapper', '.video-player', '.html5-video-player',
-      '[data-player]', '[data-testid*="player"]', '[data-testid*="video"]',
-    ];
+    const container = video.closest(
+      '.video-js, .vjs-tech, .plyr, .mejs-container,' +
+      '.flowplayer, .jw-wrapper, .jwplayer, .theoplayer-container,' +
+      '.bitmovinplayer-container, .video-container, .player-container,' +
+      '.player-wrapper, .video-player, .html5-video-player,' +
+      '[data-player], [data-testid*="player"], [data-testid*="video"]'
+    );
 
-    for (const selector of selectors) {
-      const container = video.closest(selector);
-      if (container) {
-        return { target: container, method: 'prepend' };
-      }
+    if (container) {
+      return { target: container, method: 'prepend' };
     }
 
     const parent = video.parentElement;

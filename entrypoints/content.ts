@@ -143,13 +143,10 @@ export default defineContentScript({
       isActive = true;
       siteHandler = getSiteHandler();
 
-      // Keybindings only work in top frame to avoid duplicate execution
-      if (isTopFrame()) {
-        keybindHandler = createKeybindHandler(
-          () => [...controllers.values()],
-          () => settings
-        );
-      }
+      keybindHandler = createKeybindHandler(
+        () => [...controllers.values()],
+        () => settings
+      );
 
       observerPool = new ObserverPool(handleMediaFound, handleMediaRemoved, settings.enableAudio);
 
