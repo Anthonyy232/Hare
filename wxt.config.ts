@@ -22,6 +22,9 @@ export default defineConfig({
     browser_specific_settings: {
       gecko: {
         id: 'hare@anthonyy232.github.io',
+        data_collection_permissions: {
+          required: ['none'],
+        },
       },
     },
   },
