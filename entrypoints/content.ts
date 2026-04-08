@@ -9,6 +9,9 @@ import { CLEANUP } from '../lib/constants';
 import type { Browser } from 'wxt/browser';
 import { logger } from '../lib/logger';
 import { isTopFrame } from '../lib/browser-detect';
+import { SyncAgent } from '../lib/sync-agent';
+import { safeMedia } from '../lib/safe-media';
+import { SYNC, type SyncEventPayload, type SyncCommandPayload, type DriftCorrectPayload, type SyncPositionResponse } from '../lib/sync-types';
 
 /**
  * Tracks event listeners for cleanup without preventing garbage collection of the media element.
@@ -40,6 +43,68 @@ export default defineContentScript({
     let keybindHandler: KeybindHandler | null = null;
     let cleanupInterval: NodeJS.Timeout | null = null;
     let isActive = false;
+    let syncAgent: SyncAgent | null = null;
+    let syncKeepAlivePort: ReturnType<typeof browser.runtime.connect> | null = null;
+    let syncKeepAliveReconnectTimer: NodeJS.Timeout | null = null;
+    let syncKeepAlivePingTimer: NodeJS.Timeout | null = null;
+
+    /**
+     * Open (or replace) the keep-alive port and arm the periodic-reconnect /
+     * ping timers. The port instance is short-lived: Chrome enforces a hard
+     * cap (~5 minutes) on a single connect() before forcibly disconnecting it,
+     * so we reconnect well before that. The 20s ping resets the SW's 30s
+     * idle timer continuously between drift checks.
+     */
+    const openSyncKeepAlive = (): void => {
+      if (syncKeepAlivePort) {
+        try { syncKeepAlivePort.disconnect(); } catch { /* already gone */ }
+        syncKeepAlivePort = null;
+      }
+      try {
+        syncKeepAlivePort = browser.runtime.connect({ name: 'sync-keepalive' });
+      } catch (error) {
+        logger.warn('sync-keepalive connect failed:', error);
+        return;
+      }
+      syncKeepAlivePort.onDisconnect.addListener(() => {
+        // Note: don't auto-reopen here — the reconnect timer below handles
+        // scheduled rotation, and unexpected disconnects (extension reload,
+        // tab unload) shouldn't trigger respawn loops.
+        syncKeepAlivePort = null;
+      });
+    };
+
+    const startSyncKeepAlive = (): void => {
+      stopSyncKeepAlive();
+      openSyncKeepAlive();
+      syncKeepAliveReconnectTimer = setInterval(() => {
+        openSyncKeepAlive();
+      }, SYNC.KEEPALIVE_RECONNECT_MS);
+      syncKeepAlivePingTimer = setInterval(() => {
+        if (!syncKeepAlivePort) return;
+        try {
+          syncKeepAlivePort.postMessage({ type: 'PING' });
+        } catch {
+          // Port died between ticks; the next reconnect tick will recover.
+          syncKeepAlivePort = null;
+        }
+      }, 20_000);
+    };
+
+    const stopSyncKeepAlive = (): void => {
+      if (syncKeepAliveReconnectTimer) {
+        clearInterval(syncKeepAliveReconnectTimer);
+        syncKeepAliveReconnectTimer = null;
+      }
+      if (syncKeepAlivePingTimer) {
+        clearInterval(syncKeepAlivePingTimer);
+        syncKeepAlivePingTimer = null;
+      }
+      if (syncKeepAlivePort) {
+        try { syncKeepAlivePort.disconnect(); } catch { /* already gone */ }
+        syncKeepAlivePort = null;
+      }
+    };
 
     /**
      * Instantiates a new controller for discovered media, applying site-specific
@@ -187,6 +252,12 @@ export default defineContentScript({
         controller.destroy();
       }
       controllers.clear();
+
+      if (syncAgent) {
+        syncAgent.destroy();
+        syncAgent = null;
+      }
+      stopSyncKeepAlive();
     };
 
     const unwatchSettings = watchSettings((newSettings) => {
@@ -256,6 +327,104 @@ export default defineContentScript({
           case 'TOGGLE_DISPLAY': {
             for (const controller of controllersArray) controller.toggleVisibility();
             sendResponse({ success: true });
+            break;
+          }
+
+          case 'SYNC_ACTIVATE': {
+            if (syncAgent) syncAgent.destroy();
+            const primaryMedia = [...controllers.keys()].find(m => m.isConnected);
+            if (!primaryMedia) {
+              sendResponse({ success: false, error: 'No video found' });
+              break;
+            }
+            const primaryController = controllers.get(primaryMedia);
+            syncAgent = new SyncAgent(primaryMedia, (event: SyncEventPayload) => {
+              const typeMap: Record<SyncEventPayload['action'], string> = {
+                pause: 'SYNC_PAUSE',
+                play: 'SYNC_PLAY',
+                seek: 'SYNC_SEEK',
+                buffering_start: 'SYNC_BUFFERING',
+                buffering_end: 'SYNC_BUFFERING',
+              };
+              browser.runtime.sendMessage({
+                type: typeMap[event.action],
+                payload: event,
+              }).catch(() => {});
+            }, primaryController?.intendedSpeed ?? 1.0);
+            // Keep-alive: open a port and arm the periodic-reconnect / ping
+            // timers so the MV3 service worker stays alive for the duration
+            // of the sync session.
+            startSyncKeepAlive();
+            sendResponse({
+              success: true,
+              currentTime: safeMedia.getCurrentTime(primaryMedia),
+            });
+            break;
+          }
+
+          case 'SYNC_DEACTIVATE': {
+            if (syncAgent) {
+              syncAgent.destroy();
+              syncAgent = null;
+            }
+            stopSyncKeepAlive();
+            sendResponse({ success: true });
+            break;
+          }
+
+          case 'SYNC_PAUSE': {
+            if (!syncAgent) { sendResponse({ success: false }); break; }
+            const pauseCmd = message.payload as SyncCommandPayload;
+            const compensatedPausePos = pauseCmd.position + (Date.now() - pauseCmd.timestamp) / 1000;
+            syncAgent.executeSeek(compensatedPausePos);
+            syncAgent.executePause();
+            sendResponse({ success: true });
+            break;
+          }
+
+          case 'SYNC_PLAY': {
+            if (!syncAgent) { sendResponse({ success: false }); break; }
+            const playCmd = message.payload as SyncCommandPayload;
+            // position -1 means "resume without seeking" (e.g., buffering recovery)
+            if (playCmd.position >= 0) {
+              const compensatedPlayPos = playCmd.position + (Date.now() - playCmd.timestamp) / 1000;
+              syncAgent.executeSeek(compensatedPlayPos);
+            }
+            syncAgent.executePlay();
+            sendResponse({ success: true });
+            break;
+          }
+
+          case 'SYNC_SEEK': {
+            if (!syncAgent) { sendResponse({ success: false }); break; }
+            const seekCmd = message.payload as SyncCommandPayload;
+            // Seek is to an absolute position — no timestamp compensation needed
+            syncAgent.executeSeek(seekCmd.position);
+            sendResponse({ success: true });
+            break;
+          }
+
+          case 'SYNC_DRIFT_CORRECT': {
+            if (!syncAgent) { sendResponse({ success: false }); break; }
+            const drift = message.payload as DriftCorrectPayload;
+            if (drift.method === 'seek') {
+              syncAgent.executeSeek(drift.position);
+            } else if (drift.method === 'rate') {
+              syncAgent.applyRateCorrection(
+                drift.rateFactor ?? 0.02,
+                drift.durationMs ?? 3000,
+              );
+            }
+            sendResponse({ success: true });
+            break;
+          }
+
+          case 'SYNC_GET_POSITION': {
+            if (!syncAgent) { sendResponse(null); break; }
+            const req = message.payload as { requestId: string };
+            const pos = syncAgent.getPosition();
+            const response: SyncPositionResponse = { ...pos, requestId: req.requestId };
+            sendResponse(response);
             break;
           }
 

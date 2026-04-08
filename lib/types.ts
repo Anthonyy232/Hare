@@ -48,7 +48,23 @@ export type MessageType =
   | 'SET_SPEED'
   | 'ADJUST_SPEED'
   | 'RESET_SPEED'
-  | 'TOGGLE_DISPLAY';
+  | 'TOGGLE_DISPLAY'
+  // Sync coordination (background <-> content)
+  | 'SYNC_ACTIVATE'
+  | 'SYNC_DEACTIVATE'
+  | 'SYNC_PAUSE'
+  | 'SYNC_PLAY'
+  | 'SYNC_SEEK'
+  | 'SYNC_DRIFT_CORRECT'
+  | 'SYNC_GET_POSITION'
+  | 'SYNC_POSITION'
+  | 'SYNC_BUFFERING'
+  // Sync management (popup <-> background)
+  | 'GET_SYNC_CANDIDATES'
+  | 'START_SYNC'
+  | 'STOP_SYNC'
+  | 'NUDGE_OFFSET'
+  | 'GET_SYNC_STATUS';
 
 export interface HareMessage {
   type: MessageType;

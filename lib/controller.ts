@@ -725,6 +725,11 @@ export class VideoController {
     return safeMedia.getPlaybackRate(this.media);
   }
 
+  /** The user-intended playback speed, independent of any active sync rate correction. */
+  get intendedSpeed(): number {
+    return this.targetSpeed;
+  }
+
   /**
    * Displays on-screen feedback for actions that don't have immediate visual state changes.
    */
