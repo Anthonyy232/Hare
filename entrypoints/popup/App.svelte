@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import SpeedControl from "../../components/SpeedControl.svelte";
+  import SyncMode from "../../components/SyncMode.svelte";
   import type { StatusResponse, HareMessage } from "../../lib/types";
   import { SPEED, UI } from "../../lib/constants";
   import { logger } from "../../lib/logger";
@@ -208,6 +209,10 @@
       </div>
     {/if}
   </main>
+
+  <div class="sync-section-wrapper">
+    <SyncMode />
+  </div>
 
   <footer>
     <button class="settings-btn" onclick={openOptions}>
@@ -460,5 +465,11 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+  }
+
+  .sync-section-wrapper {
+    padding: 0 20px 12px;
+    position: relative;
+    z-index: 1;
   }
 </style>
