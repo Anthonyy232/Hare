@@ -61,6 +61,38 @@ export type KeybindHandler = {
 };
 
 /**
+ * Cross-frame action forward used when a frame recognizes a binding but has
+ * no local controllers — e.g., Google Drive's viewer where the <video> lives
+ * inside a cross-origin YouTube embed iframe that never receives focus.
+ */
+type HareKeyForwardMessage = {
+  __hareKeyForward: true;
+  action: KeyAction;
+  value: number;
+};
+
+function isHareKeyForwardMessage(data: unknown): data is HareKeyForwardMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const d = data as Record<string, unknown>;
+  return (
+    d.__hareKeyForward === true &&
+    typeof d.action === 'string' &&
+    typeof d.value === 'number'
+  );
+}
+
+function forwardToChildFrames(action: KeyAction, value: number): void {
+  const msg: HareKeyForwardMessage = { __hareKeyForward: true, action, value };
+  for (let i = 0; i < window.frames.length; i++) {
+    try {
+      window.frames[i].postMessage(msg, '*');
+    } catch {
+      /* postMessage is allowed cross-origin; swallow exotic failures */
+    }
+  }
+}
+
+/**
  * Captures keyboard events globally to trigger speed control actions.
  */
 export function createKeybindHandler(
@@ -69,7 +101,7 @@ export function createKeybindHandler(
 ): KeybindHandler {
   const handleKeyDown = (event: KeyboardEvent): void => {
     const target = event.target;
-    // Allow typing in inputs unless it's a modifier-only event or special case? 
+    // Allow typing in inputs unless it's a modifier-only event or special case?
     // No, standard behavior is to ignore inputs.
     if (!target || !(target instanceof Element) || isInputElement(target)) return;
 
@@ -79,39 +111,68 @@ export function createKeybindHandler(
     const settings = getSettings();
     if (!settings.enabled) return;
 
-    const controllers = getControllers();
-    if (controllers.length === 0) return;
-
     const binding = findBinding(event, settings.keyBindings);
     if (!binding) return;
 
-    // Execute our action
-    executeAction(binding.action, binding, controllers);
+    const controllers = getControllers();
+    if (controllers.length > 0) {
+      executeAction(binding.action, binding, controllers);
+    } else if (window.frames.length > 0) {
+      // Video is in a child iframe (e.g. Google Drive's cross-origin YouTube
+      // embed). The iframe never sees this keydown because focus stays on
+      // the host frame, so push the resolved action down through postMessage.
+      forwardToChildFrames(binding.action, binding.value);
+    } else {
+      return;
+    }
 
     // If forced, blocking the site from seeing this event
     if (binding.force) {
       event.preventDefault();
       event.stopImmediatePropagation();
     } else {
-      // Even if not forced, we might want to prevent default browser behaviors 
+      // Even if not forced, we might want to prevent default browser behaviors
       // (like scrolling for space/arrows) if we handled it?
-      // For now, adhere to "force" setting for side-effects, 
+      // For now, adhere to "force" setting for side-effects,
       // but "rewind/advance" on arrow keys usually requires prevention to stop scrolling.
       // However, making that assumption might annoy users who map non-standard keys.
       // Let's stick to the "force" flag as the source of truth for suppression.
     }
   };
 
-  /** 
-   * Use capture phase on WINDOW to intercept keys before ANY site scripts. 
+  const handleForwardMessage = (event: MessageEvent): void => {
+    if (!isHareKeyForwardMessage(event.data)) return;
+    // Only accept forwards from an ancestor (parent or top). This rejects
+    // random messages from peer/child frames or unrelated page scripts.
+    if (event.source !== window.parent && event.source !== window.top) return;
+
+    const settings = getSettings();
+    if (!settings.enabled) return;
+
+    const { action, value } = event.data;
+
+    const controllers = getControllers();
+    if (controllers.length > 0) {
+      const syntheticBinding: KeyBinding = { action, value, key: '', force: false };
+      executeAction(action, syntheticBinding, controllers);
+    } else if (window.frames.length > 0) {
+      // Pass it deeper — supports nested iframe chains.
+      forwardToChildFrames(action, value);
+    }
+  };
+
+  /**
+   * Use capture phase on WINDOW to intercept keys before ANY site scripts.
    * This ensures we see the event even if the site stops propagation on document/body.
    */
   window.addEventListener('keydown', handleKeyDown, { capture: true });
+  window.addEventListener('message', handleForwardMessage);
 
   return {
     handleKeyDown,
     destroy: () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      window.removeEventListener('message', handleForwardMessage);
     },
   };
 }
