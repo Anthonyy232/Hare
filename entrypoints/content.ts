@@ -12,7 +12,15 @@ import { logger } from '../lib/logger';
 import { isTopFrame } from '../lib/browser-detect';
 import { SyncAgent } from '../lib/sync-agent';
 import { safeMedia } from '../lib/safe-media';
-import { SYNC, type SyncEventPayload, type SyncCommandPayload, type DriftCorrectPayload, type SyncPositionResponse } from '../lib/sync-types';
+import { SYNC, type SyncEventPayload, type SyncCommandPayload, type DriftCorrectPayload } from '../lib/sync-types';
+
+const SYNC_EVENT_TYPE: Record<SyncEventPayload['action'], string> = {
+  pause: 'SYNC_PAUSE',
+  play: 'SYNC_PLAY',
+  seek: 'SYNC_SEEK',
+  buffering_start: 'SYNC_BUFFERING',
+  buffering_end: 'SYNC_BUFFERING',
+};
 
 /**
  * Tracks event listeners for cleanup without preventing garbage collection of the media element.
@@ -90,7 +98,7 @@ export default defineContentScript({
           // Port died between ticks; the next reconnect tick will recover.
           syncKeepAlivePort = null;
         }
-      }, 20_000);
+      }, SYNC.KEEPALIVE_PING_MS);
     };
 
     const stopSyncKeepAlive = (): void => {
@@ -346,21 +354,11 @@ export default defineContentScript({
             }
             const primaryController = controllers.get(primaryMedia);
             syncAgent = new SyncAgent(primaryMedia, (event: SyncEventPayload) => {
-              const typeMap: Record<SyncEventPayload['action'], string> = {
-                pause: 'SYNC_PAUSE',
-                play: 'SYNC_PLAY',
-                seek: 'SYNC_SEEK',
-                buffering_start: 'SYNC_BUFFERING',
-                buffering_end: 'SYNC_BUFFERING',
-              };
               browser.runtime.sendMessage({
-                type: typeMap[event.action],
+                type: SYNC_EVENT_TYPE[event.action],
                 payload: event,
               }).catch(() => {});
             }, primaryController?.intendedSpeed ?? 1.0);
-            // Keep-alive: open a port and arm the periodic-reconnect / ping
-            // timers so the MV3 service worker stays alive for the duration
-            // of the sync session.
             startSyncKeepAlive();
             sendResponse({
               success: true,
@@ -427,11 +425,7 @@ export default defineContentScript({
           }
 
           case 'SYNC_GET_POSITION': {
-            if (!syncAgent) { sendResponse(null); break; }
-            const req = message.payload as { requestId: string };
-            const pos = syncAgent.getPosition();
-            const response: SyncPositionResponse = { ...pos, requestId: req.requestId };
-            sendResponse(response);
+            sendResponse(syncAgent ? syncAgent.getPosition() : null);
             break;
           }
 

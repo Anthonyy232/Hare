@@ -210,9 +210,7 @@
     {/if}
   </main>
 
-  <div class="sync-section-wrapper">
-    <SyncMode />
-  </div>
+  <SyncMode />
 
   <footer>
     <button class="settings-btn" onclick={openOptions}>
@@ -467,9 +465,4 @@
     }
   }
 
-  .sync-section-wrapper {
-    padding: 0 20px 12px;
-    position: relative;
-    z-index: 1;
-  }
 </style>

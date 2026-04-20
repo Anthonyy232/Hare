@@ -7,7 +7,14 @@ import type {
   SyncStatusResponse,
   SyncPositionResponse,
 } from './sync-types';
+import type { HareMessage, MessageType } from './types';
 import { logger } from './logger';
+
+const COMMAND_TYPE: Record<'pause' | 'play' | 'seek', MessageType> = {
+  pause: 'SYNC_PAUSE',
+  play: 'SYNC_PLAY',
+  seek: 'SYNC_SEEK',
+};
 
 interface TabRef {
   tabId: number;
@@ -132,8 +139,38 @@ export class SyncCoordinator {
   nudgeOffset(delta: number): void {
     if (!this.session) return;
     this.session.offset += delta;
+    this.session.generation++;
     void this.persistSession();
     logger.debug('Offset nudged', { newOffset: this.session.offset });
+    // Apply the new offset actively so the user sees an instant jump rather
+    // than waiting up to 2s for the next drift tick (and then only receiving
+    // partial correction when the delta is below the rate-adjust threshold).
+    void this.realignB();
+  }
+
+  /**
+   * Hard-seek B to match A's current position under the *current* session
+   * offset. Generation is checked so a stale realignment (superseded by a
+   * later nudge or user action) is dropped.
+   */
+  private async realignB(): Promise<void> {
+    if (!this.session) return;
+    const gen = this.session.generation;
+    const posA = await this.requestPosition(this.session.videoA.tabId);
+    if (!posA) return;
+    if (!this.session || this.session.generation !== gen) return;
+
+    const correctedA = posA.currentTime + (Date.now() - posA.timestamp) / 1000;
+    const targetB = Math.max(0, correctedA + this.session.offset);
+
+    await this.sendToSyncedTab(this.session.videoB.tabId, {
+      type: 'SYNC_DRIFT_CORRECT',
+      payload: {
+        position: targetB,
+        generation: gen,
+        method: 'seek',
+      } satisfies DriftCorrectPayload,
+    });
   }
 
   setNudgeStep(step: number): void {
@@ -182,60 +219,26 @@ export class SyncCoordinator {
   }
 
   /** Send to the correct frame within a synced tab */
-  private async sendToSyncedTab(tabId: number, message: { type: string; payload?: unknown }): Promise<unknown> {
+  private async sendToSyncedTab(tabId: number, message: HareMessage): Promise<unknown> {
     return this.sendToTab(tabId, message, this.getFrameId(tabId));
   }
 
   async handleSyncEvent(fromTabId: number, event: SyncEventPayload): Promise<void> {
     if (!this.session) return;
 
-    const { videoA, videoB } = this.session;
-    let targetTabId: number;
-    let targetPosition: number;
-
-    if (fromTabId === videoA.tabId) {
-      targetTabId = videoB.tabId;
-      targetPosition = Math.max(0, event.position + this.session.offset);
-    } else if (fromTabId === videoB.tabId) {
-      targetTabId = videoA.tabId;
-      targetPosition = Math.max(0, event.position - this.session.offset);
-    } else {
-      return; // Unknown tab
-    }
+    const targetTabId = this.peerTabId(fromTabId);
+    if (targetTabId == null) return;
+    const targetPosition = this.toTargetPosition(fromTabId, event.position);
 
     switch (event.action) {
       case 'pause':
-        this.session.generation++;
-        await this.sendToSyncedTab(targetTabId, {
-          type: 'SYNC_PAUSE',
-          payload: {
-            action: 'pause',
-            position: targetPosition,
-            timestamp: event.timestamp,
-            generation: this.session.generation,
-          } satisfies SyncCommandPayload,
-        });
-        break;
-
       case 'play':
-        this.session.generation++;
-        await this.sendToSyncedTab(targetTabId, {
-          type: 'SYNC_PLAY',
-          payload: {
-            action: 'play',
-            position: targetPosition,
-            timestamp: event.timestamp,
-            generation: this.session.generation,
-          } satisfies SyncCommandPayload,
-        });
-        break;
-
       case 'seek':
         this.session.generation++;
         await this.sendToSyncedTab(targetTabId, {
-          type: 'SYNC_SEEK',
+          type: COMMAND_TYPE[event.action],
           payload: {
-            action: 'seek',
+            action: event.action,
             position: targetPosition,
             timestamp: event.timestamp,
             generation: this.session.generation,
@@ -248,9 +251,25 @@ export class SyncCoordinator {
         break;
 
       case 'buffering_end':
-        await this.handleBufferingEnd(fromTabId, targetTabId, event);
+        await this.handleBufferingEnd(fromTabId);
         break;
     }
+  }
+
+  /** Convert a position on `fromTabId` to the equivalent position on the other tab. */
+  private toTargetPosition(fromTabId: number, position: number): number {
+    if (!this.session) return Math.max(0, position);
+    const { videoA, offset } = this.session;
+    const delta = fromTabId === videoA.tabId ? offset : -offset;
+    return Math.max(0, position + delta);
+  }
+
+  private peerTabId(fromTabId: number): number | null {
+    if (!this.session) return null;
+    const { videoA, videoB } = this.session;
+    if (fromTabId === videoA.tabId) return videoB.tabId;
+    if (fromTabId === videoB.tabId) return videoA.tabId;
+    return null;
   }
 
   private async handleBufferingStart(
@@ -270,15 +289,11 @@ export class SyncCoordinator {
 
     if (this.session.bufferingTab === null) {
       this.session.bufferingTab = fromSide;
-      // Apply offset: convert source position to target position
-      const targetPosition = Math.max(0, fromTabId === this.session.videoA.tabId
-        ? event.position + this.session.offset
-        : event.position - this.session.offset);
       await this.sendToSyncedTab(targetTabId, {
         type: 'SYNC_PAUSE',
         payload: {
           action: 'pause',
-          position: targetPosition,
+          position: this.toTargetPosition(fromTabId, event.position),
           timestamp: event.timestamp,
           generation: this.session.generation,
         } satisfies SyncCommandPayload,
@@ -288,11 +303,7 @@ export class SyncCoordinator {
     }
   }
 
-  private async handleBufferingEnd(
-    fromTabId: number,
-    _targetTabId: number,
-    _event: SyncEventPayload
-  ): Promise<void> {
+  private async handleBufferingEnd(fromTabId: number): Promise<void> {
     if (!this.session) return;
 
     const fromSide = fromTabId === this.session.videoA.tabId ? 'A' : 'B';
@@ -304,37 +315,25 @@ export class SyncCoordinator {
         if (!this.session) return;
 
         if (this.session.bufferingTab === 'both') {
-          const otherSide = fromSide === 'A' ? 'B' : 'A';
-          this.session.bufferingTab = otherSide;
-        } else if (this.session.bufferingTab === fromSide) {
-          this.session.bufferingTab = null;
-          this.session.generation++;
-          const gen = this.session.generation;
-          const tabAId = this.session.videoA.tabId;
-          const tabBId = this.session.videoB.tabId;
-          const fAId = this.session.videoA.frameId;
-          const fBId = this.session.videoB.frameId;
-
-          // position: -1 signals "resume without seeking"
-          await this.sendToTab(tabAId, {
-            type: 'SYNC_PLAY',
-            payload: {
-              action: 'play',
-              position: -1,
-              timestamp: Date.now(),
-              generation: gen,
-            } satisfies SyncCommandPayload,
-          }, fAId);
-          await this.sendToTab(tabBId, {
-            type: 'SYNC_PLAY',
-            payload: {
-              action: 'play',
-              position: -1,
-              timestamp: Date.now(),
-              generation: gen,
-            } satisfies SyncCommandPayload,
-          }, fBId);
+          this.session.bufferingTab = fromSide === 'A' ? 'B' : 'A';
+          return;
         }
+        if (this.session.bufferingTab !== fromSide) return;
+
+        this.session.bufferingTab = null;
+        this.session.generation++;
+        // position: -1 signals "resume without seeking"
+        const payload: SyncCommandPayload = {
+          action: 'play',
+          position: -1,
+          timestamp: Date.now(),
+          generation: this.session.generation,
+        };
+        const msg: HareMessage = { type: 'SYNC_PLAY', payload };
+        await Promise.all([
+          this.sendToSyncedTab(this.session.videoA.tabId, msg),
+          this.sendToSyncedTab(this.session.videoB.tabId, msg),
+        ]);
       }, SYNC.BUFFERING_STABLE_MS)
     );
   }
@@ -349,13 +348,12 @@ export class SyncCoordinator {
     if (!this.session) return;
     if (this.session.bufferingTab !== null) return;
 
-    const requestId = Math.random().toString(36).slice(2);
     const generationAtCheck = this.session.generation;
 
     try {
       const [posA, posB] = await Promise.all([
-        this.requestPosition(this.session.videoA.tabId, requestId + '_A', this.session.videoA.frameId),
-        this.requestPosition(this.session.videoB.tabId, requestId + '_B', this.session.videoB.frameId),
+        this.requestPosition(this.session.videoA.tabId),
+        this.requestPosition(this.session.videoB.tabId),
       ]);
 
       if (!posA || !posB) return;
@@ -378,32 +376,25 @@ export class SyncCoordinator {
 
       if (absDriftMs < SYNC.DRIFT_IGNORE_THRESHOLD_MS) return;
 
-      const behindTabId = driftMs < 0
-        ? this.session.videoB.tabId
-        : this.session.videoA.tabId;
+      const behindIsB = driftMs < 0;
+      const behindTabId = behindIsB ? this.session.videoB.tabId : this.session.videoA.tabId;
 
       if (absDriftMs < SYNC.DRIFT_RATE_ADJUST_THRESHOLD_MS) {
-        // Always speed up the behind tab (positive factor)
-        const rateFactor = SYNC.RATE_ADJUST_FACTOR;
         await this.sendToSyncedTab(behindTabId, {
           type: 'SYNC_DRIFT_CORRECT',
           payload: {
             position: 0,
             generation: generationAtCheck,
             method: 'rate',
-            rateFactor,
+            rateFactor: SYNC.RATE_ADJUST_FACTOR,
             durationMs: SYNC.RATE_ADJUST_DURATION_MS,
           } satisfies DriftCorrectPayload,
         });
       } else {
-        const targetPosition = behindTabId === this.session.videoB.tabId
-          ? expectedB
-          : correctedB - this.session.offset;
-
         await this.sendToSyncedTab(behindTabId, {
           type: 'SYNC_DRIFT_CORRECT',
           payload: {
-            position: targetPosition,
+            position: behindIsB ? expectedB : expectedA,
             generation: generationAtCheck,
             method: 'seek',
           } satisfies DriftCorrectPayload,
@@ -420,17 +411,10 @@ export class SyncCoordinator {
     }
   }
 
-  private async requestPosition(
-    tabId: number,
-    requestId: string,
-    frameId?: number
-  ): Promise<SyncPositionResponse | null> {
+  private async requestPosition(tabId: number): Promise<SyncPositionResponse | null> {
     try {
       const response = await Promise.race([
-        this.sendToTab(tabId, {
-          type: 'SYNC_GET_POSITION',
-          payload: { requestId },
-        }, frameId),
+        this.sendToSyncedTab(tabId, { type: 'SYNC_GET_POSITION' }),
         new Promise<null>((resolve) =>
           setTimeout(() => resolve(null), SYNC.POSITION_TIMEOUT_MS)
         ),
@@ -441,14 +425,11 @@ export class SyncCoordinator {
     }
   }
 
-  private async sendToTab(tabId: number, message: { type: string; payload?: unknown }, frameId?: number): Promise<unknown> {
+  private async sendToTab(tabId: number, message: HareMessage, frameId?: number): Promise<unknown> {
     try {
-      let result;
-      if (frameId != null) {
-        result = await browser.tabs.sendMessage(tabId, message, { frameId });
-      } else {
-        result = await browser.tabs.sendMessage(tabId, message);
-      }
+      const result = frameId != null
+        ? await browser.tabs.sendMessage(tabId, message, { frameId })
+        : await browser.tabs.sendMessage(tabId, message);
       this.sendFailures = 0;
       return result;
     } catch (error) {
