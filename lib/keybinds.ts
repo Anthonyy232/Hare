@@ -23,7 +23,7 @@ function findBinding(event: KeyboardEvent, bindings: KeyBinding[]): KeyBinding |
   return null;
 }
 
-function executeAction(
+export function executeAction(
   action: KeyAction,
   binding: KeyBinding,
   controllers: VideoController[]

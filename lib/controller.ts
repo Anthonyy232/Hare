@@ -1,5 +1,6 @@
 import { SPEED, CONTROLLER, UI, OBSERVER, SEEK } from './constants';
-import type { Settings, SiteHandler, ControllerPosition } from './types';
+import type { Settings, SiteHandler, ControllerPosition, KeyAction } from './types';
+import type { HitmapButton } from './cross-frame-pointer';
 import controllerCSS from '../assets/controller.css?raw';
 import { logger } from './logger';
 import { MESSAGES } from './messages';
@@ -244,7 +245,7 @@ export class VideoController {
     const fasterBtn = this.createButton(ICONS.faster, 'faster', () => this.adjustSpeed(this.cachedSpeedStep), 'Faster');
     const advanceBtn = this.createButton(ICONS.advance, 'advance', () => this.seek(this.cachedSeekValue), 'Advance');
 
-    const hideBtn = this.createButton(ICONS.hide, 'hide', () => this.toggleVisibility(), 'Hide controller');
+    const hideBtn = this.createButton(ICONS.hide, 'display', () => this.toggleVisibility(), 'Hide controller');
     hideBtn.classList.add('hare-btn-hide');
     hideBtn.setAttribute('aria-pressed', String(this.isManuallyHidden));
     this.hideBtn = hideBtn;
@@ -709,6 +710,35 @@ export class VideoController {
       this.controllerEl.classList.toggle('hidden', this.isManuallyHidden);
     }
     this.hideBtn?.setAttribute('aria-pressed', String(this.isManuallyHidden));
+  }
+
+  /**
+   * Viewport-relative rects of each interactive button, used by the cross-frame
+   * pointer bridge so a host frame can forward clicks that can't reach this frame.
+   * Each entry carries the action's value so the receiving frame can replay it
+   * via `executeAction` without re-deriving from settings.
+   * Returns null when the badge is detached or hidden.
+   */
+  getButtonHitmap(): HitmapButton[] | null {
+    if (!this.wrapper || !this.shadow || !this.controllerEl) return null;
+    if (this.controllerEl.classList.contains('hidden')) return null;
+
+    const buttons: HitmapButton[] = [];
+    const btnEls = this.shadow.querySelectorAll<HTMLButtonElement>('button[data-action]');
+    for (const btn of btnEls) {
+      const r = btn.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) continue;
+      const action = btn.dataset.action as KeyAction | undefined;
+      if (!action) continue;
+      const value =
+        action === 'slower' || action === 'faster'
+          ? this.cachedSpeedStep
+          : action === 'rewind' || action === 'advance'
+            ? this.cachedSeekValue
+            : 0;
+      buttons.push({ action, value, x: r.left, y: r.top, w: r.width, h: r.height });
+    }
+    return buttons.length > 0 ? buttons : null;
   }
 
   updateSettings(settings: Settings): void {

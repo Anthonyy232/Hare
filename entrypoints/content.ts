@@ -3,6 +3,7 @@ import { VideoController } from '../lib/controller';
 import { ObserverPool } from '../lib/observer-pool';
 import { findAllMedia, isValidMedia } from '../lib/media-detector';
 import { createKeybindHandler, type KeybindHandler } from '../lib/keybinds';
+import { createCrossFramePointerBridge, type CrossFramePointerBridge } from '../lib/cross-frame-pointer';
 import { getSiteHandler } from '../lib/site-handlers';
 import type { Settings, SiteHandler, StatusResponse, HareMessage } from '../lib/types';
 import { CLEANUP } from '../lib/constants';
@@ -41,6 +42,7 @@ export default defineContentScript({
     let siteHandler: SiteHandler | null = null;
     let observerPool: ObserverPool | null = null;
     let keybindHandler: KeybindHandler | null = null;
+    let pointerBridge: CrossFramePointerBridge | null = null;
     let cleanupInterval: NodeJS.Timeout | null = null;
     let isActive = false;
     let syncAgent: SyncAgent | null = null;
@@ -215,6 +217,8 @@ export default defineContentScript({
 
       observerPool = new ObserverPool(handleMediaFound, handleMediaRemoved, settings.enableAudio);
 
+      pointerBridge = createCrossFramePointerBridge(() => [...controllers.values()]);
+
       const existingMedia = findAllMedia(document, settings.enableAudio);
       logger.debug('Initial media scan complete', {
         foundCount: existingMedia.length,
@@ -247,6 +251,9 @@ export default defineContentScript({
 
       keybindHandler?.destroy();
       keybindHandler = null;
+
+      pointerBridge?.destroy();
+      pointerBridge = null;
 
       for (const controller of controllers.values()) {
         controller.destroy();

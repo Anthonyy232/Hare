@@ -60,6 +60,11 @@ export const CLEANUP = {
   DEFERRED_VIDEO_TIMEOUT_MS: 30000,
 } as const;
 
+export const CROSS_FRAME = {
+  /** How often each child frame republishes its button hitmap to its parent. */
+  HITMAP_POLL_MS: 500,
+} as const;
+
 export const UI = {
   TOAST_DURATION_MS: 2000,
   SAVE_FEEDBACK_MS: 2000,
