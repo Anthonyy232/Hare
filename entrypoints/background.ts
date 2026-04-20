@@ -2,6 +2,7 @@ import { loadSettings, saveSettings } from '../lib/settings';
 import { logger } from '../lib/logger';
 import { SyncCoordinator } from '../lib/sync-coordinator';
 import type { SyncEventPayload, SyncCandidate } from '../lib/sync-types';
+import type { HareMessage } from '../lib/types';
 
 export default defineBackground(() => {
   /**
@@ -43,17 +44,15 @@ export default defineBackground(() => {
 
   // Handle sync messages from content scripts and popup
   browser.runtime.onMessage.addListener(
-    (message: { type: string; payload?: unknown }, sender, sendResponse) => {
+    (message: HareMessage, sender, sendResponse) => {
       switch (message.type) {
         case 'SYNC_PAUSE':
         case 'SYNC_PLAY':
         case 'SYNC_SEEK':
         case 'SYNC_BUFFERING': {
-          // User-initiated events forwarded from content script SyncAgent
           const tabId = sender.tab?.id;
           if (tabId == null) return;
-          const event = message.payload as SyncEventPayload;
-          syncCoordinator.handleSyncEvent(tabId, event);
+          syncCoordinator.handleSyncEvent(tabId, message.payload as SyncEventPayload);
           return;
         }
 
@@ -61,55 +60,46 @@ export default defineBackground(() => {
           (async () => {
             try {
               const tabs = await browser.tabs.query({});
-              const candidates: SyncCandidate[] = [];
+              const results = await Promise.all(
+                tabs.map(async (tab): Promise<SyncCandidate | null> => {
+                  if (!tab.id || !tab.url) return null;
+                  try {
+                    // Videos are often in iframes (e.g., YouTube) — query all frames.
+                    const frames = await browser.webNavigation.getAllFrames({ tabId: tab.id });
+                    if (!frames?.length) return null;
 
-              for (const tab of tabs) {
-                if (!tab.id || !tab.url) continue;
-                try {
-                  // Query all frames — videos are often in iframes (e.g., YouTube)
-                  const frames = await browser.webNavigation.getAllFrames({ tabId: tab.id });
-                  if (!frames || frames.length === 0) continue;
+                    const responses = await Promise.all(
+                      frames.map(async (frame) => {
+                        try {
+                          return await browser.tabs.sendMessage(
+                            tab.id!,
+                            { type: 'GET_STATUS' },
+                            { frameId: frame.frameId }
+                          );
+                        } catch {
+                          return null;
+                        }
+                      })
+                    );
 
-                  let totalVideoCount = 0;
-                  let hasAnyVideos = false;
+                    const totalVideoCount = responses.reduce(
+                      (sum, r) => sum + ((r as { videoCount?: number } | null)?.videoCount ?? 0),
+                      0
+                    );
+                    if (totalVideoCount === 0) return null;
 
-                  const responses = await Promise.all(
-                    frames.map(async (frame) => {
-                      try {
-                        return await browser.tabs.sendMessage(
-                          tab.id!,
-                          { type: 'GET_STATUS' },
-                          { frameId: frame.frameId }
-                        );
-                      } catch {
-                        return null;
-                      }
-                    })
-                  );
-
-                  for (const response of responses) {
-                    if (response && (response as { videoCount: number }).videoCount > 0) {
-                      totalVideoCount += (response as { videoCount: number }).videoCount;
-                      hasAnyVideos = true;
-                    }
-                  }
-
-                  if (hasAnyVideos) {
-                    const url = new URL(tab.url);
-                    candidates.push({
+                    return {
                       tabId: tab.id,
                       title: tab.title || 'Untitled',
-                      domain: url.hostname,
+                      domain: new URL(tab.url).hostname,
                       videoCount: totalVideoCount,
-                      favIconUrl: tab.favIconUrl,
-                    });
+                    };
+                  } catch {
+                    return null;
                   }
-                } catch {
-                  // Tab has no content script or frames inaccessible — skip
-                }
-              }
-
-              sendResponse(candidates);
+                })
+              );
+              sendResponse(results.filter((c): c is SyncCandidate => c !== null));
             } catch {
               sendResponse([]);
             }
@@ -146,21 +136,19 @@ export default defineBackground(() => {
                 throw new Error(`No video found in tab ${tabId}`);
               };
 
-              const [resultA, resultB] = await Promise.all([
+              const [resultA, resultB, tabA, tabB] = await Promise.all([
                 activateInTab(tabIdA),
                 activateInTab(tabIdB),
+                browser.tabs.get(tabIdA),
+                browser.tabs.get(tabIdB),
               ]);
 
-              // Store tab metadata for display
-              const tabs = await browser.tabs.query({});
-              for (const tab of tabs) {
-                if (tab.id && tab.url) {
-                  try {
-                    const url = new URL(tab.url);
-                    syncCoordinator.setTabMeta(tab.id, tab.title || 'Untitled', url.hostname);
-                  } catch {
-                    // Invalid URL — skip
-                  }
+              for (const tab of [tabA, tabB]) {
+                if (!tab.id || !tab.url) continue;
+                try {
+                  syncCoordinator.setTabMeta(tab.id, tab.title || 'Untitled', new URL(tab.url).hostname);
+                } catch {
+                  // Invalid URL — skip
                 }
               }
 

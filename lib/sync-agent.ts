@@ -130,6 +130,13 @@ export class SyncAgent {
   }
 
   executeSeek(position: number): void {
+    // Cancel any in-flight rate correction — its original target is now stale
+    // once the position changes, and leaving it running would smear the seek.
+    if (this.rateCorrectionTimer) {
+      clearTimeout(this.rateCorrectionTimer);
+      this.rateCorrectionTimer = null;
+      safeMedia.setPlaybackRate(this.media, this.rateCorrectionBaseRate);
+    }
     this.pendingSeek++;
     safeMedia.setCurrentTime(this.media, position);
   }
@@ -150,7 +157,7 @@ export class SyncAgent {
     }, durationMs);
   }
 
-  getPosition(): Omit<SyncPositionResponse, 'requestId'> {
+  getPosition(): SyncPositionResponse {
     return {
       currentTime: safeMedia.getCurrentTime(this.media),
       paused: this.media.paused,

@@ -57,7 +57,6 @@ export type MessageType =
   | 'SYNC_SEEK'
   | 'SYNC_DRIFT_CORRECT'
   | 'SYNC_GET_POSITION'
-  | 'SYNC_POSITION'
   | 'SYNC_BUFFERING'
   // Sync management (popup <-> background)
   | 'GET_SYNC_CANDIDATES'

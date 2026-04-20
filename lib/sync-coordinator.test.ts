@@ -333,8 +333,8 @@ describe('SyncCoordinator', () => {
     it('uses rate adjustment for drift below rate-adjust threshold', async () => {
       // Set up positions: A at 100s, B at 100.1s (100ms drift, below 150ms threshold)
       mockSendMessage
-        .mockResolvedValueOnce({ currentTime: 100, paused: false, timestamp: Date.now(), requestId: 'r_A' })
-        .mockResolvedValueOnce({ currentTime: 100.1, paused: false, timestamp: Date.now(), requestId: 'r_B' });
+        .mockResolvedValueOnce({ currentTime: 100, paused: false, timestamp: Date.now() })
+        .mockResolvedValueOnce({ currentTime: 100.1, paused: false, timestamp: Date.now() });
 
       vi.advanceTimersByTime(2000); // trigger one drift check
       await flushPromises();
@@ -349,8 +349,8 @@ describe('SyncCoordinator', () => {
     it('uses hard seek for drift at or above rate-adjust threshold', async () => {
       // Set up positions: A at 100s, B at 100.2s (200ms drift, above 150ms threshold)
       mockSendMessage
-        .mockResolvedValueOnce({ currentTime: 100, paused: false, timestamp: Date.now(), requestId: 'r_A' })
-        .mockResolvedValueOnce({ currentTime: 100.2, paused: false, timestamp: Date.now(), requestId: 'r_B' });
+        .mockResolvedValueOnce({ currentTime: 100, paused: false, timestamp: Date.now() })
+        .mockResolvedValueOnce({ currentTime: 100.2, paused: false, timestamp: Date.now() });
 
       vi.advanceTimersByTime(2000);
       await flushPromises();
@@ -365,8 +365,8 @@ describe('SyncCoordinator', () => {
     it('ignores drift below ignore threshold', async () => {
       // Set up positions: A at 100s, B at 100.03s (30ms drift, below 50ms threshold)
       mockSendMessage
-        .mockResolvedValueOnce({ currentTime: 100, paused: false, timestamp: Date.now(), requestId: 'r_A' })
-        .mockResolvedValueOnce({ currentTime: 100.03, paused: false, timestamp: Date.now(), requestId: 'r_B' });
+        .mockResolvedValueOnce({ currentTime: 100, paused: false, timestamp: Date.now() })
+        .mockResolvedValueOnce({ currentTime: 100.03, paused: false, timestamp: Date.now() });
 
       vi.advanceTimersByTime(2000);
       await flushPromises();
@@ -386,8 +386,8 @@ describe('SyncCoordinator', () => {
 
       // A at 5, B at 0 → expectedB = 5 + (-10) = -5 → should skip
       mockSendMessage
-        .mockResolvedValueOnce({ currentTime: 5, paused: false, timestamp: Date.now(), requestId: 'r_A' })
-        .mockResolvedValueOnce({ currentTime: 0, paused: false, timestamp: Date.now(), requestId: 'r_B' });
+        .mockResolvedValueOnce({ currentTime: 5, paused: false, timestamp: Date.now() })
+        .mockResolvedValueOnce({ currentTime: 0, paused: false, timestamp: Date.now() });
 
       vi.advanceTimersByTime(2000);
       await flushPromises();

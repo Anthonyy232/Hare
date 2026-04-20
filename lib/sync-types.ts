@@ -12,7 +12,6 @@ export interface SyncCandidate {
   title: string;
   domain: string;
   videoCount: number;
-  favIconUrl?: string;
 }
 
 export interface SyncEventPayload {
@@ -36,15 +35,10 @@ export interface DriftCorrectPayload {
   durationMs?: number; // how long to apply rate adjustment
 }
 
-export interface SyncPositionRequest {
-  requestId: string;
-}
-
 export interface SyncPositionResponse {
   currentTime: number;
   paused: boolean;
   timestamp: number; // Date.now() when position was read
-  requestId: string;
 }
 
 export interface SyncStatusResponse {
@@ -69,6 +63,8 @@ export const SYNC = {
   // cap on a single port instance to prevent the service worker from being
   // terminated mid-session.
   KEEPALIVE_RECONNECT_MS: 240_000,
+  // Port ping cadence — must stay under Chrome's 30s SW idle timeout.
+  KEEPALIVE_PING_MS: 20_000,
   // Storage key for persisted session state in chrome.storage.session.
   // Bumped on schema changes.
   STORAGE_KEY: 'syncSession_v1',

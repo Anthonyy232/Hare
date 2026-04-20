@@ -11,8 +11,9 @@
   let showSetup = $state(false);
   let error: string | null = $state(null);
   let nudgeStep = $state(SYNC.DEFAULT_NUDGE_STEP);
+  const offsetDisplay = $derived(offsetLabel(syncStatus?.offset ?? 0));
 
-  const NUDGE_STEPS = [0.1, 0.5, 1.0];
+  const NUDGE_STEPS = [0.01, 0.05, 0.1, 0.5];
 
   async function loadSyncStatus() {
     try {
@@ -99,10 +100,16 @@
     error = null;
   }
 
-  function formatOffset(offset: number): string {
-    const abs = Math.abs(offset);
-    const sign = offset >= 0 ? "+" : "-";
-    return `${sign}${abs.toFixed(1)}s`;
+  function formatStep(step: number): string {
+    return step < 1 ? `${Math.round(step * 1000)} ms` : `${step.toFixed(1)} s`;
+  }
+
+  function offsetLabel(offset: number): { magnitude: string; direction: string } {
+    const absMs = Math.round(Math.abs(offset) * 1000);
+    if (absMs === 0) return { magnitude: "in sync", direction: "" };
+    const magnitude =
+      absMs < 1000 ? `${absMs} ms` : `${(absMs / 1000).toFixed(3)} s`;
+    return { magnitude, direction: offset > 0 ? "ahead" : "behind" };
   }
 
   onMount(() => {
@@ -135,17 +142,36 @@
       </div>
 
       <div class="offset-control">
-        <span class="offset-label">Offset</span>
-        <div class="offset-buttons">
-          <button class="nudge-btn" onclick={() => nudge(-1)}>-</button>
-          <span class="offset-value">{formatOffset(syncStatus.offset)}</span>
-          <button class="nudge-btn" onclick={() => nudge(1)}>+</button>
+        <div class="offset-readout">
+          <span class="offset-prefix">B is</span>
+          <span class="offset-magnitude">{offsetDisplay.magnitude}</span>
+          {#if offsetDisplay.direction}
+            <span class="offset-direction">{offsetDisplay.direction} of A</span>
+          {/if}
         </div>
-        <select class="step-select" bind:value={nudgeStep}>
-          {#each NUDGE_STEPS as step}
-            <option value={step}>{step}s</option>
-          {/each}
-        </select>
+        <div class="offset-controls">
+          <button
+            class="nudge-btn"
+            onclick={() => nudge(-1)}
+            title="Shift B earlier by {formatStep(nudgeStep)}"
+            aria-label="Shift B earlier"
+          >◀</button>
+          <select
+            class="step-select"
+            bind:value={nudgeStep}
+            aria-label="Nudge step"
+          >
+            {#each NUDGE_STEPS as step}
+              <option value={step}>{formatStep(step)}</option>
+            {/each}
+          </select>
+          <button
+            class="nudge-btn"
+            onclick={() => nudge(1)}
+            title="Shift B later by {formatStep(nudgeStep)}"
+            aria-label="Shift B later"
+          >▶</button>
+        </div>
       </div>
     </div>
   {:else if showSetup}
@@ -205,7 +231,9 @@
 
 <style>
   .sync-section {
-    padding: 0;
+    padding: 0 20px 12px;
+    position: relative;
+    z-index: 1;
   }
 
   .sync-mode-btn {
@@ -314,62 +342,73 @@
 
   .offset-control {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
     font-size: 12px;
   }
 
-  .offset-label {
-    color: #999;
-    font-weight: 600;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+  .offset-readout {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    color: #ccc;
   }
 
-  .offset-buttons {
+  .offset-prefix,
+  .offset-direction {
+    color: #999;
+    font-size: 11px;
+  }
+
+  .offset-magnitude {
+    font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
+    font-variant-numeric: tabular-nums;
+    color: #f0f0f0;
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  .offset-controls {
     display: flex;
     align-items: center;
-    gap: 4px;
-    flex: 1;
+    gap: 6px;
   }
 
   .nudge-btn {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 26px;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 3px;
     background: rgba(255, 255, 255, 0.05);
     color: #f0f0f0;
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 12px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: background 0.15s ease;
+    flex-shrink: 0;
   }
 
   .nudge-btn:hover {
     background: rgba(255, 255, 255, 0.1);
   }
 
-  .offset-value {
-    font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
-    font-variant-numeric: tabular-nums;
-    color: #f0f0f0;
-    min-width: 50px;
-    text-align: center;
+  .nudge-btn:active {
+    background: rgba(139, 92, 246, 0.2);
   }
 
   .step-select {
+    flex: 1;
     font-size: 11px;
-    padding: 3px 6px;
+    padding: 4px 6px;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 3px;
     background: rgba(255, 255, 255, 0.05);
     color: #ccc;
     cursor: pointer;
+    text-align: center;
+    text-align-last: center;
   }
 
   .sync-setup {
