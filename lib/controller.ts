@@ -86,6 +86,9 @@ export class VideoController {
 
   private dragBounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null;
 
+  /** Optional listener notified when setSpeed/resetSpeed change the intended speed. Used by Sync Mode to propagate rate to peer tab. */
+  private intendedSpeedListener: ((speed: number) => void) | null = null;
+
   constructor(
     media: HTMLMediaElement,
     settings: Settings,
@@ -637,6 +640,7 @@ export class VideoController {
 
     const previousSpeed = safeMedia.getPlaybackRate(this.media);
     safeMedia.setPlaybackRate(this.media, roundedSpeed);
+    this.intendedSpeedListener?.(roundedSpeed);
 
     requestAnimationFrame(() => {
       const actualSpeed = safeMedia.getPlaybackRate(this.media);
@@ -758,6 +762,11 @@ export class VideoController {
   /** The user-intended playback speed, independent of any active sync rate correction. */
   get intendedSpeed(): number {
     return this.targetSpeed;
+  }
+
+  /** Register a listener notified when the intended speed changes. Pass null to clear. */
+  setIntendedSpeedListener(listener: ((speed: number) => void) | null): void {
+    this.intendedSpeedListener = listener;
   }
 
   /**

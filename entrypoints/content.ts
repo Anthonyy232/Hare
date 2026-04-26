@@ -18,6 +18,7 @@ const SYNC_EVENT_TYPE: Record<SyncEventPayload['action'], string> = {
   pause: 'SYNC_PAUSE',
   play: 'SYNC_PLAY',
   seek: 'SYNC_SEEK',
+  ratechange: 'SYNC_RATE',
   buffering_start: 'SYNC_BUFFERING',
   buffering_end: 'SYNC_BUFFERING',
 };
@@ -353,16 +354,36 @@ export default defineContentScript({
               break;
             }
             const primaryController = controllers.get(primaryMedia);
-            syncAgent = new SyncAgent(primaryMedia, (event: SyncEventPayload) => {
-              browser.runtime.sendMessage({
-                type: SYNC_EVENT_TYPE[event.action],
-                payload: event,
-              }).catch(() => {});
-            }, primaryController?.intendedSpeed ?? 1.0);
+            const baseRate = primaryController?.intendedSpeed
+              ?? safeMedia.getPlaybackRate(primaryMedia);
+            syncAgent = new SyncAgent(
+              primaryMedia,
+              (event: SyncEventPayload) => {
+                browser.runtime.sendMessage({
+                  type: SYNC_EVENT_TYPE[event.action],
+                  payload: event,
+                }).catch(() => {});
+              },
+              baseRate,
+              // Coordinator-issued rate changes route through the controller so
+              // enforcement state (targetSpeed / isEnforcingSpeed) stays consistent.
+              primaryController
+                ? (rate: number) => primaryController.setSpeed(rate)
+                : (rate: number) => safeMedia.setPlaybackRate(primaryMedia, rate),
+            );
+            // User-initiated speed changes (keybind, popup) flow controller -> agent.
+            if (primaryController) {
+              primaryController.setIntendedSpeedListener((rate) => {
+                syncAgent?.notifyIntendedSpeedChange(rate);
+              });
+            }
             startSyncKeepAlive();
             sendResponse({
               success: true,
               currentTime: safeMedia.getCurrentTime(primaryMedia),
+              playbackRate: baseRate,
+              paused: primaryMedia.paused,
+              timestamp: Date.now(),
             });
             break;
           }
@@ -372,6 +393,7 @@ export default defineContentScript({
               syncAgent.destroy();
               syncAgent = null;
             }
+            for (const c of controllers.values()) c.setIntendedSpeedListener(null);
             stopSyncKeepAlive();
             sendResponse({ success: true });
             break;
@@ -380,8 +402,14 @@ export default defineContentScript({
           case 'SYNC_PAUSE': {
             if (!syncAgent) { sendResponse({ success: false }); break; }
             const pauseCmd = message.payload as SyncCommandPayload;
-            const compensatedPausePos = pauseCmd.position + (Date.now() - pauseCmd.timestamp) / 1000;
-            syncAgent.executeSeek(compensatedPausePos);
+            // Source was paused at command time and isn't advancing — don't
+            // time-compensate. Skip the seek if we're already close enough to
+            // avoid visible jitter when both tabs are already in sync.
+            const localPos = syncAgent.getPosition().currentTime;
+            const driftSec = SYNC.DRIFT_IGNORE_THRESHOLD_MS / 1000;
+            if (Math.abs(localPos - pauseCmd.position) > driftSec) {
+              syncAgent.executeSeek(pauseCmd.position);
+            }
             syncAgent.executePause();
             sendResponse({ success: true });
             break;
@@ -392,7 +420,12 @@ export default defineContentScript({
             const playCmd = message.payload as SyncCommandPayload;
             // position -1 means "resume without seeking" (e.g., buffering recovery)
             if (playCmd.position >= 0) {
-              const compensatedPlayPos = playCmd.position + (Date.now() - playCmd.timestamp) / 1000;
+              // Source was playing — extrapolate using its rate (preferred) or
+              // fall back to local rate.
+              const rate = playCmd.rate
+                ?? syncAgent.getPosition().playbackRate
+                ?? 1.0;
+              const compensatedPlayPos = playCmd.position + rate * (Date.now() - playCmd.timestamp) / 1000;
               syncAgent.executeSeek(compensatedPlayPos);
             }
             syncAgent.executePlay();
@@ -405,6 +438,16 @@ export default defineContentScript({
             const seekCmd = message.payload as SyncCommandPayload;
             // Seek is to an absolute position — no timestamp compensation needed
             syncAgent.executeSeek(seekCmd.position);
+            sendResponse({ success: true });
+            break;
+          }
+
+          case 'SYNC_RATE': {
+            if (!syncAgent) { sendResponse({ success: false }); break; }
+            const rateCmd = message.payload as SyncCommandPayload;
+            if (typeof rateCmd.rate === 'number' && !isNaN(rateCmd.rate)) {
+              syncAgent.executeRateChange(rateCmd.rate);
+            }
             sendResponse({ success: true });
             break;
           }
