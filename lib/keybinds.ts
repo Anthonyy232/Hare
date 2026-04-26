@@ -18,6 +18,8 @@ function isInputElement(element: Element | null): boolean {
 
 function findBinding(event: KeyboardEvent, bindings: KeyBinding[]): KeyBinding | null {
   for (const binding of bindings) {
+    // Empty key means the user has cleared this shortcut — don't match.
+    if (!binding.key) continue;
     if (event.code === binding.key) return binding;
   }
   return null;

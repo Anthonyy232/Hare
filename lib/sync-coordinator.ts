@@ -10,10 +10,11 @@ import type {
 import type { HareMessage, MessageType } from './types';
 import { logger } from './logger';
 
-const COMMAND_TYPE: Record<'pause' | 'play' | 'seek', MessageType> = {
+const COMMAND_TYPE: Record<'pause' | 'play' | 'seek' | 'ratechange', MessageType> = {
   pause: 'SYNC_PAUSE',
   play: 'SYNC_PLAY',
   seek: 'SYNC_SEEK',
+  ratechange: 'SYNC_RATE',
 };
 
 interface TabRef {
@@ -34,17 +35,74 @@ export class SyncCoordinator {
   private sendFailures = 0;
   private static readonly MAX_SEND_FAILURES = 5;
 
+  /**
+   * Resolves once restoreSession() has finished (success or failure). Inbound
+   * event handlers await this so messages received during SW respawn aren't
+   * silently dropped while session state is still rehydrating.
+   */
+  private readyResolver!: () => void;
+  ready: Promise<void> = new Promise<void>((resolve) => {
+    this.readyResolver = resolve;
+  });
+
+  /** Mark coordinator ready when no restore is needed (tests, fresh install). */
+  markReady(): void {
+    this.readyResolver();
+  }
+
+  /** Rate- and paused-aware extrapolation of a position to a reference time. */
+  private extrapolate(p: SyncPositionResponse, now: number): number {
+    if (p.paused) return p.currentTime;
+    const rate = p.playbackRate ?? 1.0;
+    return p.currentTime + rate * (now - p.timestamp) / 1000;
+  }
+
   startSync(
     videoA: TabRef,
     videoB: TabRef,
-    initialPositions: { currentTimeA: number; currentTimeB: number }
+    initialPositions: {
+      currentTimeA: number;
+      currentTimeB: number;
+      timestampA?: number;
+      timestampB?: number;
+      rateA?: number;
+      rateB?: number;
+      pausedA?: boolean;
+      pausedB?: boolean;
+    }
   ): void {
     this.stopSync('new session starting');
+
+    // Each SYNC_ACTIVATE returns currentTime read at that tab's local moment;
+    // the two reads happen at different real-times. Extrapolate both to a
+    // common reference time before computing the offset so measurement skew
+    // doesn't get baked in.
+    const tsA = initialPositions.timestampA ?? Date.now();
+    const tsB = initialPositions.timestampB ?? tsA;
+    const refTime = Math.max(tsA, tsB);
+    const adjA = this.extrapolate(
+      {
+        currentTime: initialPositions.currentTimeA,
+        paused: initialPositions.pausedA ?? false,
+        playbackRate: initialPositions.rateA ?? 1.0,
+        timestamp: tsA,
+      },
+      refTime
+    );
+    const adjB = this.extrapolate(
+      {
+        currentTime: initialPositions.currentTimeB,
+        paused: initialPositions.pausedB ?? false,
+        playbackRate: initialPositions.rateB ?? 1.0,
+        timestamp: tsB,
+      },
+      refTime
+    );
 
     this.session = {
       videoA: { tabId: videoA.tabId, frameId: videoA.frameId },
       videoB: { tabId: videoB.tabId, frameId: videoB.frameId },
-      offset: initialPositions.currentTimeB - initialPositions.currentTimeA,
+      offset: adjB - adjA,
       nudgeStep: SYNC.DEFAULT_NUDGE_STEP,
       generation: 0,
       bufferingTab: null,
@@ -88,6 +146,8 @@ export class SyncCoordinator {
       });
     } catch (error) {
       logger.error('Failed to restore sync session:', error);
+    } finally {
+      this.readyResolver();
     }
   }
 
@@ -160,14 +220,13 @@ export class SyncCoordinator {
     if (!posA) return;
     if (!this.session || this.session.generation !== gen) return;
 
-    const correctedA = posA.currentTime + (Date.now() - posA.timestamp) / 1000;
+    const correctedA = this.extrapolate(posA, Date.now());
     const targetB = Math.max(0, correctedA + this.session.offset);
 
     await this.sendToSyncedTab(this.session.videoB.tabId, {
       type: 'SYNC_DRIFT_CORRECT',
       payload: {
         position: targetB,
-        generation: gen,
         method: 'seek',
       } satisfies DriftCorrectPayload,
     });
@@ -224,17 +283,18 @@ export class SyncCoordinator {
   }
 
   async handleSyncEvent(fromTabId: number, event: SyncEventPayload): Promise<void> {
+    await this.ready;
     if (!this.session) return;
 
     const targetTabId = this.peerTabId(fromTabId);
     if (targetTabId == null) return;
-    const targetPosition = this.toTargetPosition(fromTabId, event.position);
 
     switch (event.action) {
       case 'pause':
       case 'play':
-      case 'seek':
+      case 'seek': {
         this.session.generation++;
+        const targetPosition = this.toTargetPosition(fromTabId, event.position);
         await this.sendToSyncedTab(targetTabId, {
           type: COMMAND_TYPE[event.action],
           payload: {
@@ -242,9 +302,27 @@ export class SyncCoordinator {
             position: targetPosition,
             timestamp: event.timestamp,
             generation: this.session.generation,
+            rate: event.rate,
           } satisfies SyncCommandPayload,
         });
         break;
+      }
+
+      case 'ratechange': {
+        if (event.rate == null) break;
+        this.session.generation++;
+        await this.sendToSyncedTab(targetTabId, {
+          type: COMMAND_TYPE.ratechange,
+          payload: {
+            action: 'ratechange',
+            position: 0,
+            timestamp: event.timestamp,
+            generation: this.session.generation,
+            rate: event.rate,
+          } satisfies SyncCommandPayload,
+        });
+        break;
+      }
 
       case 'buffering_start':
         await this.handleBufferingStart(fromTabId, targetTabId, event);
@@ -358,11 +436,14 @@ export class SyncCoordinator {
 
       if (!posA || !posB) return;
       if (!this.session || this.session.generation !== generationAtCheck) return;
-      if (posA.paused && posB.paused) return;
+      // If both are paused there's nothing to drift. If one is paused and the
+      // other isn't, the playing side will diverge unboundedly until the next
+      // pause/play event reconciles — correcting either side is meaningless.
+      if (posA.paused || posB.paused) return;
 
       const now = Date.now();
-      const correctedA = posA.currentTime + (now - posA.timestamp) / 1000;
-      const correctedB = posB.currentTime + (now - posB.timestamp) / 1000;
+      const correctedA = this.extrapolate(posA, now);
+      const correctedB = this.extrapolate(posB, now);
 
       const expectedB = correctedA + this.session.offset;
       const expectedA = correctedB - this.session.offset;
@@ -384,7 +465,6 @@ export class SyncCoordinator {
           type: 'SYNC_DRIFT_CORRECT',
           payload: {
             position: 0,
-            generation: generationAtCheck,
             method: 'rate',
             rateFactor: SYNC.RATE_ADJUST_FACTOR,
             durationMs: SYNC.RATE_ADJUST_DURATION_MS,
@@ -395,7 +475,6 @@ export class SyncCoordinator {
           type: 'SYNC_DRIFT_CORRECT',
           payload: {
             position: behindIsB ? expectedB : expectedA,
-            generation: generationAtCheck,
             method: 'seek',
           } satisfies DriftCorrectPayload,
         });

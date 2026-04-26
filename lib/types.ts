@@ -55,6 +55,7 @@ export type MessageType =
   | 'SYNC_PAUSE'
   | 'SYNC_PLAY'
   | 'SYNC_SEEK'
+  | 'SYNC_RATE'
   | 'SYNC_DRIFT_CORRECT'
   | 'SYNC_GET_POSITION'
   | 'SYNC_BUFFERING'
