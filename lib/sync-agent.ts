@@ -7,9 +7,12 @@ type EventCallback = (event: SyncEventPayload) => void;
 export class SyncAgent {
   private media: HTMLMediaElement;
   private sendEvent: EventCallback;
+  /** Applies a coordinator-issued rate to the local controller (so enforcement state stays consistent). */
+  private setIntendedSpeed: (rate: number) => void;
   private pendingPause = 0;
   private pendingPlay = 0;
   private pendingSeek = 0;
+  private pendingRate = 0;
   private coordinatorPlaying = false;
   private seeking = false;
   private destroyed = false;
@@ -26,9 +29,15 @@ export class SyncAgent {
   private onStalled: () => void;
   private onPlaying: () => void;
 
-  constructor(media: HTMLMediaElement, sendEvent: EventCallback, baseRate: number = 1.0) {
+  constructor(
+    media: HTMLMediaElement,
+    sendEvent: EventCallback,
+    baseRate: number = 1.0,
+    setIntendedSpeed: (rate: number) => void = (rate) => safeMedia.setPlaybackRate(media, rate),
+  ) {
     this.media = media;
     this.sendEvent = sendEvent;
+    this.setIntendedSpeed = setIntendedSpeed;
     this.rateCorrectionBaseRate = baseRate;
 
     this.onPause = this.handlePause.bind(this);
@@ -48,12 +57,13 @@ export class SyncAgent {
     media.addEventListener('playing', this.onPlaying);
   }
 
-  private emit(action: SyncEventPayload['action']): void {
+  private emit(action: Exclude<SyncEventPayload['action'], 'ratechange'>): void {
     if (this.destroyed) return;
     this.sendEvent({
       action,
       position: safeMedia.getCurrentTime(this.media),
       timestamp: Date.now(),
+      rate: safeMedia.getPlaybackRate(this.media),
     });
   }
 
@@ -141,13 +151,48 @@ export class SyncAgent {
     safeMedia.setCurrentTime(this.media, position);
   }
 
+  /** Apply a coordinator-issued playback rate change. Echo-suppressed via pendingRate. */
+  executeRateChange(rate: number): void {
+    if (this.destroyed) return;
+    if (this.rateCorrectionTimer) {
+      clearTimeout(this.rateCorrectionTimer);
+      this.rateCorrectionTimer = null;
+    }
+    this.rateCorrectionBaseRate = rate;
+    if (Math.abs(safeMedia.getPlaybackRate(this.media) - rate) > 1e-3) {
+      this.pendingRate++;
+      this.setIntendedSpeed(rate);
+    }
+  }
+
+  /**
+   * Notify this agent that the user (via controller) just changed the intended speed.
+   * Updates the rate-correction base and emits a ratechange event to the coordinator.
+   * Coordinator-issued rate changes (executeRateChange) should NOT call this — they
+   * call setIntendedSpeed directly and pendingRate suppresses the echo.
+   */
+  notifyIntendedSpeedChange(rate: number): void {
+    if (this.destroyed) return;
+    if (this.pendingRate > 0) {
+      this.pendingRate--;
+      return;
+    }
+    this.rateCorrectionBaseRate = rate;
+    this.sendEvent({
+      action: 'ratechange',
+      position: safeMedia.getCurrentTime(this.media),
+      timestamp: Date.now(),
+      rate,
+    });
+  }
+
   /** Apply temporary rate adjustment for small drift corrections */
   applyRateCorrection(rateFactor: number, durationMs: number): void {
     if (this.rateCorrectionTimer) {
       clearTimeout(this.rateCorrectionTimer);
     }
-    // rateCorrectionBaseRate is set at construction from the VideoController's intended
-    // speed — never re-read from the media, which may hold a stale value from a prior session.
+    // rateCorrectionBaseRate is updated by notifyIntendedSpeedChange / executeRateChange
+    // so this stays accurate even when the user changes speed mid-session.
     safeMedia.setPlaybackRate(this.media, this.rateCorrectionBaseRate + rateFactor);
     this.rateCorrectionTimer = setTimeout(() => {
       this.rateCorrectionTimer = null;
@@ -161,6 +206,7 @@ export class SyncAgent {
     return {
       currentTime: safeMedia.getCurrentTime(this.media),
       paused: this.media.paused,
+      playbackRate: safeMedia.getPlaybackRate(this.media),
       timestamp: Date.now(),
     };
   }

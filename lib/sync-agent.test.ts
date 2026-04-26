@@ -22,6 +22,7 @@ import { SyncAgent } from './sync-agent';
 function createMockVideo(currentTime = 0, paused = true): HTMLVideoElement {
   const video = document.createElement('video');
   let _currentTime = currentTime;
+  let _playbackRate = 1.0;
   (video as any)._paused = paused;
 
   Object.defineProperty(video, 'currentTime', {
@@ -31,6 +32,11 @@ function createMockVideo(currentTime = 0, paused = true): HTMLVideoElement {
   });
   Object.defineProperty(video, 'paused', {
     get: () => (video as any)._paused,
+    configurable: true,
+  });
+  Object.defineProperty(video, 'playbackRate', {
+    get: () => _playbackRate,
+    set: (v: number) => { _playbackRate = v; },
     configurable: true,
   });
   return video;
@@ -262,5 +268,62 @@ describe('SyncAgent', () => {
     expect(sendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'seek' })
     );
+  });
+
+  it('getPosition includes playbackRate', () => {
+    video.playbackRate = 1.5;
+    const pos = agent.getPosition();
+    expect(pos.playbackRate).toBe(1.5);
+  });
+
+  it('emitted events carry the source rate', () => {
+    video.playbackRate = 1.25;
+    video.dispatchEvent(new Event('pause'));
+    expect(sendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'pause', rate: 1.25 })
+    );
+  });
+
+  describe('rate propagation', () => {
+    it('notifyIntendedSpeedChange emits a ratechange event', () => {
+      agent.notifyIntendedSpeedChange(1.5);
+      expect(sendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ratechange', rate: 1.5 })
+      );
+    });
+
+    it('notifyIntendedSpeedChange updates the rate-correction base', () => {
+      agent.notifyIntendedSpeedChange(1.5);
+      // applyRateCorrection layers on top of the base rate; with base=1.5
+      // and rateFactor=0.02 the media should land at 1.52.
+      agent.applyRateCorrection(0.02, 1000);
+      expect(video.playbackRate).toBeCloseTo(1.52, 5);
+    });
+
+    it('executeRateChange suppresses the echo from notifyIntendedSpeedChange', () => {
+      // Mimic content.ts: executeRateChange routes through setIntendedSpeed
+      // which calls controller.setSpeed which fires our listener back into
+      // notifyIntendedSpeedChange. Without echo suppression we'd get a
+      // ratechange event sent to the coordinator.
+      const peer = new SyncAgent(
+        video,
+        sendEvent,
+        1.0,
+        (rate: number) => {
+          // simulate controller propagating to listener
+          peer.notifyIntendedSpeedChange(rate);
+          video.playbackRate = rate;
+        }
+      );
+      peer.executeRateChange(1.5);
+      expect(sendEvent).not.toHaveBeenCalled();
+      peer.destroy();
+    });
+
+    it('executeRateChange updates the rate-correction base', () => {
+      agent.executeRateChange(2.0);
+      agent.applyRateCorrection(0.05, 1000);
+      expect(video.playbackRate).toBeCloseTo(2.05, 5);
+    });
   });
 });

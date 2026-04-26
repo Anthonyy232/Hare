@@ -46,6 +46,12 @@
     }
   }
 
+  async function discardChanges() {
+    settings = await loadSettings();
+    hasUnsavedChanges = false;
+    conflictWarning = false;
+  }
+
   function handleBindingsChange(bindings: KeyBinding[]) {
     if (settings) {
       settings = { ...settings, keyBindings: bindings };
@@ -113,21 +119,20 @@
   }
 
   onMount(() => {
-    load();
-    unwatchSettings = watchSettings((newSettings) => {
-      /**
-       * If we are currently saving, ignore external changes.
-       * If there are unsaved local changes, show a warning instead of overwriting.
-       * Otherwise, accept the external changes.
-       */
-      if (saving) return;
-
-      if (hasUnsavedChanges) {
-        conflictWarning = true;
-      } else {
-        settings = newSettings;
-      }
-    });
+    // Arm the watch only after the initial load resolves. Otherwise an
+    // external storage change that races with load() can clobber `settings`
+    // (or trigger a spurious conflict warning) before we've shown the form.
+    (async () => {
+      await load();
+      unwatchSettings = watchSettings((newSettings) => {
+        if (saving) return;
+        if (hasUnsavedChanges) {
+          conflictWarning = true;
+        } else {
+          settings = newSettings;
+        }
+      });
+    })();
   });
 
   onDestroy(() => {
@@ -282,8 +287,13 @@
 
       {#if conflictWarning}
         <div class="conflict-warning">
-          <strong>Warning:</strong>
-          {MESSAGES.SETTINGS_CONFLICT}
+          <div class="conflict-text">
+            <strong>Warning:</strong>
+            {MESSAGES.SETTINGS_CONFLICT}
+          </div>
+          <button class="conflict-discard" onclick={discardChanges}>
+            Discard local changes
+          </button>
         </div>
       {/if}
 
@@ -517,6 +527,11 @@
     border-color: #60a5fa;
   }
 
+  input[type="checkbox"]:focus-visible + .toggle-slider {
+    outline: 2px solid rgba(96, 165, 250, 0.8);
+    outline-offset: 2px;
+  }
+
   input[type="checkbox"]:checked + .toggle-slider:before {
     transform: translateX(20px);
   }
@@ -596,6 +611,33 @@
     font-size: 13px;
     line-height: 1.5;
     margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .conflict-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .conflict-discard {
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    color: #fbbf24;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .conflict-discard:hover {
+    background: rgba(251, 191, 36, 0.25);
   }
 
   .actions-wrapper {

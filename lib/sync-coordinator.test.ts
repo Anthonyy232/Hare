@@ -32,6 +32,9 @@ describe('SyncCoordinator', () => {
     vi.useFakeTimers();
     mockSendMessage.mockClear();
     coordinator = new SyncCoordinator();
+    // No SW respawn in unit tests — release the ready gate so handleSyncEvent
+    // doesn't block waiting for restoreSession to fire.
+    coordinator.markReady();
   });
 
   afterEach(() => {
@@ -333,8 +336,8 @@ describe('SyncCoordinator', () => {
     it('uses rate adjustment for drift below rate-adjust threshold', async () => {
       // Set up positions: A at 100s, B at 100.1s (100ms drift, below 150ms threshold)
       mockSendMessage
-        .mockResolvedValueOnce({ currentTime: 100, paused: false, timestamp: Date.now() })
-        .mockResolvedValueOnce({ currentTime: 100.1, paused: false, timestamp: Date.now() });
+        .mockResolvedValueOnce({ currentTime: 100, paused: false, playbackRate: 1, timestamp: Date.now() })
+        .mockResolvedValueOnce({ currentTime: 100.1, paused: false, playbackRate: 1, timestamp: Date.now() });
 
       vi.advanceTimersByTime(2000); // trigger one drift check
       await flushPromises();
@@ -349,8 +352,8 @@ describe('SyncCoordinator', () => {
     it('uses hard seek for drift at or above rate-adjust threshold', async () => {
       // Set up positions: A at 100s, B at 100.2s (200ms drift, above 150ms threshold)
       mockSendMessage
-        .mockResolvedValueOnce({ currentTime: 100, paused: false, timestamp: Date.now() })
-        .mockResolvedValueOnce({ currentTime: 100.2, paused: false, timestamp: Date.now() });
+        .mockResolvedValueOnce({ currentTime: 100, paused: false, playbackRate: 1, timestamp: Date.now() })
+        .mockResolvedValueOnce({ currentTime: 100.2, paused: false, playbackRate: 1, timestamp: Date.now() });
 
       vi.advanceTimersByTime(2000);
       await flushPromises();
@@ -365,8 +368,8 @@ describe('SyncCoordinator', () => {
     it('ignores drift below ignore threshold', async () => {
       // Set up positions: A at 100s, B at 100.03s (30ms drift, below 50ms threshold)
       mockSendMessage
-        .mockResolvedValueOnce({ currentTime: 100, paused: false, timestamp: Date.now() })
-        .mockResolvedValueOnce({ currentTime: 100.03, paused: false, timestamp: Date.now() });
+        .mockResolvedValueOnce({ currentTime: 100, paused: false, playbackRate: 1, timestamp: Date.now() })
+        .mockResolvedValueOnce({ currentTime: 100.03, paused: false, playbackRate: 1, timestamp: Date.now() });
 
       vi.advanceTimersByTime(2000);
       await flushPromises();
@@ -386,8 +389,8 @@ describe('SyncCoordinator', () => {
 
       // A at 5, B at 0 → expectedB = 5 + (-10) = -5 → should skip
       mockSendMessage
-        .mockResolvedValueOnce({ currentTime: 5, paused: false, timestamp: Date.now() })
-        .mockResolvedValueOnce({ currentTime: 0, paused: false, timestamp: Date.now() });
+        .mockResolvedValueOnce({ currentTime: 5, paused: false, playbackRate: 1, timestamp: Date.now() })
+        .mockResolvedValueOnce({ currentTime: 0, paused: false, playbackRate: 1, timestamp: Date.now() });
 
       vi.advanceTimersByTime(2000);
       await flushPromises();
@@ -461,6 +464,212 @@ describe('SyncCoordinator', () => {
       }
 
       expect(coordinator.getStatus().active).toBe(true);
+    });
+  });
+
+  describe('rate-aware drift correction', () => {
+    beforeEach(() => {
+      coordinator.startSync(
+        { tabId: 1 },
+        { tabId: 2 },
+        { currentTimeA: 0, currentTimeB: 0 }
+      );
+    });
+
+    it('does not flag false drift when both tabs play at non-1.0x but the same rate', async () => {
+      // Both at 2.0x, sampled 1s apart; if extrapolation was rate-blind it
+      // would compute a 1s drift and issue a seek correction.
+      const now = Date.now();
+      mockSendMessage
+        .mockResolvedValueOnce({ currentTime: 100, paused: false, playbackRate: 2.0, timestamp: now - 1000 })
+        .mockResolvedValueOnce({ currentTime: 102, paused: false, playbackRate: 2.0, timestamp: now });
+
+      vi.advanceTimersByTime(2000);
+      await flushPromises();
+
+      const driftCorrectCall = mockSendMessage.mock.calls.find(
+        ([, msg]) => msg.type === 'SYNC_DRIFT_CORRECT'
+      );
+      expect(driftCorrectCall).toBeUndefined();
+    });
+
+    it('skips correction when one tab is paused and the other is playing', async () => {
+      const now = Date.now();
+      mockSendMessage
+        .mockResolvedValueOnce({ currentTime: 100, paused: true, playbackRate: 1.0, timestamp: now })
+        .mockResolvedValueOnce({ currentTime: 100.5, paused: false, playbackRate: 1.0, timestamp: now });
+
+      vi.advanceTimersByTime(2000);
+      await flushPromises();
+
+      const driftCorrectCall = mockSendMessage.mock.calls.find(
+        ([, msg]) => msg.type === 'SYNC_DRIFT_CORRECT'
+      );
+      expect(driftCorrectCall).toBeUndefined();
+    });
+
+    it('drift payload no longer carries generation field', async () => {
+      const now = Date.now();
+      mockSendMessage
+        .mockResolvedValueOnce({ currentTime: 100, paused: false, playbackRate: 1.0, timestamp: now })
+        .mockResolvedValueOnce({ currentTime: 100.2, paused: false, playbackRate: 1.0, timestamp: now });
+
+      vi.advanceTimersByTime(2000);
+      await flushPromises();
+
+      const driftCorrectCall = mockSendMessage.mock.calls.find(
+        ([, msg]) => msg.type === 'SYNC_DRIFT_CORRECT'
+      );
+      expect(driftCorrectCall).toBeDefined();
+      expect(driftCorrectCall![1].payload.generation).toBeUndefined();
+    });
+  });
+
+  describe('rate change relay', () => {
+    beforeEach(() => {
+      coordinator.startSync(
+        { tabId: 1 },
+        { tabId: 2 },
+        { currentTimeA: 0, currentTimeB: 5 }
+      );
+    });
+
+    it('relays a ratechange from A to B with the source rate', async () => {
+      await coordinator.handleSyncEvent(1, {
+        action: 'ratechange',
+        position: 0,
+        timestamp: Date.now(),
+        rate: 1.5,
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        2,
+        expect.objectContaining({
+          type: 'SYNC_RATE',
+          payload: expect.objectContaining({
+            action: 'ratechange',
+            rate: 1.5,
+          }),
+        })
+      );
+    });
+
+    it('relays a ratechange from B to A', async () => {
+      await coordinator.handleSyncEvent(2, {
+        action: 'ratechange',
+        position: 0,
+        timestamp: Date.now(),
+        rate: 0.5,
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          type: 'SYNC_RATE',
+          payload: expect.objectContaining({ rate: 0.5 }),
+        })
+      );
+    });
+
+    it('drops a ratechange event with no rate field', async () => {
+      await coordinator.handleSyncEvent(1, {
+        action: 'ratechange',
+        position: 0,
+        timestamp: Date.now(),
+      });
+      expect(mockSendMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('startSync measurement-skew compensation', () => {
+    it('compensates for the time gap between A and B position reads', () => {
+      // A read at t=1000, B read at t=1500. Both playing at 1.0x at currentTime=100.
+      // Without skew compensation, offset = 100 - 100 = 0.
+      // With skew compensation, A is extrapolated forward by 0.5s to match B's
+      // reference time, so adjA = 100.5 and offset = 100 - 100.5 = -0.5.
+      coordinator.startSync(
+        { tabId: 1 },
+        { tabId: 2 },
+        {
+          currentTimeA: 100,
+          currentTimeB: 100,
+          timestampA: 1000,
+          timestampB: 1500,
+          rateA: 1,
+          rateB: 1,
+          pausedA: false,
+          pausedB: false,
+        }
+      );
+
+      expect(coordinator.getStatus().offset).toBeCloseTo(-0.5, 5);
+    });
+
+    it('does not extrapolate paused inputs', () => {
+      coordinator.startSync(
+        { tabId: 1 },
+        { tabId: 2 },
+        {
+          currentTimeA: 100,
+          currentTimeB: 100,
+          timestampA: 1000,
+          timestampB: 1500,
+          rateA: 1,
+          rateB: 1,
+          pausedA: true,
+          pausedB: false,
+        }
+      );
+
+      // A is paused so no extrapolation. B uses 1500 as its own reference;
+      // refTime is max(1000, 1500) = 1500, so adjB = 100 (no gap).
+      expect(coordinator.getStatus().offset).toBeCloseTo(0, 5);
+    });
+
+    it('falls back to skew-free offset when timestamps are not provided', () => {
+      coordinator.startSync(
+        { tabId: 1 },
+        { tabId: 2 },
+        { currentTimeA: 10, currentTimeB: 15 }
+      );
+      expect(coordinator.getStatus().offset).toBe(5);
+    });
+  });
+
+  describe('ready gate', () => {
+    it('handleSyncEvent waits for restoreSession before processing', async () => {
+      // Fresh coordinator: ready promise is unresolved until restoreSession or markReady.
+      const fresh = new SyncCoordinator();
+      // Pre-arm a session as if already started.
+      fresh.startSync(
+        { tabId: 1 },
+        { tabId: 2 },
+        { currentTimeA: 0, currentTimeB: 0 }
+      );
+      mockSendMessage.mockClear();
+
+      const eventPromise = fresh.handleSyncEvent(1, {
+        action: 'pause',
+        position: 10,
+        timestamp: Date.now(),
+      });
+
+      // While the ready gate is closed, no message should have been relayed.
+      await flushPromises();
+      expect(mockSendMessage).not.toHaveBeenCalledWith(
+        2,
+        expect.objectContaining({ type: 'SYNC_PAUSE' })
+      );
+
+      // Open the gate; the queued event should now flow through.
+      fresh.markReady();
+      await eventPromise;
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        2,
+        expect.objectContaining({ type: 'SYNC_PAUSE' })
+      );
+
+      fresh.destroy();
     });
   });
 });

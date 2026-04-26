@@ -1,7 +1,7 @@
 import { loadSettings, saveSettings } from '../lib/settings';
 import { logger } from '../lib/logger';
 import { SyncCoordinator } from '../lib/sync-coordinator';
-import type { SyncEventPayload, SyncCandidate } from '../lib/sync-types';
+import type { SyncEventPayload, SyncCandidate, SyncCommandPayload } from '../lib/sync-types';
 import type { HareMessage } from '../lib/types';
 
 export default defineBackground(() => {
@@ -49,6 +49,7 @@ export default defineBackground(() => {
         case 'SYNC_PAUSE':
         case 'SYNC_PLAY':
         case 'SYNC_SEEK':
+        case 'SYNC_RATE':
         case 'SYNC_BUFFERING': {
           const tabId = sender.tab?.id;
           if (tabId == null) return;
@@ -124,8 +125,17 @@ export default defineBackground(() => {
                       { frameId: frame.frameId }
                     );
                     if (response && (response as { success: boolean }).success) {
+                      const r = response as {
+                        currentTime: number;
+                        playbackRate?: number;
+                        paused?: boolean;
+                        timestamp?: number;
+                      };
                       return {
-                        currentTime: (response as { currentTime: number }).currentTime ?? 0,
+                        currentTime: r.currentTime ?? 0,
+                        playbackRate: r.playbackRate ?? 1.0,
+                        paused: r.paused ?? true,
+                        timestamp: r.timestamp ?? Date.now(),
                         frameId: frame.frameId,
                       };
                     }
@@ -152,10 +162,42 @@ export default defineBackground(() => {
                 }
               }
 
+              // Match B's rate to A's so they begin in sync. Direct send rather
+              // than via coordinator since the session isn't started yet.
+              if (Math.abs(resultA.playbackRate - resultB.playbackRate) > 1e-3) {
+                try {
+                  await browser.tabs.sendMessage(
+                    tabIdB,
+                    {
+                      type: 'SYNC_RATE',
+                      payload: {
+                        action: 'ratechange',
+                        position: 0,
+                        timestamp: Date.now(),
+                        generation: 0,
+                        rate: resultA.playbackRate,
+                      } satisfies SyncCommandPayload,
+                    },
+                    { frameId: resultB.frameId }
+                  );
+                } catch {
+                  // Non-fatal — drift correction will catch up.
+                }
+              }
+
               syncCoordinator.startSync(
                 { tabId: tabIdA, frameId: resultA.frameId },
                 { tabId: tabIdB, frameId: resultB.frameId },
-                { currentTimeA: resultA.currentTime, currentTimeB: resultB.currentTime }
+                {
+                  currentTimeA: resultA.currentTime,
+                  currentTimeB: resultB.currentTime,
+                  timestampA: resultA.timestamp,
+                  timestampB: resultB.timestamp,
+                  rateA: resultA.playbackRate,
+                  rateB: resultB.playbackRate,
+                  pausedA: resultA.paused,
+                  pausedB: resultB.paused,
+                }
               );
 
               sendResponse({ success: true });
@@ -183,27 +225,37 @@ export default defineBackground(() => {
           sendResponse(syncCoordinator.getStatus());
           return;
         }
+
+        default: {
+          // Unknown message type — respond so the caller doesn't hang. The
+          // content script handles the per-tab message types (GET_STATUS,
+          // SET_SPEED, SYNC_*, etc.); the background script only receives a
+          // subset, and runtime.onMessage in the SW also fires for those
+          // tab-targeted ones with `sender.tab` set, which we ignore here.
+          return;
+        }
       }
     }
   );
 
   browser.runtime.onInstalled.addListener(async (details) => {
-    if (details.reason === 'install' || details.reason === 'update') {
+    if (details.reason === 'install') {
+      // First install only: seed defaults if the user has nothing stored.
+      // Never overwrite on update — that path used to nuke recoverable
+      // user settings whenever loadSettings threw.
       try {
-        const settings = await loadSettings();
-        await saveSettings(settings);
+        const { DEFAULT_SETTINGS } = await import('../lib/types');
+        await saveSettings(DEFAULT_SETTINGS);
       } catch (error) {
-        // Critical: Settings initialization failed - attempt recovery
-        logger.error('Settings initialization failed:', error);
-        try {
-          const { DEFAULT_SETTINGS } = await import('../lib/types');
-          await saveSettings(DEFAULT_SETTINGS);
-          logger.warn('Settings recovered using defaults');
-        } catch (recoveryError) {
-          // Complete failure - log and continue (extension will use in-memory defaults)
-          logger.error('Settings recovery failed:', recoveryError);
-          logger.error('Extension will function with reduced capability until settings are manually reset');
-        }
+        logger.error('Initial settings seeding failed:', error);
+      }
+    } else if (details.reason === 'update') {
+      // Validate without writing. If load fails we leave storage as-is so
+      // the user can recover by re-saving from the options page.
+      try {
+        await loadSettings();
+      } catch (error) {
+        logger.error('Settings load failed on update; leaving storage unchanged:', error);
       }
     }
   });

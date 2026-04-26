@@ -42,6 +42,12 @@
     listeningForKey = true;
   }
 
+  function clearBinding(index: number) {
+    const newBindings = [...bindings];
+    newBindings[index] = { ...newBindings[index], key: "" };
+    onBindingsChange(newBindings);
+  }
+
   /**
    * Captures the next key press to update a binding.
    * Stops propagation to prevent side effects on other UI elements.
@@ -58,8 +64,17 @@
       return;
     }
 
+    // Backspace / Delete clears the binding (leaving it unbound).
+    if (event.code === "Backspace" || event.code === "Delete") {
+      clearBinding(editingIndex);
+      listeningForKey = false;
+      editingIndex = null;
+      return;
+    }
+
+    // Empty keys mean unbound — they don't conflict with each other.
     const isDuplicate = bindings.some(
-      (b, i) => i !== editingIndex && b.key === event.code,
+      (b, i) => i !== editingIndex && b.key === event.code && b.key !== "",
     );
 
     if (isDuplicate) {
@@ -133,15 +148,33 @@
         <tr>
           <td class="action">{actionLabels[binding.action]}</td>
           <td>
-            <button
-              class="key-btn"
-              class:listening={editingIndex === index && listeningForKey}
-              onclick={() => startListening(index)}
-            >
-              {editingIndex === index && listeningForKey
-                ? "Press a key..."
-                : formatKey(binding.key)}
-            </button>
+            <div class="key-cell">
+              <button
+                class="key-btn"
+                class:listening={editingIndex === index && listeningForKey}
+                class:unbound={!binding.key &&
+                  !(editingIndex === index && listeningForKey)}
+                onclick={() => startListening(index)}
+              >
+                {#if editingIndex === index && listeningForKey}
+                  Press a key...
+                {:else if binding.key}
+                  {formatKey(binding.key)}
+                {:else}
+                  Unbound
+                {/if}
+              </button>
+              <button
+                type="button"
+                class="key-clear"
+                title="Clear shortcut"
+                aria-label={`Clear shortcut for ${actionLabels[binding.action]}`}
+                disabled={!binding.key}
+                onclick={() => clearBinding(index)}
+              >
+                ×
+              </button>
+            </div>
           </td>
           <td>
             {#if actionValueLabels[binding.action]}
@@ -182,7 +215,8 @@
 
   <p class="help-text">
     <strong>Force:</strong> Prevents the website from intercepting the key.
-    Press <strong>Escape</strong> to cancel while listening.
+    While listening, press <strong>Escape</strong> to cancel or
+    <strong>Backspace</strong> to clear the shortcut.
   </p>
 
   {#if errorMessage}
@@ -230,6 +264,12 @@
     font-size: 14px;
   }
 
+  .key-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
   .key-btn {
     min-width: 90px;
     padding: 8px 14px;
@@ -255,7 +295,44 @@
     border-color: #60a5fa;
   }
 
+  .key-btn.unbound {
+    color: #888;
+    font-style: italic;
+    border-style: dashed;
+  }
+
   .key-btn:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.8);
+    outline-offset: 2px;
+  }
+
+  .key-clear {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    background: rgba(40, 40, 40, 0.4);
+    color: #999;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .key-clear:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+  }
+
+  .key-clear:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .key-clear:focus-visible {
     outline: 2px solid rgba(59, 130, 246, 0.8);
     outline-offset: 2px;
   }

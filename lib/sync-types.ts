@@ -15,21 +15,22 @@ export interface SyncCandidate {
 }
 
 export interface SyncEventPayload {
-  action: 'pause' | 'play' | 'seek' | 'buffering_start' | 'buffering_end';
-  position: number; // absolute currentTime
+  action: 'pause' | 'play' | 'seek' | 'buffering_start' | 'buffering_end' | 'ratechange';
+  position: number; // absolute currentTime (ignored for ratechange)
   timestamp: number; // Date.now() when event was captured
+  rate?: number; // source's playback rate at capture; required for 'ratechange'
 }
 
 export interface SyncCommandPayload {
-  action: 'pause' | 'play' | 'seek';
-  position: number; // absolute target position (already offset-adjusted)
+  action: 'pause' | 'play' | 'seek' | 'ratechange';
+  position: number; // absolute target position (already offset-adjusted); ignored for ratechange
   timestamp: number; // Date.now() when command was sent
   generation: number;
+  rate?: number; // source playback rate (used by receiver for time compensation; required for ratechange)
 }
 
 export interface DriftCorrectPayload {
   position: number;
-  generation: number;
   method: 'rate' | 'seek'; // rate = gradual playback rate adjustment, seek = hard seek
   rateFactor?: number; // e.g., 0.02 means play at baseRate + 0.02
   durationMs?: number; // how long to apply rate adjustment
@@ -38,6 +39,7 @@ export interface DriftCorrectPayload {
 export interface SyncPositionResponse {
   currentTime: number;
   paused: boolean;
+  playbackRate: number;
   timestamp: number; // Date.now() when position was read
 }
 
@@ -67,5 +69,5 @@ export const SYNC = {
   KEEPALIVE_PING_MS: 20_000,
   // Storage key for persisted session state in chrome.storage.session.
   // Bumped on schema changes.
-  STORAGE_KEY: 'syncSession_v1',
+  STORAGE_KEY: 'syncSession_v2',
 } as const;

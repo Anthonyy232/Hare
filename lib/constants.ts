@@ -56,8 +56,6 @@ export const OBSERVER = {
 
 export const CLEANUP = {
   STALE_CHECK_INTERVAL_MS: 5000,
-  /** Timeout for deferred video element checks before cleanup */
-  DEFERRED_VIDEO_TIMEOUT_MS: 30000,
 } as const;
 
 export const CROSS_FRAME = {
