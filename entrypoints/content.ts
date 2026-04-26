@@ -209,7 +209,22 @@ export default defineContentScript({
     };
 
     /**
-     * Initializes the observer pool and keybind handlers. 
+     * Re-scans the DOM for media elements and registers any that the initial
+     * scan / MutationObserver missed (deferred-ignore videos that timed out,
+     * SPA-swapped videos, shadow-DOM additions). Idempotent: existing
+     * controllers are skipped by `handleMediaFound`. Called on-demand from
+     * popup-driven message handlers so the user never has to disable / re-
+     * enable the extension to make tabs appear in Sync Mode.
+     */
+    const rescanMedia = (): void => {
+      if (!isActive) return;
+      for (const media of findAllMedia(document, settings.enableAudio)) {
+        handleMediaFound(media);
+      }
+    };
+
+    /**
+     * Initializes the observer pool and keybind handlers.
      * Restricted to top-frame for keybinds to avoid duplicate execution.
      */
     const start = (): void => {
@@ -299,11 +314,19 @@ export default defineContentScript({
       _sender: Browser.runtime.MessageSender,
       sendResponse: (response?: unknown) => void
     ): true => {
-      const controllersArray = [...controllers.values()].filter(c => c.media.isConnected);
+      let controllersArray = [...controllers.values()].filter(c => c.media.isConnected);
 
       try {
         switch (message.type) {
           case 'GET_STATUS': {
+            // Self-heal: if we have nothing tracked, re-scan the DOM. Catches
+            // videos missed by the initial scan or the MutationObserver
+            // (deferred-ignore timeouts, late SPA additions, shadow DOM, etc.)
+            // so the user doesn't need to disable / re-enable the extension.
+            if (controllersArray.length === 0) {
+              rescanMedia();
+              controllersArray = [...controllers.values()].filter(c => c.media.isConnected);
+            }
             sendResponse({
               hasVideos: controllersArray.length > 0,
               currentSpeed: controllersArray[0]?.speed ?? 1.0,
@@ -348,6 +371,11 @@ export default defineContentScript({
 
           case 'SYNC_ACTIVATE': {
             if (syncAgent) syncAgent.destroy();
+            // Rescan first so a tab that was previously invisible to GET_STATUS
+            // (deferred-ignore timeout, late SPA addition, etc.) can still
+            // activate sync without the user disabling and re-enabling the
+            // extension.
+            rescanMedia();
             const primaryMedia = [...controllers.keys()].find(m => m.isConnected);
             if (!primaryMedia) {
               sendResponse({ success: false, error: 'No video found' });
