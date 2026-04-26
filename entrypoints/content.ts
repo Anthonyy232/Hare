@@ -27,7 +27,7 @@ const SYNC_EVENT_TYPE: Record<SyncEventPayload['action'], string> = {
  * Tracks event listeners for cleanup without preventing garbage collection of the media element.
  */
 const mediaLoadstartListeners = new WeakMap<HTMLMediaElement, () => void>();
-const deferredVideoListeners = new WeakMap<HTMLMediaElement, { listener: () => void; timeout: NodeJS.Timeout }>();
+const deferredVideoListeners = new WeakMap<HTMLMediaElement, { listener: () => void }>();
 
 export default defineContentScript({
   matches: ['http://*/*', 'https://*/*', 'file:///*'],
@@ -140,12 +140,15 @@ export default defineContentScript({
           media.addEventListener('play', retryCheck);
           media.addEventListener('canplay', retryCheck);
 
-          // Auto-cleanup after timeout to prevent memory leaks
-          const timeout = setTimeout(() => {
-            cleanupDeferredListener(media);
-          }, CLEANUP.DEFERRED_VIDEO_TIMEOUT_MS);
-
-          deferredVideoListeners.set(media, { listener: retryCheck, timeout });
+          // Listeners live as long as the media element does; no timeout
+          // needed. WeakMap entries are GC'd with the element. A previous
+          // 30 s timeout was used as a "memory safety net" but its real
+          // effect was to permanently abandon any video whose
+          // `shouldIgnoreVideo` flipped to false later than 30 s — e.g. a
+          // late-loading SPA player. rescanMedia() picks up such elements
+          // for sync mode; the deferred listeners themselves are now
+          // sufficient for speed control.
+          deferredVideoListeners.set(media, { listener: retryCheck });
         }
         return;
       }
@@ -182,8 +185,7 @@ export default defineContentScript({
     const cleanupDeferredListener = (media: HTMLMediaElement): void => {
       const entry = deferredVideoListeners.get(media);
       if (entry) {
-        const { listener, timeout } = entry;
-        clearTimeout(timeout);
+        const { listener } = entry;
         media.removeEventListener('loadedmetadata', listener);
         media.removeEventListener('resize', listener);
         media.removeEventListener('play', listener);

@@ -225,6 +225,15 @@ export default defineBackground(() => {
           sendResponse(syncCoordinator.getStatus());
           return;
         }
+
+        default: {
+          // Unknown message type — respond so the caller doesn't hang. The
+          // content script handles the per-tab message types (GET_STATUS,
+          // SET_SPEED, SYNC_*, etc.); the background script only receives a
+          // subset, and runtime.onMessage in the SW also fires for those
+          // tab-targeted ones with `sender.tab` set, which we ignore here.
+          return;
+        }
       }
     }
   );
