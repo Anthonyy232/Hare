@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import type { KeyBinding, KeyAction } from "../lib/types";
   import { MESSAGES } from "../lib/messages";
 
@@ -82,6 +83,7 @@
       if (errorTimeout) clearTimeout(errorTimeout);
       errorTimeout = setTimeout(() => {
         errorMessage = null;
+        errorTimeout = null;
       }, 3000);
       listeningForKey = false;
       editingIndex = null;
@@ -129,6 +131,13 @@
     if (listeningForKey) {
       window.addEventListener("keydown", handleKeyDown, true);
       return () => window.removeEventListener("keydown", handleKeyDown, true);
+    }
+  });
+
+  onDestroy(() => {
+    if (errorTimeout) {
+      clearTimeout(errorTimeout);
+      errorTimeout = null;
     }
   });
 </script>

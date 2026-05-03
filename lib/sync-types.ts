@@ -23,7 +23,7 @@ export interface SyncEventPayload {
 
 export interface SyncCommandPayload {
   action: 'pause' | 'play' | 'seek' | 'ratechange';
-  position: number; // absolute target position (already offset-adjusted); ignored for ratechange
+  position: number; // absolute target position; -1 means preserve current position for pause/play
   timestamp: number; // Date.now() when command was sent
   generation: number;
   rate?: number; // source playback rate (used by receiver for time compensation; required for ratechange)
@@ -58,6 +58,7 @@ export const SYNC = {
   RATE_ADJUST_FACTOR: 0.02, // play at 1.02x or 0.98x to close gap
   RATE_ADJUST_DURATION_MS: 3000,
   SEEK_DEBOUNCE_MS: 50,
+  SEEK_ECHO_TIMEOUT_MS: 1000,
   BUFFERING_STABLE_MS: 50,
   POSITION_TIMEOUT_MS: 2000,
   DEFAULT_NUDGE_STEP: 0.1,

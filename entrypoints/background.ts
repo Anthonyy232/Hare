@@ -53,7 +53,7 @@ export default defineBackground(() => {
         case 'SYNC_BUFFERING': {
           const tabId = sender.tab?.id;
           if (tabId == null) return;
-          syncCoordinator.handleSyncEvent(tabId, message.payload as SyncEventPayload);
+          syncCoordinator.handleSyncEvent(tabId, message.payload as SyncEventPayload, sender.frameId);
           return;
         }
 

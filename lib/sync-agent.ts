@@ -9,14 +9,17 @@ export class SyncAgent {
   private sendEvent: EventCallback;
   /** Applies a coordinator-issued rate to the local controller (so enforcement state stays consistent). */
   private setIntendedSpeed: (rate: number) => void;
+  /** Applies a temporary correction rate without changing the user's intended speed. */
+  private setTransientRate: (rate: number) => void;
   private pendingPause = 0;
   private pendingPlay = 0;
   private pendingSeek = 0;
   private pendingRate = 0;
-  private coordinatorPlaying = false;
+  private suppressNextPlaying = false;
   private seeking = false;
   private destroyed = false;
   private seekDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingSeekTimeout: ReturnType<typeof setTimeout> | null = null;
   private rateCorrectionTimer: ReturnType<typeof setTimeout> | null = null;
   private rateCorrectionBaseRate: number = 1.0;
 
@@ -34,10 +37,12 @@ export class SyncAgent {
     sendEvent: EventCallback,
     baseRate: number = 1.0,
     setIntendedSpeed: (rate: number) => void = (rate) => safeMedia.setPlaybackRate(media, rate),
+    setTransientRate: (rate: number) => void = (rate) => safeMedia.setPlaybackRate(media, rate),
   ) {
     this.media = media;
     this.sendEvent = sendEvent;
     this.setIntendedSpeed = setIntendedSpeed;
+    this.setTransientRate = setTransientRate;
     this.rateCorrectionBaseRate = baseRate;
 
     this.onPause = this.handlePause.bind(this);
@@ -68,7 +73,7 @@ export class SyncAgent {
   }
 
   private handlePause(): void {
-    this.coordinatorPlaying = false;
+    this.suppressNextPlaying = false;
     if (this.pendingPause > 0) {
       this.pendingPause--;
       return;
@@ -88,6 +93,10 @@ export class SyncAgent {
     this.seeking = false;
     if (this.pendingSeek > 0) {
       this.pendingSeek--;
+      if (this.pendingSeek === 0 && this.pendingSeekTimeout) {
+        clearTimeout(this.pendingSeekTimeout);
+        this.pendingSeekTimeout = null;
+      }
       return;
     }
     // Debounce rapid seeks (scrubbing)
@@ -99,18 +108,20 @@ export class SyncAgent {
   }
 
   private handleWaiting(): void {
-    if (this.coordinatorPlaying || this.seeking) return;
+    if (this.seeking) return;
+    this.suppressNextPlaying = false;
     this.emit('buffering_start');
   }
 
   private handleStalled(): void {
-    if (this.coordinatorPlaying || this.seeking) return;
+    if (this.seeking) return;
+    this.suppressNextPlaying = false;
     this.emit('buffering_start');
   }
 
   private handlePlaying(): void {
-    if (this.coordinatorPlaying) {
-      this.coordinatorPlaying = false;
+    if (this.suppressNextPlaying) {
+      this.suppressNextPlaying = false;
       return;
     }
     this.emit('buffering_end');
@@ -119,7 +130,7 @@ export class SyncAgent {
   // --- Commands from coordinator ---
 
   executePause(): void {
-    this.coordinatorPlaying = false;
+    this.suppressNextPlaying = false;
     if (!this.media.paused) {
       this.pendingPause++;
     }
@@ -129,12 +140,12 @@ export class SyncAgent {
   executePlay(): void {
     if (this.media.paused) {
       this.pendingPlay++;
-      this.coordinatorPlaying = true;
+      this.suppressNextPlaying = true;
     }
     safeMedia.play(this.media).catch(() => {
       // play() can reject (e.g., autoplay policy). Decrement counters so they
       // don't permanently suppress future user-initiated events.
-      this.coordinatorPlaying = false;
+      this.suppressNextPlaying = false;
       if (this.pendingPlay > 0) this.pendingPlay--;
     });
   }
@@ -145,10 +156,33 @@ export class SyncAgent {
     if (this.rateCorrectionTimer) {
       clearTimeout(this.rateCorrectionTimer);
       this.rateCorrectionTimer = null;
-      safeMedia.setPlaybackRate(this.media, this.rateCorrectionBaseRate);
+      this.setTransientRate(this.rateCorrectionBaseRate);
     }
+    const before = safeMedia.getCurrentTime(this.media);
     this.pendingSeek++;
-    safeMedia.setCurrentTime(this.media, position);
+    try {
+      safeMedia.setCurrentTime(this.media, position);
+      const after = safeMedia.getCurrentTime(this.media);
+      const likelySeekedEvent =
+        this.media.seeking ||
+        Math.abs(after - before) > 1e-3;
+      if (likelySeekedEvent) {
+        this.armPendingSeekTimeout();
+      } else {
+        this.pendingSeek--;
+      }
+    } catch (error) {
+      this.pendingSeek--;
+      throw error;
+    }
+  }
+
+  private armPendingSeekTimeout(): void {
+    if (this.pendingSeekTimeout) clearTimeout(this.pendingSeekTimeout);
+    this.pendingSeekTimeout = setTimeout(() => {
+      this.pendingSeek = 0;
+      this.pendingSeekTimeout = null;
+    }, SYNC.SEEK_ECHO_TIMEOUT_MS);
   }
 
   /** Apply a coordinator-issued playback rate change. Echo-suppressed via pendingRate. */
@@ -193,11 +227,11 @@ export class SyncAgent {
     }
     // rateCorrectionBaseRate is updated by notifyIntendedSpeedChange / executeRateChange
     // so this stays accurate even when the user changes speed mid-session.
-    safeMedia.setPlaybackRate(this.media, this.rateCorrectionBaseRate + rateFactor);
+    this.setTransientRate(this.rateCorrectionBaseRate + rateFactor);
     this.rateCorrectionTimer = setTimeout(() => {
       this.rateCorrectionTimer = null;
       if (!this.destroyed) {
-        safeMedia.setPlaybackRate(this.media, this.rateCorrectionBaseRate);
+        this.setTransientRate(this.rateCorrectionBaseRate);
       }
     }, durationMs);
   }
@@ -217,10 +251,14 @@ export class SyncAgent {
       clearTimeout(this.seekDebounceTimer);
       this.seekDebounceTimer = null;
     }
+    if (this.pendingSeekTimeout) {
+      clearTimeout(this.pendingSeekTimeout);
+      this.pendingSeekTimeout = null;
+    }
     if (this.rateCorrectionTimer) {
       clearTimeout(this.rateCorrectionTimer);
       this.rateCorrectionTimer = null;
-      safeMedia.setPlaybackRate(this.media, this.rateCorrectionBaseRate);
+      this.setTransientRate(this.rateCorrectionBaseRate);
     }
     this.media.removeEventListener('pause', this.onPause);
     this.media.removeEventListener('play', this.onPlay);
@@ -229,5 +267,9 @@ export class SyncAgent {
     this.media.removeEventListener('waiting', this.onWaiting);
     this.media.removeEventListener('stalled', this.onStalled);
     this.media.removeEventListener('playing', this.onPlaying);
+  }
+
+  isForMedia(media: HTMLMediaElement): boolean {
+    return this.media === media;
   }
 }
