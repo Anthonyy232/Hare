@@ -76,6 +76,7 @@ export class VideoController {
   // Speed enforcement: reactive enforcement to counter sites resetting speed
   private targetSpeed: number = SPEED.DEFAULT;
   private isEnforcingSpeed = false;
+  private suppressRateEnforcementCount = 0;
   private lastEnforcementTime = 0;
   private static readonly ENFORCEMENT_DEBOUNCE_MS = 500;
 
@@ -485,12 +486,18 @@ export class VideoController {
   }
 
   private handleRateChange = (e: Event): void => {
-    if (this.isEnforcingSpeed) {
+    const shouldSkipEnforcement = this.suppressRateEnforcementCount > 0;
+    if (shouldSkipEnforcement) {
+      this.suppressRateEnforcementCount--;
+    }
+
+    if (this.isEnforcingSpeed || shouldSkipEnforcement) {
       // Swallow the event so the website doesn't know the speed changed.
       // This prevents sites from running their own logic to reset the speed.
       e.stopImmediatePropagation();
     }
     this.updateSpeedDisplay();
+    if (shouldSkipEnforcement) return;
     this.enforceSpeedIfNeeded();
   };
 
@@ -664,6 +671,19 @@ export class VideoController {
     this.isEnforcingSpeed = false;
     this.targetSpeed = SPEED.DEFAULT;
     this.setSpeed(SPEED.DEFAULT);
+  }
+
+  /**
+   * Applies a temporary coordinator-controlled playback rate without changing
+   * the user's intended speed. Used for small drift corrections in Sync Mode.
+   */
+  applyTransientRate(speed: number): void {
+    const clampedSpeed = Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed));
+    if (Math.abs(safeMedia.getPlaybackRate(this.media) - clampedSpeed) > SPEED.TOLERANCE) {
+      this.suppressRateEnforcementCount++;
+    }
+    safeMedia.setPlaybackRate(this.media, clampedSpeed);
+    this.updateSpeedDisplay();
   }
 
   /**

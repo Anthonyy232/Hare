@@ -1,5 +1,5 @@
 import { storage } from '#imports';
-import { DEFAULT_SETTINGS, type Settings, type KeyBinding } from './types';
+import { DEFAULT_SETTINGS, type Settings, type KeyBinding, type KeyAction } from './types';
 import { STORAGE_KEY } from './constants';
 import { logger } from './logger';
 
@@ -10,24 +10,48 @@ const settingsStorage = storage.defineItem<Settings>(`sync:${STORAGE_KEY}`, {
 /**
  * Normalizes user-provided keybindings, falling back to defaults for invalid entries.
  */
-function validateKeyBindings(value: unknown): KeyBinding[] {
+const DEFAULT_KEY_ACTIONS = new Set(DEFAULT_SETTINGS.keyBindings.map((binding) => binding.action));
+
+function cloneBinding(binding: KeyBinding): KeyBinding {
+  return { ...binding };
+}
+
+function isKnownKeyAction(value: unknown): value is KeyAction {
+  return typeof value === 'string' && DEFAULT_KEY_ACTIONS.has(value as KeyAction);
+}
+
+export function validateKeyBindings(value: unknown): KeyBinding[] {
   if (!Array.isArray(value)) {
     logger.warn('Invalid keyBindings - using defaults');
-    return DEFAULT_SETTINGS.keyBindings;
+    return DEFAULT_SETTINGS.keyBindings.map(cloneBinding);
   }
 
-  const validBindings = value.filter((binding): binding is KeyBinding => {
-    return (
+  const validBindings = new Map<KeyAction, KeyBinding>();
+
+  for (const binding of value) {
+    const candidate = binding as Partial<KeyBinding>;
+    if (
       binding &&
       typeof binding === 'object' &&
-      typeof binding.action === 'string' &&
-      typeof binding.key === 'string' &&
-      typeof binding.value === 'number' &&
-      typeof binding.force === 'boolean'
-    );
-  });
+      isKnownKeyAction(candidate.action) &&
+      typeof candidate.key === 'string' &&
+      typeof candidate.value === 'number' &&
+      Number.isFinite(candidate.value) &&
+      candidate.value >= 0 &&
+      typeof candidate.force === 'boolean'
+    ) {
+      validBindings.set(candidate.action, {
+        action: candidate.action,
+        key: candidate.key,
+        value: candidate.value,
+        force: candidate.force,
+      });
+    }
+  }
 
-  return validBindings.length > 0 ? validBindings : DEFAULT_SETTINGS.keyBindings;
+  return DEFAULT_SETTINGS.keyBindings.map((defaultBinding) =>
+    cloneBinding(validBindings.get(defaultBinding.action) ?? defaultBinding)
+  );
 }
 
 export async function loadSettings(): Promise<Settings> {

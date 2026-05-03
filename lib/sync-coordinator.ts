@@ -30,9 +30,9 @@ interface PersistedSyncState {
 export class SyncCoordinator {
   private session: SyncSession | null = null;
   private driftInterval: ReturnType<typeof setInterval> | null = null;
-  private bufferStableTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  private bufferStableTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private tabMeta = new Map<number, { title: string; domain: string }>();
-  private sendFailures = 0;
+  private sendFailures = new Map<string, number>();
   private static readonly MAX_SEND_FAILURES = 5;
 
   /**
@@ -107,7 +107,7 @@ export class SyncCoordinator {
       generation: 0,
       bufferingTab: null,
     };
-    this.sendFailures = 0;
+    this.sendFailures.clear();
 
     this.startDriftCorrection();
     void this.persistSession();
@@ -134,7 +134,7 @@ export class SyncCoordinator {
 
       this.session = state.session;
       this.tabMeta = new Map(state.tabMeta ?? []);
-      this.sendFailures = 0;
+      this.sendFailures.clear();
       // bufferingTab state from before SW death is no longer reliable —
       // both tabs have continued running independently. Reset it.
       this.session.bufferingTab = null;
@@ -185,6 +185,7 @@ export class SyncCoordinator {
     const frameAId = this.session?.videoA.frameId;
     const frameBId = this.session?.videoB.frameId;
     this.session = null; // null first to prevent re-entry from sendToTab error handler
+    this.sendFailures.clear();
 
     if (tabAId != null) this.sendToTab(tabAId, { type: 'SYNC_DEACTIVATE' }, frameAId);
     if (tabBId != null) this.sendToTab(tabBId, { type: 'SYNC_DEACTIVATE' }, frameBId);
@@ -282,19 +283,23 @@ export class SyncCoordinator {
     return this.sendToTab(tabId, message, this.getFrameId(tabId));
   }
 
-  async handleSyncEvent(fromTabId: number, event: SyncEventPayload): Promise<void> {
+  async handleSyncEvent(fromTabId: number, event: SyncEventPayload, fromFrameId?: number): Promise<void> {
     await this.ready;
     if (!this.session) return;
 
-    const targetTabId = this.peerTabId(fromTabId);
-    if (targetTabId == null) return;
+    const sourceSide = this.syncedSide(fromTabId, fromFrameId);
+    if (!sourceSide) return;
+
+    const targetTabId = sourceSide === 'A'
+      ? this.session.videoB.tabId
+      : this.session.videoA.tabId;
 
     switch (event.action) {
       case 'pause':
       case 'play':
       case 'seek': {
         this.session.generation++;
-        const targetPosition = this.toTargetPosition(fromTabId, event.position);
+        const targetPosition = this.toTargetPosition(sourceSide, event.position);
         await this.sendToSyncedTab(targetTabId, {
           type: COMMAND_TYPE[event.action],
           payload: {
@@ -325,44 +330,59 @@ export class SyncCoordinator {
       }
 
       case 'buffering_start':
-        await this.handleBufferingStart(fromTabId, targetTabId, event);
+        await this.handleBufferingStart(fromTabId, fromFrameId, sourceSide, targetTabId, event);
         break;
 
       case 'buffering_end':
-        await this.handleBufferingEnd(fromTabId);
+        await this.handleBufferingEnd(fromTabId, fromFrameId, sourceSide);
         break;
     }
   }
 
-  /** Convert a position on `fromTabId` to the equivalent position on the other tab. */
-  private toTargetPosition(fromTabId: number, position: number): number {
+  /** Convert a position on one synced side to the equivalent position on the other side. */
+  private toTargetPosition(fromSide: 'A' | 'B', position: number): number {
     if (!this.session) return Math.max(0, position);
-    const { videoA, offset } = this.session;
-    const delta = fromTabId === videoA.tabId ? offset : -offset;
+    const { offset } = this.session;
+    const delta = fromSide === 'A' ? offset : -offset;
     return Math.max(0, position + delta);
   }
 
-  private peerTabId(fromTabId: number): number | null {
+  /** Converts a position, returning -1 when the current offset can't be maintained. */
+  private toTargetPositionOrNoSeek(fromSide: 'A' | 'B', position: number): number {
+    if (!this.session) return Math.max(0, position);
+    const { offset } = this.session;
+    const delta = fromSide === 'A' ? offset : -offset;
+    const target = position + delta;
+    return target < 0 ? -1 : target;
+  }
+
+  private syncedSide(tabId: number, frameId?: number): 'A' | 'B' | null {
     if (!this.session) return null;
     const { videoA, videoB } = this.session;
-    if (fromTabId === videoA.tabId) return videoB.tabId;
-    if (fromTabId === videoB.tabId) return videoA.tabId;
+    if (this.matchesEndpoint(videoA, tabId, frameId)) return 'A';
+    if (this.matchesEndpoint(videoB, tabId, frameId)) return 'B';
     return null;
+  }
+
+  private matchesEndpoint(ref: TabRef, tabId: number, frameId?: number): boolean {
+    if (ref.tabId !== tabId) return false;
+    return ref.frameId == null || frameId == null || ref.frameId === frameId;
   }
 
   private async handleBufferingStart(
     fromTabId: number,
+    fromFrameId: number | undefined,
+    fromSide: 'A' | 'B',
     targetTabId: number,
     event: SyncEventPayload
   ): Promise<void> {
     if (!this.session) return;
 
-    const fromSide = fromTabId === this.session.videoA.tabId ? 'A' : 'B';
-
-    const existingTimer = this.bufferStableTimers.get(fromTabId);
+    const timerKey = this.endpointKey(fromTabId, fromFrameId);
+    const existingTimer = this.bufferStableTimers.get(timerKey);
     if (existingTimer) {
       clearTimeout(existingTimer);
-      this.bufferStableTimers.delete(fromTabId);
+      this.bufferStableTimers.delete(timerKey);
     }
 
     if (this.session.bufferingTab === null) {
@@ -371,7 +391,7 @@ export class SyncCoordinator {
         type: 'SYNC_PAUSE',
         payload: {
           action: 'pause',
-          position: this.toTargetPosition(fromTabId, event.position),
+          position: this.toTargetPositionOrNoSeek(fromSide, event.position),
           timestamp: event.timestamp,
           generation: this.session.generation,
         } satisfies SyncCommandPayload,
@@ -381,15 +401,18 @@ export class SyncCoordinator {
     }
   }
 
-  private async handleBufferingEnd(fromTabId: number): Promise<void> {
+  private async handleBufferingEnd(
+    fromTabId: number,
+    fromFrameId: number | undefined,
+    fromSide: 'A' | 'B'
+  ): Promise<void> {
     if (!this.session) return;
 
-    const fromSide = fromTabId === this.session.videoA.tabId ? 'A' : 'B';
-
+    const timerKey = this.endpointKey(fromTabId, fromFrameId);
     this.bufferStableTimers.set(
-      fromTabId,
+      timerKey,
       setTimeout(async () => {
-        this.bufferStableTimers.delete(fromTabId);
+        this.bufferStableTimers.delete(timerKey);
         if (!this.session) return;
 
         if (this.session.bufferingTab === 'both') {
@@ -509,20 +532,81 @@ export class SyncCoordinator {
       const result = frameId != null
         ? await browser.tabs.sendMessage(tabId, message, { frameId })
         : await browser.tabs.sendMessage(tabId, message);
-      this.sendFailures = 0;
+      if (this.isFailedResponse(message, result)) {
+        this.recordSendFailure(tabId, frameId, message, result);
+        return null;
+      }
+      this.clearSendFailure(tabId, frameId);
       return result;
     } catch (error) {
-      if (
-        this.session &&
-        (tabId === this.session.videoA.tabId || tabId === this.session.videoB.tabId)
-      ) {
-        this.sendFailures++;
-        logger.warn(`Send to tab ${tabId} failed (${this.sendFailures}/${SyncCoordinator.MAX_SEND_FAILURES}):`, error);
-        if (this.sendFailures >= SyncCoordinator.MAX_SEND_FAILURES) {
-          this.stopSync(`sendToTab failed ${this.sendFailures} times for tab ${tabId}, msg: ${message.type}, last error: ${error}`);
-        }
-      }
+      this.recordSendFailure(tabId, frameId, message, error);
       return null;
+    }
+  }
+
+  private endpointKey(tabId: number, frameId?: number): string {
+    return `${tabId}:${frameId ?? 'all'}`;
+  }
+
+  private isSyncedEndpoint(tabId: number): boolean {
+    return !!this.session && (
+      tabId === this.session.videoA.tabId ||
+      tabId === this.session.videoB.tabId
+    );
+  }
+
+  private clearSendFailure(tabId: number, frameId?: number): void {
+    this.sendFailures.delete(this.endpointKey(tabId, frameId));
+  }
+
+  private isFailedResponse(message: HareMessage, result: unknown): boolean {
+    if (message.type === 'SYNC_DEACTIVATE') return false;
+    if (result == null) return true;
+    if (typeof result !== 'object') return false;
+
+    const record = result as Record<string, unknown>;
+    if (record.success === false) return true;
+
+    if (message.type === 'SYNC_GET_POSITION') {
+      return !(
+        this.isFiniteNumber(record.currentTime) &&
+        typeof record.paused === 'boolean' &&
+        this.isFiniteNumber(record.playbackRate) &&
+        this.isFiniteNumber(record.timestamp)
+      );
+    }
+
+    return false;
+  }
+
+  private isFiniteNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value);
+  }
+
+  private recordSendFailure(
+    tabId: number,
+    frameId: number | undefined,
+    message: HareMessage,
+    reason: unknown
+  ): void {
+    if (!this.isSyncedEndpoint(tabId)) return;
+
+    const key = this.endpointKey(tabId, frameId);
+    const failures = (this.sendFailures.get(key) ?? 0) + 1;
+    this.sendFailures.set(key, failures);
+    logger.warn(`Send to tab ${tabId} failed (${failures}/${SyncCoordinator.MAX_SEND_FAILURES}):`, reason);
+    if (failures >= SyncCoordinator.MAX_SEND_FAILURES) {
+      this.stopSync(`sendToTab failed ${failures} times for tab ${tabId}, msg: ${message.type}, last error: ${this.formatFailureReason(reason)}`);
+    }
+  }
+
+  private formatFailureReason(reason: unknown): string {
+    if (reason instanceof Error) return reason.message;
+    if (typeof reason === 'string') return reason;
+    try {
+      return JSON.stringify(reason);
+    } catch {
+      return String(reason);
     }
   }
 

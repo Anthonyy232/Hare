@@ -117,6 +117,20 @@ export default defineContentScript({
       }
     };
 
+    const deactivateLocalSync = (notifyCoordinator: boolean): void => {
+      const hadSyncAgent = !!syncAgent;
+      if (syncAgent) {
+        syncAgent.destroy();
+        syncAgent = null;
+      }
+      for (const c of controllers.values()) c.setIntendedSpeedListener(null);
+      stopSyncKeepAlive();
+
+      if (notifyCoordinator && hadSyncAgent) {
+        browser.runtime.sendMessage({ type: 'STOP_SYNC' }).catch(() => {});
+      }
+    };
+
     /**
      * Instantiates a new controller for discovered media, applying site-specific
      * filters and setting up listeners for dynamic source changes.
@@ -195,6 +209,10 @@ export default defineContentScript({
     };
 
     const handleMediaRemoved = (media: HTMLMediaElement): void => {
+      if (syncAgent?.isForMedia(media)) {
+        deactivateLocalSync(true);
+      }
+
       const controller = controllers.get(media);
       if (controller) {
         controller.destroy();
@@ -281,16 +299,12 @@ export default defineContentScript({
       pointerBridge?.destroy();
       pointerBridge = null;
 
+      deactivateLocalSync(true);
+
       for (const controller of controllers.values()) {
         controller.destroy();
       }
       controllers.clear();
-
-      if (syncAgent) {
-        syncAgent.destroy();
-        syncAgent = null;
-      }
-      stopSyncKeepAlive();
     };
 
     const unwatchSettings = watchSettings((newSettings) => {
@@ -372,7 +386,7 @@ export default defineContentScript({
           }
 
           case 'SYNC_ACTIVATE': {
-            if (syncAgent) syncAgent.destroy();
+            deactivateLocalSync(false);
             // Rescan first so a tab that was previously invisible to GET_STATUS
             // (deferred-ignore timeout, late SPA addition, etc.) can still
             // activate sync without the user disabling and re-enabling the
@@ -400,6 +414,9 @@ export default defineContentScript({
               primaryController
                 ? (rate: number) => primaryController.setSpeed(rate)
                 : (rate: number) => safeMedia.setPlaybackRate(primaryMedia, rate),
+              primaryController
+                ? (rate: number) => primaryController.applyTransientRate(rate)
+                : (rate: number) => safeMedia.setPlaybackRate(primaryMedia, rate),
             );
             // User-initiated speed changes (keybind, popup) flow controller -> agent.
             if (primaryController) {
@@ -419,12 +436,7 @@ export default defineContentScript({
           }
 
           case 'SYNC_DEACTIVATE': {
-            if (syncAgent) {
-              syncAgent.destroy();
-              syncAgent = null;
-            }
-            for (const c of controllers.values()) c.setIntendedSpeedListener(null);
-            stopSyncKeepAlive();
+            deactivateLocalSync(false);
             sendResponse({ success: true });
             break;
           }
@@ -437,7 +449,7 @@ export default defineContentScript({
             // avoid visible jitter when both tabs are already in sync.
             const localPos = syncAgent.getPosition().currentTime;
             const driftSec = SYNC.DRIFT_IGNORE_THRESHOLD_MS / 1000;
-            if (Math.abs(localPos - pauseCmd.position) > driftSec) {
+            if (pauseCmd.position >= 0 && Math.abs(localPos - pauseCmd.position) > driftSec) {
               syncAgent.executeSeek(pauseCmd.position);
             }
             syncAgent.executePause();

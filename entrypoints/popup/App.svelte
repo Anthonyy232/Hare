@@ -30,22 +30,22 @@
   }
 
   /**
-   * Dispatches commands to the content script of the currently active tab.
-   * Sends to all frames and aggregates results for GET_STATUS.
+   * Resolves the currently active browser tab.
    */
-  async function sendMessage(message: HareMessage): Promise<unknown> {
+  async function getActiveTabId(): Promise<number> {
     const [tab] = await browser.tabs.query({
       active: true,
       currentWindow: true,
     });
     if (!tab?.id) throw new Error(MESSAGES.NO_ACTIVE_TAB);
-    return browser.tabs.sendMessage(tab.id, message);
+    return tab.id;
   }
 
   /**
-   * Sends a message to a specific frame within a tab.
+   * Sends a message to a specific frame within a tab. Returns null for frames
+   * that cannot receive extension messages or produce an invalid response.
    */
-  async function sendToFrame(
+  async function requestFrameStatus(
     tabId: number,
     frameId: number,
     message: HareMessage,
@@ -69,6 +69,60 @@
     }
   }
 
+  async function sendCommandToFrame(
+    tabId: number,
+    frameId: number,
+    message: HareMessage,
+  ): Promise<boolean> {
+    try {
+      const response = (await browser.tabs.sendMessage(tabId, message, {
+        frameId,
+      })) as { success?: boolean } | undefined;
+      return response?.success === true;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message.includes("Could not establish connection") ||
+          error.message.includes("Receiving end does not exist"))
+      ) {
+        return false;
+      }
+      logger.warn("Unexpected error sending command to frame:", frameId, error);
+      return false;
+    }
+  }
+
+  async function getVideoFrames(tabId: number): Promise<number[]> {
+    const frames = await browser.webNavigation.getAllFrames({ tabId });
+    if (!frames || frames.length === 0) {
+      throw new Error(MESSAGES.NO_VIDEOS_FOUND);
+    }
+
+    const responses = await Promise.all(
+      frames.map((frame) =>
+        requestFrameStatus(tabId, frame.frameId, { type: "GET_STATUS" }),
+      ),
+    );
+
+    return frames
+      .filter((_, index) => (responses[index]?.videoCount ?? 0) > 0)
+      .map((frame) => frame.frameId);
+  }
+
+  async function sendCommandToVideoFrames(message: HareMessage): Promise<void> {
+    const tabId = await getActiveTabId();
+    const frameIds = await getVideoFrames(tabId);
+    if (frameIds.length === 0) throw new Error(MESSAGES.NO_VIDEOS_FOUND);
+
+    const results = await Promise.all(
+      frameIds.map((frameId) => sendCommandToFrame(tabId, frameId, message)),
+    );
+
+    if (!results.some(Boolean)) {
+      throw new Error(MESSAGES.NO_VIDEOS_FOUND);
+    }
+  }
+
   /**
    * Aggregates status from all frames in the active tab.
    * Videos can be in iframes (common on YouTube), so querying only the top frame
@@ -79,18 +133,11 @@
       loading = true;
       error = null;
 
-      const [tab] = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-
-      if (!tab?.id) {
-        throw new Error(MESSAGES.NO_ACTIVE_TAB);
-      }
+      const tabId = await getActiveTabId();
 
       // Get all frames in the tab
       const frames = await browser.webNavigation.getAllFrames({
-        tabId: tab.id,
+        tabId,
       });
       if (!frames || frames.length === 0) {
         throw new Error(MESSAGES.NO_VIDEOS_FOUND);
@@ -99,7 +146,7 @@
       // Query all frames in parallel
       const responses = await Promise.all(
         frames.map((frame) =>
-          sendToFrame(tab.id!, frame.frameId, { type: "GET_STATUS" }),
+          requestFrameStatus(tabId, frame.frameId, { type: "GET_STATUS" }),
         ),
       );
 
@@ -139,7 +186,7 @@
     const clampedSpeed = Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed));
 
     try {
-      await sendMessage({ type: "SET_SPEED", payload: clampedSpeed });
+      await sendCommandToVideoFrames({ type: "SET_SPEED", payload: clampedSpeed });
       status = { ...status, currentSpeed: clampedSpeed };
     } catch (e) {
       logger.error(MESSAGES.FAILED_TO_SET_SPEED, e);
@@ -151,7 +198,7 @@
     if (!status) return;
 
     try {
-      await sendMessage({ type: "RESET_SPEED" });
+      await sendCommandToVideoFrames({ type: "RESET_SPEED" });
       status = { ...status, currentSpeed: SPEED.DEFAULT };
     } catch (e) {
       logger.error(MESSAGES.FAILED_TO_RESET_SPEED, e);

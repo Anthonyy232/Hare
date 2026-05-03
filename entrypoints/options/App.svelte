@@ -19,6 +19,16 @@
   let hasUnsavedChanges = $state(false);
   let conflictWarning = $state(false);
   let unwatchSettings: (() => void) | null = null;
+  let saveFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function showSavedFeedback() {
+    if (saveFeedbackTimeout) clearTimeout(saveFeedbackTimeout);
+    saved = true;
+    saveFeedbackTimeout = setTimeout(() => {
+      saved = false;
+      saveFeedbackTimeout = null;
+    }, UI.SAVE_FEEDBACK_MS);
+  }
 
   async function load() {
     loading = true;
@@ -34,15 +44,15 @@
     conflictWarning = false;
     await saveSettings(settings);
     saving = false;
-    saved = true;
-    setTimeout(() => (saved = false), UI.SAVE_FEEDBACK_MS);
+    showSavedFeedback();
   }
 
   async function reset() {
     if (confirm(MESSAGES.RESET_SETTINGS_CONFIRM)) {
       settings = await resetSettings();
-      saved = true;
-      setTimeout(() => (saved = false), UI.SAVE_FEEDBACK_MS);
+      hasUnsavedChanges = false;
+      conflictWarning = false;
+      showSavedFeedback();
     }
   }
 
@@ -137,6 +147,10 @@
 
   onDestroy(() => {
     unwatchSettings?.();
+    if (saveFeedbackTimeout) {
+      clearTimeout(saveFeedbackTimeout);
+      saveFeedbackTimeout = null;
+    }
   });
 </script>
 

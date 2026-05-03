@@ -139,16 +139,30 @@ describe('SyncAgent', () => {
     expect(sendEvent).toHaveBeenCalledTimes(1);
   });
 
-  describe('coordinatorPlaying suppresses buffering echoes', () => {
-    it('suppresses waiting/playing during coordinator-initiated play', () => {
-      // Video is paused — executePlay sets coordinatorPlaying
+  describe('coordinator-issued play buffering behavior', () => {
+    it('suppresses playing when coordinator-initiated play starts cleanly', () => {
+      // Video is paused — executePlay suppresses the next clean playing event
       agent.executePlay();
       video.dispatchEvent(new Event('play'));  // consumed by pendingPlay
-      video.dispatchEvent(new Event('waiting'));  // suppressed by coordinatorPlaying
-      video.dispatchEvent(new Event('playing'));  // clears coordinatorPlaying
+      video.dispatchEvent(new Event('playing'));  // clears coordinator play suppression
 
       // None of these should have been reported
       expect(sendEvent).not.toHaveBeenCalled();
+    });
+
+    it('reports real buffering during coordinator-initiated play', () => {
+      agent.executePlay();
+      video.dispatchEvent(new Event('play'));  // consumed by pendingPlay
+
+      video.dispatchEvent(new Event('waiting'));
+      expect(sendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'buffering_start' })
+      );
+
+      video.dispatchEvent(new Event('playing'));
+      expect(sendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'buffering_end' })
+      );
     });
 
     it('does not suppress buffering when play was user-initiated', () => {
@@ -169,18 +183,18 @@ describe('SyncAgent', () => {
       );
     });
 
-    it('clears coordinatorPlaying on pause', () => {
+    it('clears clean-play suppression on pause', () => {
       // Coordinator starts play, but user pauses before 'playing' fires
       agent.executePlay();
       video.dispatchEvent(new Event('play'));  // consumed by pendingPlay
 
-      // User pauses — should clear coordinatorPlaying and report
+      // User pauses — should clear clean-play suppression and report
       video.dispatchEvent(new Event('pause'));
       expect(sendEvent).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'pause' })
       );
 
-      // Now 'waiting' should NOT be suppressed (coordinatorPlaying was cleared)
+      // Now 'waiting' should NOT be suppressed
       video.dispatchEvent(new Event('waiting'));
       expect(sendEvent).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'buffering_start' })
@@ -222,12 +236,12 @@ describe('SyncAgent', () => {
       );
     });
 
-    it('executePause clears coordinatorPlaying', () => {
+    it('executePause clears clean-play suppression', () => {
       // Coordinator sends play then immediately sends pause
-      agent.executePlay();  // coordinatorPlaying = true
+      agent.executePlay();  // clean-play suppression is armed
 
       (video as any)._paused = false; // play() set it to false
-      agent.executePause(); // should clear coordinatorPlaying
+      agent.executePause(); // should clear clean-play suppression
 
       video.dispatchEvent(new Event('pause'));  // consumed by pendingPause
       video.dispatchEvent(new Event('waiting'));  // NOT suppressed
@@ -267,6 +281,18 @@ describe('SyncAgent', () => {
     expect(sendEvent).toHaveBeenCalledTimes(1);
     expect(sendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'seek' })
+    );
+  });
+
+  it('does not let a no-op coordinator seek swallow the next user seek', () => {
+    agent.executeSeek(10); // already at 10, so no seeked event is expected
+
+    video.currentTime = 20;
+    video.dispatchEvent(new Event('seeked'));
+    vi.advanceTimersByTime(60);
+
+    expect(sendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'seek', position: 20 })
     );
   });
 
@@ -324,6 +350,31 @@ describe('SyncAgent', () => {
       agent.executeRateChange(2.0);
       agent.applyRateCorrection(0.05, 1000);
       expect(video.playbackRate).toBeCloseTo(2.05, 5);
+    });
+
+    it('applyRateCorrection uses the transient rate path', () => {
+      const peerVideo = createMockVideo(10);
+      const setIntendedSpeed = vi.fn((rate: number) => {
+        peerVideo.playbackRate = rate;
+      });
+      const setTransientRate = vi.fn((rate: number) => {
+        peerVideo.playbackRate = rate;
+      });
+      const peer = new SyncAgent(
+        peerVideo,
+        sendEvent,
+        1.0,
+        setIntendedSpeed,
+        setTransientRate
+      );
+
+      peer.applyRateCorrection(0.02, 1000);
+      expect(setTransientRate).toHaveBeenCalledWith(1.02);
+      expect(setIntendedSpeed).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1000);
+      expect(setTransientRate).toHaveBeenLastCalledWith(1.0);
+      peer.destroy();
     });
   });
 });

@@ -30,7 +30,13 @@ describe('SyncCoordinator', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    mockSendMessage.mockClear();
+    mockSendMessage.mockReset();
+    mockSendMessage.mockImplementation(async (_tabId: number, message: { type?: string }) => {
+      if (message.type === 'SYNC_GET_POSITION') {
+        return { currentTime: 0, paused: false, playbackRate: 1, timestamp: Date.now() };
+      }
+      return { success: true };
+    });
     coordinator = new SyncCoordinator();
     // No SW respawn in unit tests — release the ready gate so handleSyncEvent
     // doesn't block waiting for restoreSession to fire.
@@ -172,6 +178,36 @@ describe('SyncCoordinator', () => {
         timestamp: Date.now(),
       });
       expect(mockSendMessage).not.toHaveBeenCalled();
+    });
+
+    it('does not relay events from unsynced frames in a synced tab', async () => {
+      coordinator.stopSync();
+      coordinator.startSync(
+        { tabId: 1, frameId: 0 },
+        { tabId: 2, frameId: 7 },
+        { currentTimeA: 0, currentTimeB: 5 }
+      );
+      mockSendMessage.mockClear();
+
+      await coordinator.handleSyncEvent(1, {
+        action: 'pause',
+        position: 10,
+        timestamp: Date.now(),
+      }, 99);
+
+      expect(mockSendMessage).not.toHaveBeenCalled();
+
+      await coordinator.handleSyncEvent(1, {
+        action: 'pause',
+        position: 10,
+        timestamp: Date.now(),
+      }, 0);
+
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        2,
+        expect.objectContaining({ type: 'SYNC_PAUSE' }),
+        { frameId: 7 }
+      );
     });
 
     it('clamps negative target positions to 0', async () => {
@@ -322,6 +358,32 @@ describe('SyncCoordinator', () => {
       expect(playToTab1).toBeDefined();
       expect(playToTab2).toBeDefined();
     });
+
+    it('pauses without seeking when the buffering target would be negative', async () => {
+      coordinator.destroy();
+      coordinator = new SyncCoordinator();
+      coordinator.markReady();
+      coordinator.startSync(
+        { tabId: 1 },
+        { tabId: 2 },
+        { currentTimeA: 10, currentTimeB: 0 } // offset = -10
+      );
+      mockSendMessage.mockClear();
+
+      await coordinator.handleSyncEvent(1, {
+        action: 'buffering_start',
+        position: 5,
+        timestamp: Date.now(),
+      });
+
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        2,
+        expect.objectContaining({
+          type: 'SYNC_PAUSE',
+          payload: expect.objectContaining({ position: -1 }),
+        })
+      );
+    });
   });
 
   describe('drift correction thresholds', () => {
@@ -435,6 +497,51 @@ describe('SyncCoordinator', () => {
           position: 10,
           timestamp: Date.now(),
         });
+      }
+
+      expect(coordinator.getStatus().active).toBe(false);
+    });
+
+    it('stops sync after repeated failed responses from a content script', async () => {
+      coordinator.startSync(
+        { tabId: 1 },
+        { tabId: 2 },
+        { currentTimeA: 0, currentTimeB: 0 }
+      );
+
+      mockSendMessage.mockResolvedValue({ success: false, error: 'No active sync agent' });
+
+      for (let i = 0; i < 5; i++) {
+        await coordinator.handleSyncEvent(1, {
+          action: 'pause',
+          position: 10,
+          timestamp: Date.now(),
+        });
+      }
+
+      expect(coordinator.getStatus().active).toBe(false);
+    });
+
+    it('does not let healthy peer responses reset failures for a dead endpoint', async () => {
+      coordinator.startSync(
+        { tabId: 1 },
+        { tabId: 2 },
+        { currentTimeA: 0, currentTimeB: 0 }
+      );
+
+      mockSendMessage.mockImplementation(async (tabId: number, message: { type: string }) => {
+        if (message.type === 'SYNC_GET_POSITION') {
+          if (tabId === 1) {
+            return { currentTime: 100, paused: false, playbackRate: 1, timestamp: Date.now() };
+          }
+          return null;
+        }
+        return { success: true };
+      });
+
+      for (let i = 0; i < 5; i++) {
+        vi.advanceTimersByTime(2000);
+        await flushPromises();
       }
 
       expect(coordinator.getStatus().active).toBe(false);

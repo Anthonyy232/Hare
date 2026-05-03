@@ -9,13 +9,34 @@ const __dirname = path.dirname(__filename);
 const extensionPath = path.join(__dirname, '../../.output/chrome-mv3');
 const videoFixturePath = path.join(__dirname, 'fixtures/video.html');
 
+async function waitForExtensionId(browserContext: BrowserContext): Promise<string> {
+    const serviceWorkerPromise = browserContext
+        .waitForEvent('serviceworker', { timeout: 15000 })
+        .catch(() => null);
+
+    const existingWorker = browserContext
+        .serviceWorkers()
+        .find((worker) => worker.url().startsWith('chrome-extension://'));
+    const eventWorker = existingWorker ? null : await serviceWorkerPromise;
+    const serviceWorker =
+        existingWorker ??
+        eventWorker ??
+        browserContext.serviceWorkers().find((worker) => worker.url().startsWith('chrome-extension://'));
+
+    if (!serviceWorker) {
+        throw new Error('Extension service worker did not start');
+    }
+
+    return serviceWorker.url().split('/')[2];
+}
+
 test.describe('Extension E2E Tests', () => {
-    let browserContext: BrowserContext;
+    let browserContext: BrowserContext | undefined;
     let page: Page;
     let extensionId: string;
 
-    test.beforeEach(async ({ }) => {
-        browserContext = await chromium.launchPersistentContext('', {
+    test.beforeEach(async ({ }, testInfo) => {
+        browserContext = await chromium.launchPersistentContext(testInfo.outputPath('user-data-dir'), {
             headless: false,
             args: [
                 `--disable-extensions-except=${extensionPath}`,
@@ -23,19 +44,14 @@ test.describe('Extension E2E Tests', () => {
             ],
         });
 
-        let serviceWorker = browserContext.serviceWorkers()[0];
-        if (!serviceWorker) {
-            serviceWorker = await browserContext.waitForEvent('serviceworker');
-        }
-
-        const swUrl = serviceWorker.url();
-        extensionId = swUrl.split('/')[2];
+        extensionId = await waitForExtensionId(browserContext);
 
         page = await browserContext.newPage();
     });
 
     test.afterEach(async () => {
-        await browserContext.close();
+        await browserContext?.close();
+        browserContext = undefined;
     });
 
     test('Extension loads and controls video speed', async () => {

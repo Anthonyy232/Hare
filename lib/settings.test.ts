@@ -1,5 +1,44 @@
 import { describe, it, expect } from 'vitest';
-import { isBlacklisted } from './settings';
+import { validateKeyBindings, isBlacklisted } from './settings';
+import { DEFAULT_SETTINGS } from './types';
+
+describe('validateKeyBindings', () => {
+    it('fills missing actions with defaults', () => {
+        const bindings = validateKeyBindings([
+            { action: 'faster', key: 'KeyF', value: 0.25, force: true },
+        ]);
+
+        expect(bindings).toHaveLength(DEFAULT_SETTINGS.keyBindings.length);
+        expect(bindings.find((binding) => binding.action === 'faster')).toEqual({
+            action: 'faster',
+            key: 'KeyF',
+            value: 0.25,
+            force: true,
+        });
+        expect(bindings.find((binding) => binding.action === 'slower')).toEqual(
+            DEFAULT_SETTINGS.keyBindings.find((binding) => binding.action === 'slower')
+        );
+    });
+
+    it('ignores unknown actions and invalid values', () => {
+        const bindings = validateKeyBindings([
+            { action: 'rewind', key: 'KeyA', value: Number.POSITIVE_INFINITY, force: true },
+            { action: 'not-real', key: 'KeyB', value: 1, force: true },
+            { action: 'advance', key: 'KeyN', value: 15, force: false },
+        ]);
+
+        expect(bindings.find((binding) => binding.action === 'rewind')).toEqual(
+            DEFAULT_SETTINGS.keyBindings.find((binding) => binding.action === 'rewind')
+        );
+        expect(bindings.find((binding) => binding.action === 'advance')).toEqual({
+            action: 'advance',
+            key: 'KeyN',
+            value: 15,
+            force: false,
+        });
+        expect(bindings).not.toContainEqual(expect.objectContaining({ action: 'not-real' }));
+    });
+});
 
 describe('isBlacklisted', () => {
     it('returns false for empty blacklist', () => {
