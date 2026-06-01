@@ -1,6 +1,7 @@
 import { OBSERVER } from './constants';
 import { getShadowRoot } from './shadow-dom';
 import { BrowserFeatures } from './browser-detect';
+import { logger } from './logger';
 
 type MediaFoundCallback = (media: HTMLMediaElement) => void;
 type MediaRemovedCallback = (media: HTMLMediaElement) => void;
@@ -124,6 +125,16 @@ export class ObserverPool {
     }
 
     for (const media of removedMedia) {
+      if (foundMedia.has(media) || media.isConnected) {
+        logger.debug('Media removal ignored because element is still connected', {
+          tagName: media.tagName,
+          src: media.currentSrc || media.src || '',
+          wasReaddedInBatch: foundMedia.has(media),
+          isConnected: media.isConnected,
+        });
+        continue;
+      }
+
       this.trackedMedia.delete(media);
       this.onMediaRemoved(media);
     }
