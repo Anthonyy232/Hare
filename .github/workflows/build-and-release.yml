@@ -24,8 +24,8 @@ jobs:
       matrix:
         browser: [chrome, firefox]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -43,7 +43,7 @@ jobs:
       - name: Package extension
         run: npx wxt zip -b ${{ matrix.browser }}
       - name: Upload submission packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ matrix.browser }}-package-v${{ steps.version.outputs.version }}
           path: .output/*.zip
@@ -58,12 +58,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.1
         with:
           path: artifacts/
           pattern: '*-package-v*'
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3.0.3
         with:
           files: artifacts/*.zip
           fail_on_unmatched_files: true
