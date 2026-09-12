@@ -5,9 +5,13 @@
     speed: number;
     onSpeedChange: (speed: number) => void;
     onReset: () => void;
+    disabled?: boolean;
   }
 
-  let { speed, onSpeedChange, onReset }: Props = $props();
+  let { speed, onSpeedChange, onReset, disabled = false }: Props = $props();
+  let draft = $state('');
+  let editing = $state(false);
+  $effect(() => { if (!editing) draft = speed.toFixed(2); });
 
   function decrease() {
     onSpeedChange(Math.max(SPEED.MIN, speed - SPEED.STEP));
@@ -21,36 +25,29 @@
    * Updates state during typing without clamping to allow free-form input.
    */
   function handleInput(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const value = parseFloat(target.value);
-    // Allow any valid number during typing (boundary enforcement happens on blur)
-    if (!isNaN(value)) {
-      onSpeedChange(value);
-    }
+    draft = (event.target as HTMLInputElement).value;
   }
 
   /**
    * Enforces min/max boundaries when the user finishes editing.
    */
-  function handleBlur(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const value = parseFloat(target.value);
-    if (isNaN(value) || value < SPEED.MIN) {
-      onSpeedChange(SPEED.MIN);
-      target.value = SPEED.MIN.toFixed(2);
-    } else if (value > SPEED.MAX) {
-      onSpeedChange(SPEED.MAX);
-      target.value = SPEED.MAX.toFixed(2);
-    }
+  function commit() {
+    if (!editing) return;
+    editing = false;
+    const value = draft.trim() ? Number(draft) : NaN;
+    draft = speed.toFixed(2);
+    if (Number.isFinite(value) && Math.abs(value - speed) > 0.001) onSpeedChange(Math.max(SPEED.MIN, Math.min(SPEED.MAX, value)));
   }
 </script>
 
 <div class="speed-control">
   <button
     class="btn"
+    data-speed-action
     onclick={decrease}
     title="Decrease speed"
     aria-label="Decrease speed"
+    disabled={disabled || speed <= SPEED.MIN}
   >
     <svg viewBox="0 0 24 24" class="icon"
       ><line x1="5" y1="12" x2="19" y2="12"></line></svg
@@ -60,20 +57,34 @@
   <input
     type="number"
     class="speed-input"
-    value={speed.toFixed(2)}
+    value={draft}
     min={SPEED.MIN}
     max={SPEED.MAX}
-    step={SPEED.STEP}
-    oninput={handleInput}
-    onblur={handleBlur}
+    step="0.01"
+    {disabled}
+    oninput={(event) => { editing = true; handleInput(event); }}
+    onfocus={() => { editing = true; }}
+    onblur={(event) => {
+      // A direct speed action takes precedence over the unfinished custom value.
+      if (event.relatedTarget instanceof HTMLElement && event.relatedTarget.hasAttribute('data-speed-action')) {
+        editing = false;
+        draft = speed.toFixed(2);
+      } else commit();
+    }}
+    onkeydown={(event) => {
+      if (event.key === 'Enter') { event.preventDefault(); commit(); }
+      if (event.key === 'Escape') { editing = false; draft = speed.toFixed(2); (event.target as HTMLInputElement).blur(); }
+    }}
     aria-label="Playback speed"
   />
 
   <button
     class="btn"
+    data-speed-action
     onclick={increase}
     title="Increase speed"
     aria-label="Increase speed"
+    disabled={disabled || speed >= SPEED.MAX}
   >
     <svg viewBox="0 0 24 24" class="icon">
       <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -83,6 +94,8 @@
 
   <button
     class="btn reset"
+    data-speed-action
+    {disabled}
     onclick={onReset}
     title="Reset to 1.0x"
     aria-label="Reset speed to 1.0x">Reset</button

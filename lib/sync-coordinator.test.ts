@@ -49,6 +49,46 @@ describe('SyncCoordinator', () => {
   });
 
   describe('session management', () => {
+    it('does not send a stale drift correction to a replacement session', async () => {
+      let resolveOld!: (position: unknown) => void;
+      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 0 });
+      mockSendMessage.mockImplementation((tabId, message) => {
+        if (message.type === 'SYNC_GET_POSITION' && tabId === 1) return new Promise(resolve => { resolveOld = resolve; });
+        if (message.type === 'SYNC_GET_POSITION') return Promise.resolve({ currentTime: 20, paused: false, playbackRate: 1, timestamp: Date.now() });
+        return Promise.resolve({ success: true });
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      coordinator.startSync({ tabId: 3 }, { tabId: 4 }, { currentTimeA: 0, currentTimeB: 0 });
+      mockSendMessage.mockClear();
+      resolveOld({ currentTime: 10, paused: false, playbackRate: 1, timestamp: Date.now() });
+      await flushPromises();
+      expect(mockSendMessage.mock.calls.filter(call => call[1].type === 'SYNC_DRIFT_CORRECT')).toHaveLength(0);
+    });
+
+    it('cancels automatic buffering resume when the user pauses', async () => {
+      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 0 });
+      await coordinator.handleSyncEvent(1, { action: 'buffering_start', position: 0, timestamp: Date.now() });
+      await coordinator.handleSyncEvent(1, { action: 'buffering_end', position: 0, timestamp: Date.now() });
+      await coordinator.handleSyncEvent(2, { action: 'pause', position: 0, timestamp: Date.now() });
+      mockSendMessage.mockClear();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(mockSendMessage.mock.calls.filter(call => call[1].type === 'SYNC_PLAY')).toHaveLength(0);
+    });
+
+    it('ignores non-finite offset updates', () => {
+      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 5 });
+      coordinator.nudgeOffset(NaN);
+      expect(coordinator.getStatus().offset).toBe(5);
+    });
+
+    it('discards an invalid persisted session and releases readiness', async () => {
+      mockStorageSessionGet.mockResolvedValueOnce({ syncSession_v2: { session: { videoA: { tabId: 1 }, offset: NaN } } });
+      const restored = new SyncCoordinator();
+      await restored.restoreSession();
+      await restored.ready;
+      expect(restored.getStatus().active).toBe(false);
+      restored.destroy();
+    });
     it('starts with no active session', () => {
       const status = coordinator.getStatus();
       expect(status.active).toBe(false);

@@ -18,6 +18,7 @@ vi.mock('./safe-media', () => ({
 }));
 
 import { SyncAgent } from './sync-agent';
+import type { SyncEventPayload } from './sync-types';
 
 function createMockVideo(currentTime = 0, paused = true): HTMLVideoElement {
   const video = document.createElement('video');
@@ -44,7 +45,7 @@ function createMockVideo(currentTime = 0, paused = true): HTMLVideoElement {
 
 describe('SyncAgent', () => {
   let video: HTMLVideoElement;
-  let sendEvent: ReturnType<typeof vi.fn>;
+  let sendEvent: ReturnType<typeof vi.fn<(event: SyncEventPayload) => void>>;
   let agent: SyncAgent;
 
   beforeAll(() => {
@@ -110,6 +111,7 @@ describe('SyncAgent', () => {
   });
 
   it('reports buffering start on waiting event', () => {
+    (video as any)._paused = false;
     video.dispatchEvent(new Event('waiting'));
     expect(sendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'buffering_start' })
@@ -166,6 +168,7 @@ describe('SyncAgent', () => {
     });
 
     it('does not suppress buffering when play was user-initiated', () => {
+      (video as any)._paused = false;
       // User plays (no executePlay), then video buffers
       video.dispatchEvent(new Event('play'));  // user-initiated
       expect(sendEvent).toHaveBeenCalledWith(
@@ -202,6 +205,7 @@ describe('SyncAgent', () => {
     });
 
     it('suppresses waiting during coordinator-initiated seek', () => {
+      (video as any)._paused = false;
       agent.executeSeek(50);
       // 'seeking' fires, then 'waiting' — both suppressed during seek
       video.dispatchEvent(new Event('seeking'));
@@ -244,10 +248,8 @@ describe('SyncAgent', () => {
       agent.executePause(); // should clear clean-play suppression
 
       video.dispatchEvent(new Event('pause'));  // consumed by pendingPause
-      video.dispatchEvent(new Event('waiting'));  // NOT suppressed
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'buffering_start' })
-      );
+      video.dispatchEvent(new Event('waiting')); // Paused media cannot stall its peer.
+      expect(sendEvent).not.toHaveBeenCalled();
     });
   });
 

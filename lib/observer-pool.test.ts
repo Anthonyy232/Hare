@@ -14,6 +14,36 @@ describe('ObserverPool', () => {
     document.body.innerHTML = '';
   });
 
+  it('observes pre-existing nested shadow roots and releases removed hosts', async () => {
+    const found: HTMLMediaElement[] = [], removed: HTMLMediaElement[] = [];
+    const host = document.createElement('div'); document.body.append(host);
+    const outer = host.attachShadow({ mode: 'open' });
+    const innerHost = document.createElement('div'); outer.append(innerHost);
+    const inner = innerHost.attachShadow({ mode: 'open' });
+    const pool = new ObserverPool(media => found.push(media), media => removed.push(media));
+    pool.observe(document);
+    const video = document.createElement('video'); inner.append(video);
+    await flushObserver();
+    expect(found).toEqual([video]);
+    host.remove();
+    await flushObserver();
+    expect(removed).toEqual([video]);
+    inner.append(document.createElement('video'));
+    await flushObserver();
+    expect(found).toHaveLength(1);
+    pool.disconnect();
+  });
+
+  it('does not report media added and removed before the batch flushes', async () => {
+    const found: HTMLMediaElement[] = [];
+    const pool = new ObserverPool(media => found.push(media), () => {});
+    pool.observe(document);
+    const video = document.createElement('video'); document.body.append(video); video.remove();
+    await flushObserver();
+    expect(found).toEqual([]);
+    pool.disconnect();
+  });
+
   it('reports media added to the observed document', async () => {
     const found: HTMLMediaElement[] = [];
     const removed: HTMLMediaElement[] = [];

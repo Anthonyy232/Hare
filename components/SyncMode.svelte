@@ -4,14 +4,19 @@
   import { SYNC } from "../lib/sync-types";
   import { logger } from "../lib/logger";
 
+  let { onExpandedChange }: { onExpandedChange?: (expanded: boolean) => void } = $props();
+
   let syncStatus: SyncStatusResponse | null = $state(null);
   let candidates: SyncCandidate[] = $state([]);
   let selectedTabs: number[] = $state([]);
   let loading = $state(false);
+  let starting = $state(false);
   let showSetup = $state(false);
   let error: string | null = $state(null);
   let nudgeStep = $state(SYNC.DEFAULT_NUDGE_STEP);
-  const offsetDisplay = $derived(offsetLabel(syncStatus?.offset ?? 0));
+  const offsetDisplay = $derived.by(() => offsetLabel(syncStatus?.offset ?? 0));
+  const expanded = $derived.by(() => showSetup || syncStatus?.active === true);
+  $effect(() => { onExpandedChange?.(expanded); });
 
   const NUDGE_STEPS = [0.01, 0.05, 0.1, 0.5];
 
@@ -28,6 +33,8 @@
     error = null;
     try {
       candidates = await browser.runtime.sendMessage({ type: "GET_SYNC_CANDIDATES" }) as SyncCandidate[];
+      if (!Array.isArray(candidates)) throw new Error('Invalid tab list');
+      selectedTabs = selectedTabs.filter(id => candidates.some(candidate => candidate.tabId === id));
       if (candidates.length < 2) {
         error = "Need at least 2 tabs with videos";
       }
@@ -44,48 +51,63 @@
       selectedTabs = selectedTabs.filter((id) => id !== tabId);
     } else if (selectedTabs.length < 2) {
       selectedTabs = [...selectedTabs, tabId];
-    } else {
-      // Replace the first selection
-      selectedTabs = [selectedTabs[1], tabId];
     }
   }
 
   async function startSync() {
-    if (selectedTabs.length !== 2) return;
+    if (selectedTabs.length !== 2 || loading) return;
     loading = true;
+    starting = true;
+    error = null;
     try {
-      await browser.runtime.sendMessage({
+      const result = await browser.runtime.sendMessage({
         type: "START_SYNC",
         payload: { tabIdA: selectedTabs[0], tabIdB: selectedTabs[1] },
       });
+      if (!result?.success) throw new Error(result?.error || 'Failed to start sync');
       showSetup = false;
       selectedTabs = [];
       await loadSyncStatus();
-    } catch {
-      error = "Failed to start sync";
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to start sync';
+    } finally {
+      loading = false;
+      starting = false;
+    }
+  }
+
+  async function stopSync() {
+    if (loading) return;
+    loading = true;
+    error = null;
+    try {
+      const result = await browser.runtime.sendMessage({ type: "STOP_SYNC" });
+      if (!result?.success) throw new Error('Could not stop sync');
+      syncStatus = null;
+    } catch (e) {
+      logger.error("Failed to stop sync", e);
+      error = 'Could not stop sync. Try again.';
     } finally {
       loading = false;
     }
   }
 
-  async function stopSync() {
-    try {
-      await browser.runtime.sendMessage({ type: "STOP_SYNC" });
-      syncStatus = null;
-    } catch (e) {
-      logger.error("Failed to stop sync", e);
-    }
-  }
-
   async function nudge(direction: number) {
+    if (loading) return;
+    loading = true;
+    error = null;
     try {
-      await browser.runtime.sendMessage({
+      const result = await browser.runtime.sendMessage({
         type: "NUDGE_OFFSET",
         payload: direction * nudgeStep,
       });
+      if (!result?.success) throw new Error(result?.error || 'Could not adjust offset');
       await loadSyncStatus();
     } catch (e) {
       logger.error("Failed to nudge offset", e);
+      error = 'Could not adjust the offset. Check that both tabs are still open.';
+    } finally {
+      loading = false;
     }
   }
 
@@ -114,16 +136,19 @@
 
   onMount(() => {
     loadSyncStatus();
+    const timer = setInterval(() => { if (!loading) void loadSyncStatus(); }, 1500);
+    return () => clearInterval(timer);
   });
 </script>
 
-<div class="sync-section">
+<section class="sync-section" aria-label="Video sync">
+  {#if error}<div class="sync-error" role="alert">{error}</div>{/if}
   {#if syncStatus?.active}
     <!-- Active sync view -->
     <div class="sync-active">
       <div class="sync-header">
         <div class="sync-badge">SYNC</div>
-        <button class="stop-btn" onclick={stopSync}>Stop</button>
+        <button class="stop-btn" onclick={stopSync} disabled={loading}>Stop</button>
       </div>
 
       <div class="sync-tabs">
@@ -152,6 +177,7 @@
         <div class="offset-controls">
           <button
             class="nudge-btn"
+            disabled={loading}
             onclick={() => nudge(-1)}
             title="Shift B earlier by {formatStep(nudgeStep)}"
             aria-label="Shift B earlier"
@@ -167,6 +193,7 @@
           </select>
           <button
             class="nudge-btn"
+            disabled={loading}
             onclick={() => nudge(1)}
             title="Shift B later by {formatStep(nudgeStep)}"
             aria-label="Shift B later"
@@ -179,21 +206,32 @@
     <div class="sync-setup">
       <div class="setup-header">
         <span>Select 2 tabs to sync</span>
-        <button class="cancel-btn" onclick={cancelSetup}>Cancel</button>
+        <button class="cancel-btn" onclick={cancelSetup} disabled={loading}>Cancel</button>
       </div>
+      <p class="setup-hint">Cue each video to the moment you want to pair. A sets the playback speed; B keeps its starting offset.</p>
 
       {#if loading}
-        <div class="sync-loading">Scanning tabs...</div>
-      {:else if error}
-        <div class="sync-error">{error}</div>
+        <div class="sync-loading" role="status">{starting ? 'Starting sync…' : 'Scanning tabs…'}</div>
       {:else}
+        <div class="selection-status">
+          <span role="status">{selectedTabs.length} of 2 selected</span>
+          {#if selectedTabs.length === 2}
+            <button class="swap-btn" onclick={() => { selectedTabs = [selectedTabs[1], selectedTabs[0]]; }}>Swap A / B</button>
+          {/if}
+        </div>
+        {#if selectedTabs.length === 2 && candidates.length > 2}
+          <p class="setup-hint">Deselect a tab to choose a different pair.</p>
+        {/if}
         <div class="candidate-list">
           {#each candidates as candidate}
             <button
               class="candidate"
               class:selected={selectedTabs.includes(candidate.tabId)}
+              aria-pressed={selectedTabs.includes(candidate.tabId)}
+              disabled={selectedTabs.length === 2 && !selectedTabs.includes(candidate.tabId)}
               onclick={() => toggleTab(candidate.tabId)}
             >
+              <span class="selection-marker" aria-hidden="true">{selectedTabs.includes(candidate.tabId) ? (selectedTabs.indexOf(candidate.tabId) === 0 ? 'A' : 'B') : '+'}</span>
               <div class="candidate-info">
                 <span class="candidate-title" title={candidate.title}>
                   {candidate.title}
@@ -201,7 +239,7 @@
                 <span class="candidate-domain">{candidate.domain}</span>
               </div>
               <span class="candidate-videos">
-                {candidate.videoCount} video{candidate.videoCount !== 1 ? "s" : ""}
+                {candidate.videoCount} {candidate.videoCount === 1 ? 'player' : 'players'}
               </span>
             </button>
           {/each}
@@ -215,6 +253,7 @@
           Start Sync
         </button>
       {/if}
+      <button class="sync-mode-btn" onclick={loadCandidates} disabled={loading}>Refresh tab list</button>
     </div>
   {:else}
     <!-- Inactive — show button to open setup -->
@@ -226,12 +265,19 @@
       </svg>
       Sync Mode
     </button>
+    <p class="sync-description">Keep two video tabs playing together</p>
   {/if}
-</div>
+</section>
 
 <style>
+  .selection-status { display: flex; justify-content: space-between; align-items: center; min-height: 32px; font-size: 11px; color: #c4b5fd; }
+  .swap-btn { background: #a78bfa14; border: 1px solid #a78bfa4d; color: #ddd6fe; padding: 6px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+  .selection-marker { display: grid; place-items: center; width: 24px; height: 24px; margin-right: 8px; border: 1px solid #ffffff30; border-radius: 5px; flex-shrink: 0; color: #bbb; font-weight: 700; }
+  .selected .selection-marker { color: #1f1735; background: #c4b5fd; border-color: #c4b5fd; }
+  .sync-description { font-size: 11px; color: #aaa; text-align: center; margin: 7px 0 0; }
+  .setup-hint { font-size: 12px; color: #aaa; line-height: 1.5; margin: 0; }
   .sync-section {
-    padding: 0 20px 12px;
+    padding: 0 20px 18px;
     position: relative;
     z-index: 1;
   }
@@ -240,7 +286,7 @@
     width: 100%;
     padding: 10px 16px;
     border: 1px solid rgba(139, 92, 246, 0.3);
-    border-radius: 4px;
+    border-radius: 6px;
     background: rgba(139, 92, 246, 0.1);
     color: #f0f0f0;
     font-size: 13px;
@@ -502,7 +548,7 @@
 
   .candidate-domain {
     font-size: 10px;
-    color: #666;
+    color: #aaa;
   }
 
   .candidate-videos {

@@ -6,6 +6,7 @@ import { logger } from './logger';
 import { MESSAGES } from './messages';
 import { BrowserFeatures } from './browser-detect';
 import { safeMedia } from './safe-media';
+import { ICONS } from './controller-icons';
 
 let sharedStyleSheet: CSSStyleSheet | null = null;
 
@@ -26,15 +27,10 @@ function getStyleSheet(): CSSStyleSheet {
   return sharedStyleSheet;
 }
 
-const ICONS = {
-  rewind: `<svg viewBox="0 0 24 24"><polyline points="11 17 6 12 11 7"></polyline><polyline points="18 17 13 12 18 7"></polyline></svg>`,
-  slower: `<svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
-  faster: `<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
-  advance: `<svg viewBox="0 0 24 24"><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>`,
-  hide: `<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
-};
+
 
 let controllerIdCounter = 0;
+const positionedParents = new WeakMap<HTMLElement, { count: number; value: string; priority: string }>();
 
 // Cache parsed SVGs to avoid repetitive DOMParser usage
 const svgCache: Record<string, SVGElement> = {};
@@ -71,6 +67,11 @@ export class VideoController {
   // Cached values to avoid repeated Lookups during keybind execution
   private cachedSpeedStep: number = SPEED.STEP;
   private cachedSeekValue: number = SEEK.DEFAULT_SECONDS;
+  private cachedSlowerStep: number = SPEED.STEP;
+  private cachedRewindValue: number = SEEK.DEFAULT_SECONDS;
+  private destroyed = false;
+  private positionedParent: HTMLElement | null = null;
+  private speedRequest = 0;
 
 
   // Speed enforcement: reactive enforcement to counter sites resetting speed
@@ -79,11 +80,6 @@ export class VideoController {
   private suppressRateEnforcementCount = 0;
   private lastEnforcementTime = 0;
   private static readonly ENFORCEMENT_DEBOUNCE_MS = 500;
-
-  // Pause Recovery: detects if the site forces a pause after we change speed
-  private lastSpeedSetTime = 0;
-  private static readonly PAUSE_RECOVERY_WINDOW_MS = 300;
-  private isRecoveringFromPause = false;
 
   private dragBounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null;
 
@@ -100,6 +96,7 @@ export class VideoController {
     this.settings = settings;
     this.siteHandler = siteHandler;
     this.isManuallyHidden = settings.startHidden;
+    this.targetSpeed = safeMedia.getPlaybackRate(media);
 
     this.positionX = CONTROLLER.DEFAULT_OFFSET_X;
     this.positionY = CONTROLLER.DEFAULT_OFFSET_Y;
@@ -120,6 +117,8 @@ export class VideoController {
     const advanceBinding = this.settings.keyBindings.find((b) => b.action === 'advance');
     this.cachedSpeedStep = fasterBinding?.value ?? SPEED.STEP;
     this.cachedSeekValue = advanceBinding?.value ?? SEEK.DEFAULT_SECONDS;
+    this.cachedSlowerStep = this.settings.keyBindings.find(b => b.action === 'slower')?.value ?? SPEED.STEP;
+    this.cachedRewindValue = this.settings.keyBindings.find(b => b.action === 'rewind')?.value ?? SEEK.DEFAULT_SECONDS;
   }
 
   private init(): void {
@@ -127,7 +126,7 @@ export class VideoController {
 
     this.media.addEventListener('ratechange', this.handleRateChange, { capture: true });
     this.media.addEventListener('play', this.handlePlay);
-    this.media.addEventListener('pause', this.handlePause);
+    document.addEventListener('fullscreenchange', this.handleFullscreenChange);
 
     if (safeMedia.getPlaybackRate(this.media) !== SPEED.DEFAULT) {
       this.updateSpeedDisplay();
@@ -168,8 +167,10 @@ export class VideoController {
     }
 
     // Repair 2: Video moved to a different parent (common in SPAs)
-    const expectedParent = this.siteHandler?.getControllerPosition(this.media as HTMLVideoElement)?.target
-      ?? this.media.parentElement;
+    const position = this.getControllerPosition();
+    const expectedParent = position
+      ? (position.method === 'before' || position.method === 'after' ? position.target.parentElement : position.target)
+      : this.media.parentElement;
     if (parent !== expectedParent && expectedParent) {
       this.insertController();
       return;
@@ -184,7 +185,7 @@ export class VideoController {
         // Double check style before mutating to avoid fighting with some frameworks
         const style = getComputedStyle(parent);
         if (style.position === 'static' && style.transform === 'none') {
-          parent.style.position = 'relative';
+          this.ensurePositioningContext(parent);
         } else if (this.wrapper.offsetParent !== parent) {
           // If parent supposedly has potential (transform!=none) but offsetParent is still wrong,
           // it might be because the browser doesn't consider it a container yet.
@@ -219,6 +220,8 @@ export class VideoController {
 
     this.controllerEl = document.createElement('div');
     this.controllerEl.className = 'hare-controller';
+    this.controllerEl.addEventListener('mouseenter', () => this.clampPosition());
+    this.controllerEl.addEventListener('focusin', () => this.clampPosition());
     if (this.isManuallyHidden) {
       this.controllerEl.classList.add('hidden');
     }
@@ -244,8 +247,8 @@ export class VideoController {
     const controls = document.createElement('span');
     controls.className = 'hare-controls';
 
-    const rewindBtn = this.createButton(ICONS.rewind, 'rewind', () => this.seek(-this.cachedSeekValue), 'Rewind');
-    const slowerBtn = this.createButton(ICONS.slower, 'slower', () => this.adjustSpeed(-this.cachedSpeedStep), 'Slower');
+    const rewindBtn = this.createButton(ICONS.rewind, 'rewind', () => this.seek(-this.cachedRewindValue), 'Rewind');
+    const slowerBtn = this.createButton(ICONS.slower, 'slower', () => this.adjustSpeed(-this.cachedSlowerStep), 'Slower');
     const fasterBtn = this.createButton(ICONS.faster, 'faster', () => this.adjustSpeed(this.cachedSpeedStep), 'Faster');
     const advanceBtn = this.createButton(ICONS.advance, 'advance', () => this.seek(this.cachedSeekValue), 'Advance');
 
@@ -259,6 +262,7 @@ export class VideoController {
 
     this.osdEl = document.createElement('div');
     this.osdEl.className = 'hare-osd';
+    this.osdEl.setAttribute('role', 'status');
     this.osdEl.textContent = '';
 
     this.shadow.appendChild(this.controllerEl);
@@ -298,6 +302,7 @@ export class VideoController {
     ariaLabel: string
   ): HTMLButtonElement {
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'hare-btn';
 
     const svgElement = this.createSVGFromString(iconSvg);
@@ -319,10 +324,35 @@ export class VideoController {
    * Ensures parent has a stacking context for absolute positioning.
    */
   private ensurePositioningContext(parent: HTMLElement): void {
+    if (this.positionedParent !== parent) {
+      this.releasePositioningContext();
+      const existing = positionedParents.get(parent);
+      if (existing) {
+        existing.count++;
+        this.positionedParent = parent;
+      }
+    }
     const style = getComputedStyle(parent);
     if (style.position === 'static') {
+      if (!this.positionedParent) {
+        positionedParents.set(parent, { count: 1, value: parent.style.getPropertyValue('position'), priority: parent.style.getPropertyPriority('position') });
+        this.positionedParent = parent;
+      }
       parent.style.position = 'relative';
     }
+  }
+
+  private releasePositioningContext(): void {
+    const parent = this.positionedParent;
+    this.positionedParent = null;
+    if (!parent) return;
+    const lease = positionedParents.get(parent);
+    if (!lease || --lease.count > 0) return;
+    if (parent.style.position === 'relative' && parent.style.getPropertyPriority('position') === '') {
+      if (lease.value) parent.style.setProperty('position', lease.value, lease.priority);
+      else parent.style.removeProperty('position');
+    }
+    positionedParents.delete(parent);
   }
 
   /**
@@ -332,10 +362,7 @@ export class VideoController {
   private insertController(): void {
     if (!this.wrapper) return;
 
-    let position: ControllerPosition | null = null;
-    if (this.siteHandler) {
-      position = this.siteHandler.getControllerPosition(this.media as HTMLVideoElement);
-    }
+    let position = this.getControllerPosition();
 
     if (position) {
       const target = position.target as HTMLElement;
@@ -346,13 +373,14 @@ export class VideoController {
         logger.debug('Site handler returned disconnected element, using fallback positioning');
         position = null;
       } else {
-        this.ensurePositioningContext(target);
+        const parent = position.method === 'before' || position.method === 'after' ? target.parentElement : target;
+        if (parent) this.ensurePositioningContext(parent);
 
         switch (position.method) {
-          case 'prepend': target.prepend(this.wrapper); break;
-          case 'append': target.append(this.wrapper); break;
-          case 'before': target.before(this.wrapper); break;
-          case 'after': target.after(this.wrapper); break;
+          case 'prepend': if (this.wrapper.parentNode !== target) target.prepend(this.wrapper); break;
+          case 'append': if (this.wrapper.parentNode !== target) target.append(this.wrapper); break;
+          case 'before': if (this.wrapper.nextSibling !== target) target.before(this.wrapper); break;
+          case 'after': if (this.wrapper.previousSibling !== target) target.after(this.wrapper); break;
         }
       }
     }
@@ -362,12 +390,30 @@ export class VideoController {
       const parent = this.media.parentElement;
       if (parent) {
         this.ensurePositioningContext(parent);
-        parent.prepend(this.wrapper);
+        if (this.wrapper.parentNode !== parent) parent.prepend(this.wrapper);
+      } else if (this.media.parentNode instanceof ShadowRoot) {
+        this.media.before(this.wrapper);
       }
     }
 
     this.setupResizeObserver();
   }
+
+  private getControllerPosition(): ControllerPosition | null {
+    const fullscreen = document.fullscreenElement;
+    if (fullscreen && fullscreen !== this.media && fullscreen.contains(this.media)) {
+      return { target: fullscreen, method: 'append' };
+    }
+    const position = this.media instanceof HTMLVideoElement
+      ? this.siteHandler?.getControllerPosition(this.media) : null;
+    // Video elements cannot display DOM children (e.g. a .vjs-tech selector).
+    return position?.target instanceof HTMLMediaElement ? null : position ?? null;
+  }
+
+  private handleFullscreenChange = (): void => {
+    this.insertController();
+    this.clampPosition();
+  };
 
   /**
    * Monitors parent container size to keep controller within visible bounds.
@@ -412,8 +458,7 @@ export class VideoController {
 
   /**
    * Calculates valid move boundaries for all four borders (top, left, right, bottom).
-   * Uses the collapsed controller size to ensure consistent boundary detection
-   * regardless of whether the controls are currently expanded or hidden.
+   * Includes expanded buttons when hovered or focused so controls remain reachable.
    */
   private getClampedBounds(): { minX: number; maxX: number; minY: number; maxY: number } | null {
     if (!this.wrapper || !this.controllerEl) return null;
@@ -434,30 +479,17 @@ export class VideoController {
 
     if (parentWidth === 0 || parentHeight === 0) return null;
 
-    // Measure collapsed size for accurate boundary checks.
-    // This ensures all borders (top, left, right, bottom) use the same reference dimensions,
-    // preventing the controller from moving out of bounds when controls are hidden.
-    const controlsEl = this.controllerEl.querySelector('.hare-controls') as HTMLElement | null;
-    if (controlsEl) controlsEl.style.display = 'none';
-
     const controllerRect = this.controllerEl.getBoundingClientRect();
-    const collapsedWidth = controllerRect.width;
-    const collapsedHeight = controllerRect.height;
-
-    if (controlsEl) controlsEl.style.display = '';
+    const controllerWidth = controllerRect.width;
+    const controllerHeight = controllerRect.height;
 
     const padding = CONTROLLER.BOUNDARY_PADDING;
 
-    // All four boundaries use the collapsed dimensions for consistency:
-    // - Left border (minX): padding from left edge
-    // - Right border (maxX): parent width minus collapsed width minus padding
-    // - Top border (minY): padding from top edge
-    // - Bottom border (maxY): parent height minus collapsed height minus padding
     return {
       minX: padding,
-      maxX: Math.max(padding, parentWidth - collapsedWidth - padding),
+      maxX: Math.max(padding, parentWidth - controllerWidth - padding),
       minY: padding,
-      maxY: Math.max(padding, parentHeight - collapsedHeight - padding),
+      maxY: Math.max(padding, parentHeight - controllerHeight - padding),
     };
   }
 
@@ -498,6 +530,7 @@ export class VideoController {
     }
     this.updateSpeedDisplay();
     if (shouldSkipEnforcement) return;
+    if (!this.isEnforcingSpeed) this.targetSpeed = safeMedia.getPlaybackRate(this.media);
     this.enforceSpeedIfNeeded();
   };
 
@@ -507,31 +540,8 @@ export class VideoController {
     }
   };
 
-  private handlePause = (): void => {
-    // If the video pauses shortly after we set the speed, it's likely a site restriction.
-    const now = Date.now();
-    if (
-      this.lastSpeedSetTime > 0 &&
-      now - this.lastSpeedSetTime < VideoController.PAUSE_RECOVERY_WINDOW_MS
-    ) {
-      if (!this.isRecoveringFromPause) {
-        logger.debug('Detected potential forced pause after speed change. Attempting recovery...');
-        this.isRecoveringFromPause = true;
-
-        // Brief delay to let the site's logic finish before we resume
-        setTimeout(() => {
-          safeMedia.play(this.media)
-            .catch(e => logger.warn('Failed to recover from forced pause:', e))
-            .finally(() => {
-              // Reset flag after a moment to allow legitimate pauses again
-              setTimeout(() => this.isRecoveringFromPause = false, 500);
-            });
-        }, 50);
-      }
-    }
-  };
-
   private handleDragStart = (e: MouseEvent | PointerEvent): void => {
+    if (e.button !== 0) return;
     if (!this.wrapper) return;
 
     if (!this.media.isConnected) {
@@ -637,19 +647,26 @@ export class VideoController {
    * Sets playback speed and verifies implementation. Some DRM/players may reject changes
    * or enforce limits; we notify the user via OSD if the actual speed differs from requested.
    */
-  setSpeed(speed: number): void {
+  setSpeed(speed: number): boolean {
+    if (this.destroyed || !Number.isFinite(speed)) return false;
     const clampedSpeed = Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed));
     const roundedSpeed = Math.round(clampedSpeed * 100) / 100;
 
+    const previousSpeed = safeMedia.getPlaybackRate(this.media);
+    try {
+      safeMedia.setPlaybackRate(this.media, roundedSpeed);
+    } catch {
+      this.showOSD(MESSAGES.SPEED_CONTROL_BLOCKED);
+      return false;
+    }
     this.targetSpeed = roundedSpeed;
     this.isEnforcingSpeed = roundedSpeed !== SPEED.DEFAULT;
-    this.lastSpeedSetTime = Date.now();
-
-    const previousSpeed = safeMedia.getPlaybackRate(this.media);
-    safeMedia.setPlaybackRate(this.media, roundedSpeed);
+    this.updateSpeedDisplay();
     this.intendedSpeedListener?.(roundedSpeed);
 
+    const request = ++this.speedRequest;
     requestAnimationFrame(() => {
+      if (this.destroyed || request !== this.speedRequest) return;
       const actualSpeed = safeMedia.getPlaybackRate(this.media);
       const tolerance = SPEED.TOLERANCE;
 
@@ -661,6 +678,7 @@ export class VideoController {
         }
       }
     });
+    return true;
   }
 
   adjustSpeed(delta: number): void {
@@ -678,11 +696,13 @@ export class VideoController {
    * the user's intended speed. Used for small drift corrections in Sync Mode.
    */
   applyTransientRate(speed: number): void {
+    if (this.destroyed || !Number.isFinite(speed)) return;
     const clampedSpeed = Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed));
-    if (Math.abs(safeMedia.getPlaybackRate(this.media) - clampedSpeed) > SPEED.TOLERANCE) {
+    if (safeMedia.getPlaybackRate(this.media) !== clampedSpeed) {
       this.suppressRateEnforcementCount++;
+      try { safeMedia.setPlaybackRate(this.media, clampedSpeed); }
+      catch (error) { this.suppressRateEnforcementCount--; throw error; }
     }
-    safeMedia.setPlaybackRate(this.media, clampedSpeed);
     this.updateSpeedDisplay();
   }
 
@@ -717,6 +737,7 @@ export class VideoController {
    * Seeks the media by duration.
    */
   seek(seconds: number): void {
+    if (!Number.isFinite(seconds) || this.destroyed) return;
     if (this.media.readyState < SEEK.MIN_READY_STATE) return;
 
     try {
@@ -755,12 +776,9 @@ export class VideoController {
       const action = btn.dataset.action as KeyAction | undefined;
       if (!action) continue;
       const value =
-        action === 'slower' || action === 'faster'
-          ? this.cachedSpeedStep
-          : action === 'rewind' || action === 'advance'
-            ? this.cachedSeekValue
-            : 0;
-      buttons.push({ action, value, x: r.left, y: r.top, w: r.width, h: r.height });
+        action === 'slower' ? this.cachedSlowerStep : action === 'faster' ? this.cachedSpeedStep
+          : action === 'rewind' ? this.cachedRewindValue : action === 'advance' ? this.cachedSeekValue : 0;
+      buttons.push({ controllerId: this.id, action, value, x: r.left, y: r.top, w: r.width, h: r.height });
     }
     return buttons.length > 0 ? buttons : null;
   }
@@ -807,11 +825,14 @@ export class VideoController {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.isEnforcingSpeed = false;
 
     this.media.removeEventListener('ratechange', this.handleRateChange, { capture: true });
     this.media.removeEventListener('play', this.handlePlay);
-    this.media.removeEventListener('pause', this.handlePause);
+    document.removeEventListener('fullscreenchange', this.handleFullscreenChange);
+    this.intendedSpeedListener = null;
 
     if (BrowserFeatures.hasPointerEvents) {
       this.speedDisplay?.removeEventListener('pointerdown', this.handleDragStart as EventListener);
@@ -829,6 +850,7 @@ export class VideoController {
     this.resizeObserver = null;
 
     this.wrapper?.remove();
+    this.releasePositioningContext();
     this.wrapper = null;
     this.shadow = null;
     this.speedDisplay = null;

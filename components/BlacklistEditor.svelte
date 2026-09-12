@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { validateBlacklist } from '../lib/settings';
   interface Props {
     blacklist: string;
     onBlacklistChange: (blacklist: string) => void;
   }
 
   let { blacklist, onBlacklistChange }: Props = $props();
+  const errors = $derived(validateBlacklist(blacklist));
 
   function handleInput(event: Event) {
     const target = event.target as HTMLTextAreaElement;
@@ -16,7 +18,7 @@
   <label for="blacklist">
     <strong>Excluded Sites</strong>
     <span class="sublabel"
-      >One per line. Supports domains and regex patterns.</span
+      >One per line. Domains include their subdomains. You can also paste a URL or use /regular expressions/.</span
     >
   </label>
 
@@ -27,19 +29,26 @@
     oninput={handleInput}
     placeholder="example.com&#10;subdomain.example.com&#10;/regex-pattern/"
     rows={8}
+    spellcheck="false"
+    aria-invalid={errors.length > 0}
+    aria-describedby="blacklist-feedback"
   ></textarea>
+  <div id="blacklist-feedback" role="status">
+    {#each errors as error}<p class="validation-error">{error}</p>{/each}
+  </div>
 
   <div class="examples">
     <strong>Examples:</strong>
     <ul>
       <li><code>example.com</code> - matches domain and all subdomains</li>
-      <li><code>subdomain.example.com</code> - matches only that subdomain</li>
+      <li><code>subdomain.example.com</code> - matches that domain and its subdomains</li>
       <li><code>/.*\.example\.com/</code> - regular expression matching</li>
     </ul>
   </div>
 </div>
 
 <style>
+  .validation-error { color: #fca5a5; font-size: 13px; }
   .blacklist-editor {
     width: 100%;
   }

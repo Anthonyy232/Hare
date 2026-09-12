@@ -10,7 +10,8 @@ function isInputElement(element: Element | null): boolean {
 
   const tagName = element.tagName.toUpperCase();
   if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return true;
-  if (element.getAttribute('contenteditable') === 'true') return true;
+  if ((element as HTMLElement).isContentEditable) return true;
+  if (element.closest('[contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="searchbox"], [role="combobox"]')) return true;
 
   const role = element.getAttribute('role');
   return role === 'textbox' || role === 'searchbox' || role === 'combobox';
@@ -47,7 +48,7 @@ export function executeAction(
         controller.seek(binding.value);
         break;
       case 'reset':
-        controller.resetSpeed();
+        controller.setSpeed(binding.value);
         controller.showOSD(`${controller.speed.toFixed(2)}x`);
         break;
       case 'display':
@@ -79,7 +80,8 @@ function isHareKeyForwardMessage(data: unknown): data is HareKeyForwardMessage {
   return (
     d.__hareKeyForward === true &&
     typeof d.action === 'string' &&
-    typeof d.value === 'number'
+    ['slower', 'faster', 'rewind', 'advance', 'reset', 'display'].includes(d.action) &&
+    typeof d.value === 'number' && Number.isFinite(d.value) && d.value >= 0
   );
 }
 
@@ -102,19 +104,20 @@ export function createKeybindHandler(
   getSettings: () => Settings
 ): KeybindHandler {
   const handleKeyDown = (event: KeyboardEvent): void => {
-    const target = event.target;
-    // Allow typing in inputs unless it's a modifier-only event or special case?
-    // No, standard behavior is to ignore inputs.
-    if (!target || !(target instanceof Element) || isInputElement(target)) return;
+    if (event.isComposing || event.keyCode === 229 || document.designMode === 'on') return;
+    const path = event.composedPath();
+    if (path.some(target => target instanceof Element && isInputElement(target))) return;
+    if (event.target instanceof Element && isInputElement(event.target)) return;
 
     // Ignore commands with active system modifiers.
-    if (event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
 
     const settings = getSettings();
     if (!settings.enabled) return;
 
     const binding = findBinding(event, settings.keyBindings);
     if (!binding) return;
+    if (event.repeat && (binding.action === 'display' || binding.action === 'reset')) return;
 
     const controllers = getControllers();
     if (controllers.length > 0) {
@@ -146,7 +149,7 @@ export function createKeybindHandler(
     if (!isHareKeyForwardMessage(event.data)) return;
     // Only accept forwards from an ancestor (parent or top). This rejects
     // random messages from peer/child frames or unrelated page scripts.
-    if (event.source !== window.parent && event.source !== window.top) return;
+    if (window.parent === window || event.source !== window.parent) return;
 
     const settings = getSettings();
     if (!settings.enabled) return;

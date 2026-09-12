@@ -44,6 +44,7 @@ export interface SiteHandler {
 }
 
 export type MessageType =
+  | 'GET_PAGE_CONTEXT'
   | 'GET_STATUS'
   | 'SET_SPEED'
   | 'ADJUST_SPEED'
@@ -75,6 +76,9 @@ export interface StatusResponse {
   hasVideos: boolean;
   currentSpeed: number;
   videoCount: number;
+  mixedSpeeds?: boolean;
+  enabled?: boolean;
+  excluded?: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

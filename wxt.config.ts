@@ -3,6 +3,20 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   manifestVersion: 3,
   modules: ['@wxt-dev/module-svelte'],
+  svelte: {
+    vite: {
+      // Build templates with DOM nodes, avoiding runtime innerHTML sinks in extension pages.
+      compilerOptions: { fragments: 'tree' },
+    },
+  },
+  zip: {
+    // Only build inputs belong in the Firefox source archive, never local test profiles/reports.
+    includeSources: [
+      'entrypoints/**', 'components/**', 'lib/**', 'assets/**', 'public/**', 'tests/**', 'docs/**',
+      'README.md', 'LICENSE', 'package.json', 'package-lock.json', 'tsconfig.json',
+      'wxt.config.ts', 'vitest.config.ts', 'playwright.config.ts',
+    ],
+  },
   manifest: {
     name: 'Hare',
     description: 'Control HTML5 video/audio playback speed with keyboard shortcuts',

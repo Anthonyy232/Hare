@@ -1,189 +1,101 @@
 import { OBSERVER } from './constants';
+import { scanMediaTree } from './media-detector';
 import { getShadowRoot } from './shadow-dom';
 import { BrowserFeatures } from './browser-detect';
-import { logger } from './logger';
 
-type MediaFoundCallback = (media: HTMLMediaElement) => void;
-type MediaRemovedCallback = (media: HTMLMediaElement) => void;
+type MediaCallback = (media: HTMLMediaElement) => void;
 
-/**
- * A centralized MutationObserver pool that efficiently tracks media elements across
- * the main document and all discovered Shadow DOMs. Batches mutations to minimize
- * callback thrashing in content-heavy pages.
- */
+/** One observer per root allows detached shadow trees to be released independently. */
 export class ObserverPool {
-  private observer: MutationObserver;
+  private observers = new Map<Document | ShadowRoot, MutationObserver>();
   private pendingMutations: MutationRecord[] = [];
-  private flushScheduled = false;
-  private flushTimeoutId: number | NodeJS.Timeout | null = null;
-  private observedShadowRoots = new WeakSet<ShadowRoot>();
+  private flushTimeoutId: ReturnType<typeof setTimeout> | number | null = null;
   private trackedMedia = new WeakSet<HTMLMediaElement>();
-  private onMediaFound: MediaFoundCallback;
-  private onMediaRemoved: MediaRemovedCallback;
-  private includeAudio: boolean;
-  private readonly mediaSelector: string;
 
   constructor(
-    onMediaFound: MediaFoundCallback,
-    onMediaRemoved: MediaRemovedCallback,
-    includeAudio = false
-  ) {
-    this.onMediaFound = onMediaFound;
-    this.onMediaRemoved = onMediaRemoved;
-    this.includeAudio = includeAudio;
-    this.mediaSelector = includeAudio ? 'video, audio' : 'video';
-    this.observer = new MutationObserver(this.handleMutations.bind(this));
+    private onMediaFound: MediaCallback,
+    private onMediaRemoved: MediaCallback,
+    private includeAudio = false,
+  ) {}
+
+  observe(root: Document | ShadowRoot): HTMLMediaElement[] {
+    this.attach(root);
+    const found = new Set<HTMLMediaElement>();
+    this.scan(root, found, true);
+    this.reportFound(found);
+    return [...found];
   }
 
-  /**
-   * Registers a root for observation. Automatically handles recursive Shadow DOM discovery.
-   */
-  observe(root: Document | ShadowRoot): void {
-    if (root instanceof ShadowRoot) {
-      if (this.observedShadowRoots.has(root)) return;
-      this.observedShadowRoots.add(root);
-    }
-
-    this.observer.observe(root, { childList: true, subtree: true });
+  private attach(root: Document | ShadowRoot): void {
+    if (this.observers.has(root)) return;
+    const observer = new MutationObserver(mutations => {
+      this.pendingMutations.push(...mutations);
+      if (this.flushTimeoutId !== null) return;
+      this.flushTimeoutId = BrowserFeatures.hasRequestIdleCallback
+        ? requestIdleCallback(() => this.flush(), { timeout: OBSERVER.IDLE_TIMEOUT_MS })
+        : setTimeout(() => this.flush(), OBSERVER.DEBOUNCE_MS);
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    this.observers.set(root, observer);
   }
 
-  disconnect(): void {
-    if (this.flushTimeoutId !== null) {
-      if (BrowserFeatures.hasRequestIdleCallback) {
-        cancelIdleCallback(this.flushTimeoutId as number);
-      } else {
-        clearTimeout(this.flushTimeoutId as NodeJS.Timeout);
-      }
-      this.flushTimeoutId = null;
-    }
-    this.observer.disconnect();
-    this.pendingMutations = [];
-    this.flushScheduled = false;
+  private scan(root: Node, media: Set<HTMLMediaElement>, observeShadows: boolean): void {
+    for (const element of scanMediaTree(root, this.includeAudio, shadow => {
+      if (observeShadows && shadow.host.isConnected) this.attach(shadow);
+    })) media.add(element);
   }
 
-  /**
-   * Batches mutation records to prevent expensive DOM scans on every minor change.
-   */
-  private handleMutations(mutations: MutationRecord[]): void {
-    this.pendingMutations.push(...mutations);
-
-    if (!this.flushScheduled) {
-      this.flushScheduled = true;
-      // requestIdleCallback added in Firefox 55+ (2017), Safari 13+ (2019)
-      // Fallback to setTimeout for older browsers
-      if (BrowserFeatures.hasRequestIdleCallback) {
-        this.flushTimeoutId = requestIdleCallback(() => this.flush(), { timeout: OBSERVER.IDLE_TIMEOUT_MS });
-      } else {
-        this.flushTimeoutId = setTimeout(() => this.flush(), OBSERVER.DEBOUNCE_MS);
-      }
-    }
-  }
-
-  /**
-   * Processes the mutation queue and identifies new or removed media elements.
-   */
-  private flush(): void {
-    this.flushScheduled = false;
-    this.flushTimeoutId = null;
-    const mutations = this.pendingMutations;
-    this.pendingMutations = [];
-
-    const foundMedia = new Set<HTMLMediaElement>();
-    const removedMedia = new Set<HTMLMediaElement>();
-    const selector = this.mediaSelector;
-
-    for (const mutation of mutations) {
-      for (const node of mutation.removedNodes) {
-        if (!(node instanceof Element)) continue;
-
-        if (this.isTrackedMedia(node)) {
-          removedMedia.add(node as HTMLMediaElement);
-        }
-
-        const mediaInSubtree = node.querySelectorAll(selector);
-        for (const media of mediaInSubtree) {
-          if (this.trackedMedia.has(media as HTMLMediaElement)) {
-            removedMedia.add(media as HTMLMediaElement);
-          }
-        }
-      }
-
-      for (const node of mutation.addedNodes) {
-        if (!(node instanceof Element)) continue;
-
-        if (this.isTargetMedia(node)) {
-          foundMedia.add(node as HTMLMediaElement);
-        }
-
-        const mediaElements = node.querySelectorAll(selector);
-        for (const media of mediaElements) {
-          foundMedia.add(media as HTMLMediaElement);
-        }
-
-        this.discoverShadowRoots(node, selector, foundMedia);
-      }
-    }
-
-    for (const media of removedMedia) {
-      if (foundMedia.has(media) || media.isConnected) {
-        logger.debug('Media removal ignored because element is still connected', {
-          tagName: media.tagName,
-          src: media.currentSrc || media.src || '',
-          wasReaddedInBatch: foundMedia.has(media),
-          isConnected: media.isConnected,
-        });
-        continue;
-      }
-
-      this.trackedMedia.delete(media);
-      this.onMediaRemoved(media);
-    }
-
-    for (const media of foundMedia) {
-      if (!this.trackedMedia.has(media)) {
+  private reportFound(found: Set<HTMLMediaElement>): void {
+    for (const media of found) {
+      if (media.isConnected && !this.trackedMedia.has(media)) {
         this.trackedMedia.add(media);
         this.onMediaFound(media);
       }
     }
   }
 
-  /**
-   * Recursively crawls the subtree to find and attach observers to Shadow Roots.
-   * This is critical for sites like YouTube or Netflix that heavily use web components.
-   */
-  private discoverShadowRoots(
-    root: Element,
-    selector: string,
-    foundMedia: Set<HTMLMediaElement>,
-    depth = 0
-  ): void {
-    if (depth > OBSERVER.MAX_SHADOW_DEPTH) return;
-
-    const shadow = getShadowRoot(root);
-    if (shadow && !this.observedShadowRoots.has(shadow)) {
-      this.observe(shadow);
-      const shadowMedia = shadow.querySelectorAll(selector);
-      for (const media of shadowMedia) {
-        foundMedia.add(media as HTMLMediaElement);
+  private flush(): void {
+    this.flushTimeoutId = null;
+    const mutations = this.pendingMutations;
+    this.pendingMutations = [];
+    const found = new Set<HTMLMediaElement>();
+    const removed = new Set<HTMLMediaElement>();
+    for (const mutation of mutations) {
+      // attachShadow itself has no mutation record; a later host mutation can reveal it.
+      if (mutation.target instanceof Element) {
+        const shadow = getShadowRoot(mutation.target);
+        if (shadow && !this.observers.has(shadow)) {
+          this.attach(shadow);
+          this.scan(shadow, found, true);
+        }
+      }
+      for (const node of mutation.removedNodes) this.scan(node, removed, false);
+      for (const node of mutation.addedNodes) this.scan(node, found, true);
+    }
+    for (const media of removed) {
+      if (!media.isConnected && this.trackedMedia.has(media)) {
+        this.trackedMedia.delete(media);
+        this.onMediaRemoved(media);
       }
     }
-
-    for (const child of root.children) {
-      this.discoverShadowRoots(child, selector, foundMedia, depth + 1);
+    for (const [root, observer] of this.observers) {
+      if (root instanceof ShadowRoot && !root.host.isConnected) {
+        observer.disconnect();
+        this.observers.delete(root);
+      }
     }
+    this.reportFound(found);
   }
 
-  private isTargetMedia(node: Element): boolean {
-    return (
-      node instanceof HTMLVideoElement ||
-      (this.includeAudio && node instanceof HTMLAudioElement)
-    );
-  }
-
-  private isTrackedMedia(node: Element): boolean {
-    return (
-      (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) &&
-      this.trackedMedia.has(node as HTMLMediaElement)
-    );
+  disconnect(): void {
+    if (this.flushTimeoutId !== null) {
+      if (BrowserFeatures.hasRequestIdleCallback) cancelIdleCallback(this.flushTimeoutId as number);
+      else clearTimeout(this.flushTimeoutId as ReturnType<typeof setTimeout>);
+    }
+    for (const observer of this.observers.values()) observer.disconnect();
+    this.observers.clear();
+    this.trackedMedia = new WeakSet();
+    this.pendingMutations = [];
+    this.flushTimeoutId = null;
   }
 }

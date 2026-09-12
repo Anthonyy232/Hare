@@ -14,7 +14,7 @@ export class SyncAgent {
   private pendingPause = 0;
   private pendingPlay = 0;
   private pendingSeek = 0;
-  private pendingRate = 0;
+  private applyingRemoteRate = false;
   private suppressNextPlaying = false;
   private seeking = false;
   private destroyed = false;
@@ -108,13 +108,13 @@ export class SyncAgent {
   }
 
   private handleWaiting(): void {
-    if (this.seeking) return;
+    if (this.seeking || this.media.paused) return;
     this.suppressNextPlaying = false;
     this.emit('buffering_start');
   }
 
   private handleStalled(): void {
-    if (this.seeking) return;
+    if (this.seeking || this.media.paused || this.media.readyState >= 3) return;
     this.suppressNextPlaying = false;
     this.emit('buffering_start');
   }
@@ -137,20 +137,31 @@ export class SyncAgent {
     safeMedia.pause(this.media);
   }
 
-  executePlay(): void {
+  async executePlay(): Promise<boolean> {
+    if (this.destroyed) return false;
     if (this.media.paused) {
       this.pendingPlay++;
       this.suppressNextPlaying = true;
     }
-    safeMedia.play(this.media).catch(() => {
+    try {
+      await safeMedia.play(this.media);
+      return true;
+    } catch {
       // play() can reject (e.g., autoplay policy). Decrement counters so they
       // don't permanently suppress future user-initiated events.
       this.suppressNextPlaying = false;
       if (this.pendingPlay > 0) this.pendingPlay--;
-    });
+      this.emit('pause');
+      return false;
+    }
   }
 
   executeSeek(position: number): void {
+    if (this.destroyed || !Number.isFinite(position)) return;
+    if (this.seekDebounceTimer) {
+      clearTimeout(this.seekDebounceTimer);
+      this.seekDebounceTimer = null;
+    }
     // Cancel any in-flight rate correction — its original target is now stale
     // once the position changes, and leaving it running would smear the seek.
     if (this.rateCorrectionTimer) {
@@ -185,32 +196,30 @@ export class SyncAgent {
     }, SYNC.SEEK_ECHO_TIMEOUT_MS);
   }
 
-  /** Apply a coordinator-issued playback rate change. Echo-suppressed via pendingRate. */
+  /** Apply a coordinator-issued rate while suppressing the synchronous controller callback. */
   executeRateChange(rate: number): void {
-    if (this.destroyed) return;
+    if (this.destroyed || !Number.isFinite(rate) || rate <= 0) return;
     if (this.rateCorrectionTimer) {
       clearTimeout(this.rateCorrectionTimer);
       this.rateCorrectionTimer = null;
     }
     this.rateCorrectionBaseRate = rate;
-    if (Math.abs(safeMedia.getPlaybackRate(this.media) - rate) > 1e-3) {
-      this.pendingRate++;
-      this.setIntendedSpeed(rate);
-    }
+    this.applyingRemoteRate = true;
+    try { this.setIntendedSpeed(rate); }
+    finally { this.applyingRemoteRate = false; }
   }
 
   /**
    * Notify this agent that the user (via controller) just changed the intended speed.
    * Updates the rate-correction base and emits a ratechange event to the coordinator.
    * Coordinator-issued rate changes (executeRateChange) should NOT call this — they
-   * call setIntendedSpeed directly and pendingRate suppresses the echo.
+   * call setIntendedSpeed directly while applyingRemoteRate suppresses the echo.
    */
   notifyIntendedSpeedChange(rate: number): void {
     if (this.destroyed) return;
-    if (this.pendingRate > 0) {
-      this.pendingRate--;
-      return;
-    }
+    if (this.applyingRemoteRate) return;
+    if (this.rateCorrectionTimer) clearTimeout(this.rateCorrectionTimer);
+    this.rateCorrectionTimer = null;
     this.rateCorrectionBaseRate = rate;
     this.sendEvent({
       action: 'ratechange',
@@ -222,6 +231,7 @@ export class SyncAgent {
 
   /** Apply temporary rate adjustment for small drift corrections */
   applyRateCorrection(rateFactor: number, durationMs: number): void {
+    if (this.destroyed || !Number.isFinite(rateFactor) || !Number.isFinite(durationMs) || durationMs < 0) return;
     if (this.rateCorrectionTimer) {
       clearTimeout(this.rateCorrectionTimer);
     }

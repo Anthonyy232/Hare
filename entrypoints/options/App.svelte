@@ -2,11 +2,14 @@
   import { onMount, onDestroy } from "svelte";
   import KeybindEditor from "../../components/KeybindEditor.svelte";
   import BlacklistEditor from "../../components/BlacklistEditor.svelte";
+  import ControllerPreview from "../../components/ControllerPreview.svelte";
   import {
     loadSettings,
     saveSettings,
     resetSettings,
     watchSettings,
+    normalizeSettings,
+    validateBlacklist,
   } from "../../lib/settings";
   import { CONTROLLER, UI } from "../../lib/constants";
   import type { Settings, KeyBinding } from "../../lib/types";
@@ -16,7 +19,12 @@
   let loading = $state(true);
   let saving = $state(false);
   let saved = $state(false);
-  let hasUnsavedChanges = $state(false);
+  let savedSnapshot = $state('');
+  let hasDraftInput = $state(false);
+  const hasUnsavedChanges = $derived(hasDraftInput || (settings !== null && JSON.stringify(settings) !== savedSnapshot));
+  const validationErrors = $derived.by(() => settings ? validateBlacklist(settings.blacklist) : []);
+  let error: string | null = $state(null);
+  let disposed = false;
   let conflictWarning = $state(false);
   let unwatchSettings: (() => void) | null = null;
   let saveFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -32,47 +40,62 @@
 
   async function load() {
     loading = true;
-    settings = await loadSettings();
-    loading = false;
+    error = null;
+    try {
+      const value = await loadSettings({ strict: true });
+      settings = value;
+      savedSnapshot = JSON.stringify(value);
+      conflictWarning = false;
+    } catch { error = 'Could not load your settings. Try again before making changes.'; }
+    finally { loading = false; }
   }
 
   async function save() {
-    if (!settings) return;
+    if (!settings || saving || validationErrors.length) return;
 
     saving = true;
-    hasUnsavedChanges = false;
-    conflictWarning = false;
-    await saveSettings(settings);
-    saving = false;
-    showSavedFeedback();
+    error = null;
+    const snapshot = normalizeSettings(settings);
+    try {
+      await saveSettings(snapshot);
+      savedSnapshot = JSON.stringify(snapshot);
+      settings = snapshot;
+      conflictWarning = false;
+      showSavedFeedback();
+    } catch (e) { error = e instanceof Error ? e.message : 'Could not save. Your changes are still here; try again.'; }
+    finally { saving = false; }
   }
 
   async function reset() {
+    if (saving) return;
     if (confirm(MESSAGES.RESET_SETTINGS_CONFIRM)) {
-      settings = await resetSettings();
-      hasUnsavedChanges = false;
-      conflictWarning = false;
-      showSavedFeedback();
+      saving = true;
+      error = null;
+      try {
+        settings = await resetSettings();
+        savedSnapshot = JSON.stringify(settings);
+        conflictWarning = false;
+        showSavedFeedback();
+      } catch { error = 'Could not reset settings. Your previous settings are preserved.'; }
+      finally { saving = false; }
     }
   }
 
   async function discardChanges() {
-    settings = await loadSettings();
-    hasUnsavedChanges = false;
-    conflictWarning = false;
+    await load();
   }
 
   function handleBindingsChange(bindings: KeyBinding[]) {
     if (settings) {
       settings = { ...settings, keyBindings: bindings };
-      hasUnsavedChanges = true;
+      saved = false;
     }
   }
 
   function handleBlacklistChange(blacklist: string) {
     if (settings) {
       settings = { ...settings, blacklist };
-      hasUnsavedChanges = true;
+      saved = false;
     }
   }
 
@@ -82,7 +105,7 @@
         ...settings,
         enabled: (event.target as HTMLInputElement).checked,
       };
-      hasUnsavedChanges = true;
+      saved = false;
     }
   }
 
@@ -92,7 +115,7 @@
         ...settings,
         enableAudio: (event.target as HTMLInputElement).checked,
       };
-      hasUnsavedChanges = true;
+      saved = false;
     }
   }
 
@@ -102,7 +125,7 @@
         ...settings,
         startHidden: (event.target as HTMLInputElement).checked,
       };
-      hasUnsavedChanges = true;
+      saved = false;
     }
   }
 
@@ -112,7 +135,7 @@
         ...settings,
         controllerOpacity: parseFloat((event.target as HTMLInputElement).value),
       };
-      hasUnsavedChanges = true;
+      saved = false;
     }
   }
 
@@ -124,7 +147,7 @@
           (event.target as HTMLInputElement).value,
         ),
       };
-      hasUnsavedChanges = true;
+      saved = false;
     }
   }
 
@@ -134,18 +157,21 @@
     // (or trigger a spurious conflict warning) before we've shown the form.
     (async () => {
       await load();
+      if (disposed) return;
       unwatchSettings = watchSettings((newSettings) => {
         if (saving) return;
         if (hasUnsavedChanges) {
           conflictWarning = true;
         } else {
           settings = newSettings;
+          savedSnapshot = JSON.stringify(newSettings);
         }
       });
     })();
   });
 
   onDestroy(() => {
+    disposed = true;
     unwatchSettings?.();
     if (saveFeedbackTimeout) {
       clearTimeout(saveFeedbackTimeout);
@@ -153,6 +179,10 @@
     }
   });
 </script>
+
+<svelte:window onbeforeunload={(event) => {
+  if (hasUnsavedChanges) { event.preventDefault(); event.returnValue = ''; }
+}} />
 
 <div class="options">
   <header>
@@ -163,10 +193,17 @@
     </div>
   </header>
 
+  {#if error && !settings}
+    <div class="conflict-warning" role="alert">{error}
+      {#if !settings}<button class="btn secondary" onclick={load}>Try again</button>{/if}
+    </div>
+  {/if}
+
   {#if loading}
     <div class="loading">Loading settings...</div>
   {:else if settings}
     <main>
+      <fieldset disabled={saving}>
       <div class="settings-grid">
         <section class="card">
           <div class="section-header">
@@ -176,9 +213,9 @@
 
           <label class="toggle-row">
             <div class="toggle-content">
-              <span class="toggle-label">Enable on all sites</span>
+              <span class="toggle-label">Enable Hare</span>
               <span class="toggle-description"
-                >Activate video speed control globally</span
+                >Control playback on sites outside your exclusions</span
               >
             </div>
             <div class="toggle-switch">
@@ -250,7 +287,7 @@
                 oninput={handleOpacityChange}
               />
               <span class="slider-value"
-                >{settings.controllerOpacity.toFixed(1)}</span
+                >{Math.round(settings.controllerOpacity * 100)}%</span
               >
             </div>
           </div>
@@ -274,6 +311,7 @@
               >
             </div>
           </div>
+          <ControllerPreview opacity={settings.controllerOpacity} size={settings.controllerButtonSize} startHidden={settings.startHidden} />
         </section>
       </div>
 
@@ -285,22 +323,24 @@
         <KeybindEditor
           bindings={settings.keyBindings}
           onBindingsChange={handleBindingsChange}
+          onDraftChange={(dirty) => { hasDraftInput = dirty; if (dirty) saved = false; }}
         />
       </section>
 
       <section class="card">
         <div class="section-header">
           <div class="section-accent"></div>
-          <h2>Blacklist</h2>
+          <h2>Excluded sites</h2>
         </div>
         <BlacklistEditor
           blacklist={settings.blacklist}
           onBlacklistChange={handleBlacklistChange}
         />
       </section>
+      </fieldset>
 
       {#if conflictWarning}
-        <div class="conflict-warning">
+        <div class="conflict-warning" role="alert">
           <div class="conflict-text">
             <strong>Warning:</strong>
             {MESSAGES.SETTINGS_CONFLICT}
@@ -313,11 +353,13 @@
 
       <div class="actions-wrapper">
         <div class="actions-container">
+          {#if error}<p class="save-error" role="alert">{error}</p>{/if}
           <div class="actions">
-            <button class="btn secondary" onclick={reset}>
+            <span class="save-status" role="status">{saving ? 'Saving…' : hasUnsavedChanges ? 'Unsaved changes' : saved ? 'Settings saved' : 'All changes saved'}</span>
+            <button class="btn secondary" onclick={reset} disabled={saving}>
               Reset to Defaults
             </button>
-            <button class="btn primary" onclick={save} disabled={saving}>
+            <button class="btn primary" onclick={save} disabled={saving || !hasUnsavedChanges || validationErrors.length > 0}>
               {#if saving}
                 Saving...
               {:else if saved}
@@ -418,7 +460,7 @@
 
   .settings-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
     gap: 20px;
     margin-bottom: 20px;
   }
@@ -498,6 +540,8 @@
   }
 
   .toggle-switch {
+    flex-shrink: 0;
+    margin-left: 12px;
     position: relative;
     width: 44px;
     height: 24px;
@@ -593,6 +637,7 @@
     outline: none;
     cursor: pointer;
     -webkit-appearance: none;
+    appearance: none;
   }
 
   .slider-control input[type="range"]::-webkit-slider-thumb {
@@ -689,7 +734,7 @@
 
   .btn.primary {
     background: linear-gradient(135deg, #3b82f6, #60a5fa);
-    color: #fff;
+    color: #0d172b;
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
   }
 
@@ -713,5 +758,17 @@
     background: rgba(239, 68, 68, 0.1);
     color: #ef4444;
     border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+  .save-status { margin-right: auto; align-self: center; font-size: 13px; color: #b5b5b5; }
+  .save-error { margin: 0 0 10px; color: #fca5a5; font-size: 13px; }
+  @media (max-width: 600px) {
+    .options { padding: 24px 16px 140px; }
+    .card { padding: 16px; }
+    .actions-wrapper { padding: 12px 16px; }
+    .actions { flex-wrap: wrap; gap: 8px; }
+    .save-status { width: 100%; }
+    .btn { padding: 10px 14px; }
   }
 </style>
