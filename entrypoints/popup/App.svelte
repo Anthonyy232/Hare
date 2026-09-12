@@ -4,214 +4,117 @@
   import SyncMode from "../../components/SyncMode.svelte";
   import type { StatusResponse, HareMessage } from "../../lib/types";
   import { SPEED, UI } from "../../lib/constants";
-  import { logger } from "../../lib/logger";
   import { MESSAGES } from "../../lib/messages";
+  import { loadSettings, isBlacklisted } from "../../lib/settings";
+  import { getTabMedia, aggregateStatus, sendToFrame } from "../../lib/tab-media";
 
   let status: StatusResponse | null = $state(null);
   let loading = $state(true);
+  let busy = $state(false);
+  let syncExpanded = $state(false);
+  let statusRequest: Promise<void> | null = null;
   let error: string | null = $state(null);
+  let hint = $state('');
   let toast: string | null = $state(null);
+  let tabId: number | null = null;
+  let tabUrl = '';
+  let siteLabel = $state('Current tab');
+  const speedPresets = [0.75, 1, 1.25, 1.5, 2];
+  let disposed = false;
   let toastTimeout: ReturnType<typeof setTimeout> | null = null;
 
   onDestroy(() => {
-    if (toastTimeout) {
-      clearTimeout(toastTimeout);
-      toastTimeout = null;
-    }
+    disposed = true;
+    if (toastTimeout) clearTimeout(toastTimeout);
   });
 
-  function showToast(message: string, duration = UI.TOAST_DURATION_MS) {
+  function showToast(message: string) {
     if (toastTimeout) clearTimeout(toastTimeout);
     toast = message;
-    toastTimeout = setTimeout(() => {
-      toast = null;
-      toastTimeout = null;
-    }, duration);
+    toastTimeout = setTimeout(() => { toast = null; }, UI.TOAST_DURATION_MS * 2);
   }
 
-  /**
-   * Resolves the currently active browser tab.
-   */
-  async function getActiveTabId(): Promise<number> {
-    const [tab] = await browser.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
-    if (!tab?.id) throw new Error(MESSAGES.NO_ACTIVE_TAB);
-    return tab.id;
+  function loadStatus(): Promise<void> {
+    if (disposed) return Promise.resolve();
+    statusRequest ??= refreshStatus().finally(() => { statusRequest = null; });
+    return statusRequest;
   }
 
-  /**
-   * Sends a message to a specific frame within a tab. Returns null for frames
-   * that cannot receive extension messages or produce an invalid response.
-   */
-  async function requestFrameStatus(
-    tabId: number,
-    frameId: number,
-    message: HareMessage,
-  ): Promise<StatusResponse | null> {
+  async function refreshStatus() {
     try {
-      return (await browser.tabs.sendMessage(tabId, message, {
-        frameId,
-      })) as StatusResponse;
-    } catch (error) {
-      // Expected: Frame without content script (cross-origin, sandboxed, about:blank)
-      if (
-        error instanceof Error &&
-        (error.message.includes("Could not establish connection") ||
-          error.message.includes("Receiving end does not exist"))
-      ) {
-        return null; // Expected error
+      const settings = await loadSettings({ strict: true });
+      if (!settings.enabled) {
+        hint = 'Enable Hare in Settings to control playback.';
+        throw new Error('Hare is turned off');
       }
-      // Unexpected error - log for debugging
-      logger.warn("Unexpected error querying frame:", frameId, error);
-      return null;
-    }
-  }
-
-  async function sendCommandToFrame(
-    tabId: number,
-    frameId: number,
-    message: HareMessage,
-  ): Promise<boolean> {
-    try {
-      const response = (await browser.tabs.sendMessage(tabId, message, {
-        frameId,
-      })) as { success?: boolean } | undefined;
-      return response?.success === true;
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        (error.message.includes("Could not establish connection") ||
-          error.message.includes("Receiving end does not exist"))
-      ) {
-        return false;
+      if (!/^(https?|file):/.test(tabUrl)) {
+        hint = 'Open a regular webpage with video or audio.';
+        throw new Error('Hare cannot run on this browser page');
       }
-      logger.warn("Unexpected error sending command to frame:", frameId, error);
-      return false;
-    }
-  }
-
-  async function getVideoFrames(tabId: number): Promise<number[]> {
-    const frames = await browser.webNavigation.getAllFrames({ tabId });
-    if (!frames || frames.length === 0) {
-      throw new Error(MESSAGES.NO_VIDEOS_FOUND);
-    }
-
-    const responses = await Promise.all(
-      frames.map((frame) =>
-        requestFrameStatus(tabId, frame.frameId, { type: "GET_STATUS" }),
-      ),
-    );
-
-    return frames
-      .filter((_, index) => (responses[index]?.videoCount ?? 0) > 0)
-      .map((frame) => frame.frameId);
-  }
-
-  async function sendCommandToVideoFrames(message: HareMessage): Promise<void> {
-    const tabId = await getActiveTabId();
-    const frameIds = await getVideoFrames(tabId);
-    if (frameIds.length === 0) throw new Error(MESSAGES.NO_VIDEOS_FOUND);
-
-    const results = await Promise.all(
-      frameIds.map((frameId) => sendCommandToFrame(tabId, frameId, message)),
-    );
-
-    if (!results.some(Boolean)) {
-      throw new Error(MESSAGES.NO_VIDEOS_FOUND);
-    }
-  }
-
-  /**
-   * Aggregates status from all frames in the active tab.
-   * Videos can be in iframes (common on YouTube), so querying only the top frame
-   * would miss them and show 0 detected.
-   */
-  async function loadStatus() {
-    try {
-      loading = true;
+      if (isBlacklisted(settings.blacklist, new URL(tabUrl).hostname)) {
+        hint = 'Remove this site from Excluded sites in Settings to use Hare here.';
+        throw new Error('This site is excluded');
+      }
+      if (tabId == null) throw new Error(MESSAGES.NO_ACTIVE_TAB);
+      const frames = await getTabMedia(tabId);
+      const result = aggregateStatus(frames.map(frame => frame.status));
+      if (!result.hasVideos) {
+        hint = frames.length ? 'Start a video, or enable audio control in Settings.' : 'Reload this tab to connect Hare. For local files, enable file access in extension details.';
+        throw new Error('No media detected');
+      }
+      status = result;
       error = null;
-
-      const tabId = await getActiveTabId();
-
-      // Get all frames in the tab
-      const frames = await browser.webNavigation.getAllFrames({
-        tabId,
-      });
-      if (!frames || frames.length === 0) {
-        throw new Error(MESSAGES.NO_VIDEOS_FOUND);
-      }
-
-      // Query all frames in parallel
-      const responses = await Promise.all(
-        frames.map((frame) =>
-          requestFrameStatus(tabId, frame.frameId, { type: "GET_STATUS" }),
-        ),
-      );
-
-      // Aggregate results from all frames
-      let totalVideoCount = 0;
-      let latestSpeed: number = SPEED.DEFAULT;
-      let hasAnyVideos = false;
-
-      for (const response of responses) {
-        if (response && response.videoCount > 0) {
-          totalVideoCount += response.videoCount;
-          latestSpeed = response.currentSpeed;
-          hasAnyVideos = true;
-        }
-      }
-
-      if (!hasAnyVideos) {
-        throw new Error(MESSAGES.NO_VIDEOS_FOUND);
-      }
-
-      status = {
-        hasVideos: true,
-        currentSpeed: latestSpeed,
-        videoCount: totalVideoCount,
-      };
     } catch (e) {
-      error = MESSAGES.NO_VIDEOS_FOUND;
       status = null;
+      error = e instanceof Error ? e.message : 'Could not connect to this tab';
     } finally {
       loading = false;
     }
   }
 
-  async function setSpeed(speed: number) {
-    if (!status) return;
-
-    const clampedSpeed = Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed));
-
+  async function command(message: HareMessage, requestedSpeed?: number) {
+    if (busy || tabId == null || !status) return;
+    busy = true;
     try {
-      await sendCommandToVideoFrames({ type: "SET_SPEED", payload: clampedSpeed });
-      status = { ...status, currentSpeed: clampedSpeed };
-    } catch (e) {
-      logger.error(MESSAGES.FAILED_TO_SET_SPEED, e);
-      showToast(MESSAGES.FAILED_TO_SET_SPEED);
-    }
+      await statusRequest;
+      const frames = (await getTabMedia(tabId)).filter(frame => frame.status.videoCount > 0);
+      const results = await Promise.allSettled(frames.map(frame => sendToFrame(tabId!, frame.frameId, message)));
+      if (!results.length || results.some(result => result.status === 'rejected' || !(result.value as { success?: boolean })?.success)) {
+        showToast('Some media could not be updated. Reload the tab and try again.');
+      }
+      await loadStatus();
+      if (requestedSpeed != null && status && (status.mixedSpeeds || Math.abs(status.currentSpeed - requestedSpeed) > 0.001)) {
+        showToast('This player limited or blocked the requested speed.');
+      }
+    } catch {
+      showToast('Could not update playback. Reload the tab and try again.');
+    } finally { busy = false; }
   }
 
-  async function resetSpeed() {
-    if (!status) return;
-
-    try {
-      await sendCommandToVideoFrames({ type: "RESET_SPEED" });
-      status = { ...status, currentSpeed: SPEED.DEFAULT };
-    } catch (e) {
-      logger.error(MESSAGES.FAILED_TO_RESET_SPEED, e);
-      showToast(MESSAGES.FAILED_TO_RESET_SPEED);
-    }
+  function setSpeed(speed: number) {
+    if (!Number.isFinite(speed)) return;
+    const value = Math.round(Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed)) * 100) / 100;
+    void command({ type: 'SET_SPEED', payload: value }, value);
   }
 
-  function openOptions() {
-    browser.runtime.openOptionsPage();
-  }
+  function resetSpeed() { void command({ type: 'RESET_SPEED' }, SPEED.DEFAULT); }
+  function openOptions() { void browser.runtime.openOptionsPage(); }
 
   onMount(() => {
-    loadStatus();
+    void (async () => {
+      try {
+        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        tabId = tab?.id ?? null;
+        tabUrl = tab?.url ?? '';
+        try {
+          const url = new URL(tabUrl);
+          siteLabel = url.protocol === 'file:' ? 'Local file' : url.hostname || 'Current tab';
+        } catch { siteLabel = 'Current tab'; }
+        await loadStatus();
+      } catch { error = 'Could not find the active tab'; loading = false; }
+    })();
+    const interval = setInterval(() => { if (!busy) void loadStatus(); }, 1500);
+    return () => clearInterval(interval);
   });
 </script>
 
@@ -221,56 +124,82 @@
   <header>
     <div class="header-content">
       <h1>Hare</h1>
+      <button class="settings-link" onclick={openOptions} aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" class="settings-icon" aria-hidden="true">
+          <path d="M4 7h16M4 17h16M8 4v6M16 14v6"></path>
+        </svg>
+        Settings
+      </button>
+    </div>
+    <div class="tab-context">
+      <span class="site-label" title={siteLabel}>{siteLabel}</span>
       {#if status}
         <div class="status-indicator">
           <div class="status-dot"></div>
           <span class="status-text"
-            >{MESSAGES.VIDEO_COUNT(status.videoCount)}</span
+            >{status.videoCount} {status.videoCount === 1 ? 'player' : 'players'}</span
           >
         </div>
       {/if}
     </div>
   </header>
 
-  <main>
+  <main class:compact={syncExpanded}>
     {#if loading}
-      <div class="loading">Loading...</div>
+      <div class="loading" role="status">Connecting to this tab…</div>
     {:else if error}
       <div class="no-videos">
         <p>{error}</p>
-        <p class="hint">{MESSAGES.NAVIGATE_TO_VIDEO_HINT}</p>
+        <p class="hint">{hint}</p>
+        <button class="settings-btn" onclick={loadStatus}>Try again</button>
       </div>
     {:else if status}
       <div class="speed-section">
-        <div class="speed-label">Playback Rate</div>
+        <div class="speed-label">Playback speed</div>
 
-        <div class="speed-display">
+        {#if !syncExpanded}
+        <div class="speed-display" aria-live="polite">
           {status.currentSpeed.toFixed(2)}<span class="speed-unit">x</span>
         </div>
+
+        <div class="speed-presets" role="group" aria-label="Speed presets">
+          {#each speedPresets as preset}
+            <button
+              class="preset"
+              data-speed-action
+              aria-label={`Set speed to ${preset}x`}
+              aria-pressed={!status.mixedSpeeds && Math.abs(status.currentSpeed - preset) < 0.001}
+              disabled={busy}
+              onclick={() => setSpeed(preset)}
+            >{preset}<span aria-hidden="true">×</span></button>
+          {/each}
+        </div>
+
+        {/if}
 
         <SpeedControl
           speed={status.currentSpeed}
           onSpeedChange={setSpeed}
           onReset={resetSpeed}
+          disabled={busy}
         />
+        {#if !syncExpanded}<p class="input-hint">Custom speed: type a value and press Enter</p>{/if}
+        {#if status.mixedSpeeds}
+          <p class="hint">Media have different speeds. Changes apply to all media in this tab.</p>
+        {:else if status.videoCount > 1}
+          <p class="hint">Changes apply to all {status.videoCount} players in this tab.</p>
+        {/if}
+        {#if !syncExpanded}
+          <button class="settings-btn controller-toggle" disabled={busy} onclick={() => command({ type: 'TOGGLE_DISPLAY' })}>Show / hide controller</button>
+        {/if}
       </div>
     {/if}
   </main>
 
-  <SyncMode />
-
-  <footer>
-    <button class="settings-btn" onclick={openOptions}>
-      <svg viewBox="0 0 24 24" class="settings-icon">
-        <circle cx="12" cy="12" r="3"></circle>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-      </svg>
-      Settings
-    </button>
-  </footer>
+  <SyncMode onExpandedChange={(expanded) => { syncExpanded = expanded; }} />
 
   {#if toast}
-    <div class="toast">{toast}</div>
+    <div class="toast" role="alert">{toast}</div>
   {/if}
 </div>
 
@@ -283,7 +212,7 @@
   }
 
   .popup {
-    width: 320px;
+    width: 360px;
     max-height: 600px;
     overflow-y: auto;
     font-family:
@@ -336,6 +265,24 @@
     justify-content: space-between;
   }
 
+  .settings-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 8px;
+    margin-right: -8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #b9c5d6;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .settings-link:hover { color: #f0f0f0; background: #ffffff0d; }
+  .tab-context { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+  .site-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b9c5d6; font-size: 12px; }
+
   h1 {
     margin: 0;
     font-size: 20px;
@@ -353,8 +300,7 @@
     gap: 6px;
     font-size: 11px;
     color: #999;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    flex-shrink: 0;
     font-weight: 600;
   }
 
@@ -363,23 +309,12 @@
     height: 6px;
     border-radius: 50%;
     background: #10b981;
-    animation: statusPulse 2s ease-in-out infinite;
   }
 
-  @keyframes statusPulse {
-    0%,
-    100% {
-      opacity: 1;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 0.6;
-      transform: scale(0.95);
-    }
-  }
 
   main {
-    padding: 20px;
+    padding: 24px 20px 12px;
+    border-top: 1px solid #ffffff0d;
     position: relative;
     z-index: 1;
   }
@@ -404,13 +339,15 @@
 
   .hint {
     font-size: 12px;
-    color: #666;
+    color: #aaa;
+    line-height: 1.6;
+    margin: 0;
   }
 
   .speed-section {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
     align-items: center;
   }
 
@@ -438,12 +375,12 @@
     margin-left: 4px;
   }
 
-  footer {
-    padding: 12px 16px 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    position: relative;
-    z-index: 1;
-  }
+  .speed-presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; margin-top: 6px; }
+  .preset { min-height: 36px; padding: 6px 0; border: 1px solid #ffffff24; border-radius: 6px; background: #ffffff06; color: #c8d0dc; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+  .preset span { margin-left: 1px; font-size: 11px; }
+  .preset:hover:not(:disabled) { background: #60a5fa1a; border-color: #60a5fa80; }
+  .preset[aria-pressed="true"] { background: #93c5fd; border-color: #93c5fd; color: #152236; }
+  .input-hint { color: #a2abba; font-size: 11px; margin: -4px 0 2px; }
 
   .settings-btn {
     width: 100%;
@@ -484,6 +421,11 @@
     stroke-linejoin: round;
   }
 
+  main.compact { padding-top: 12px; padding-bottom: 20px; }
+  .compact .speed-section { gap: 8px; }
+
+  .controller-toggle { background: #ffffff06; border-color: #ffffff24; border-radius: 6px; color: #b9c5d6; font-size: 12px; }
+
   .toast {
     position: fixed;
     bottom: 16px;
@@ -498,6 +440,8 @@
     font-size: 13px;
     font-weight: 500;
     z-index: 100;
+    width: calc(100% - 32px);
+    box-sizing: border-box;
     animation: toastSlideIn 0.2s ease;
   }
 

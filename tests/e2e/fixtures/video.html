@@ -8,16 +8,25 @@
 </head>
 <body>
     <h1>Video Test Page</h1>
-    <video id="test-video" width="640" height="360" controls>
-        <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4">
+    <div id="player" style="position:relative;width:640px;height:360px">
+    <video id="test-video" width="640" height="360" controls muted preload="auto">
+        <source src="/media.wav" type="audio/wav">
         Your browser does not support the video tag.
     </video>
+    </div>
+    <input aria-label="Comment" />
+    <div contenteditable="true" aria-label="Rich text"><span>Editable text</span></div>
+    <div id="shadow-host"></div>
     <script>
-        // Ensure video is loaded slightly for interaction
-        const video = document.getElementById('test-video');
-        video.addEventListener('loadedmetadata', () => {
-            console.log('Video loaded');
-        });
+        const params = new URLSearchParams(location.search);
+        if (params.has('empty') || params.has('frame')) document.getElementById('player').remove();
+        if (params.has('frame')) {
+          const frame = document.createElement('iframe');
+          frame.src = 'http://localhost:41739/video.html';
+          frame.width = '700'; frame.height = '500'; frame.title = 'Embedded player';
+          document.body.append(frame);
+        }
+        document.getElementById('shadow-host').attachShadow({ mode: 'open' }).innerHTML = '<div id="nested-host"></div>';
     </script>
 </body>
 </html>

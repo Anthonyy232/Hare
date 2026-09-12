@@ -1,17 +1,18 @@
 import { loadSettings, watchSettings, isBlacklisted } from '../lib/settings';
 import { VideoController } from '../lib/controller';
 import { ObserverPool } from '../lib/observer-pool';
-import { findAllMedia, isValidMedia } from '../lib/media-detector';
+import { isValidMedia } from '../lib/media-detector';
 import { createKeybindHandler, type KeybindHandler } from '../lib/keybinds';
 import { createCrossFramePointerBridge, type CrossFramePointerBridge } from '../lib/cross-frame-pointer';
 import { getSiteHandler } from '../lib/site-handlers';
-import type { Settings, SiteHandler, StatusResponse, HareMessage } from '../lib/types';
+import type { SiteHandler, HareMessage } from '../lib/types';
 import { CLEANUP } from '../lib/constants';
 import type { Browser } from 'wxt/browser';
 import { logger } from '../lib/logger';
 import { isTopFrame } from '../lib/browser-detect';
 import { SyncAgent } from '../lib/sync-agent';
 import { safeMedia } from '../lib/safe-media';
+import { withTimeout } from '../lib/async-utils';
 import { SYNC, type SyncEventPayload, type SyncCommandPayload, type DriftCorrectPayload } from '../lib/sync-types';
 
 const SYNC_EVENT_TYPE: Record<SyncEventPayload['action'], string> = {
@@ -23,23 +24,22 @@ const SYNC_EVENT_TYPE: Record<SyncEventPayload['action'], string> = {
   buffering_end: 'SYNC_BUFFERING',
 };
 
-/**
- * Tracks event listeners for cleanup without preventing garbage collection of the media element.
- */
-const mediaLoadstartListeners = new WeakMap<HTMLMediaElement, () => void>();
-const deferredVideoListeners = new WeakMap<HTMLMediaElement, { listener: () => void }>();
-
 export default defineContentScript({
   matches: ['http://*/*', 'https://*/*', 'file:///*'],
-  excludeMatches: ['*://meet.google.com/*', '*://hangouts.google.com/*'],
   allFrames: true,
   matchAboutBlank: true,
   runAt: 'document_idle',
 
   async main(ctx) {
     const controllers = new Map<HTMLMediaElement, VideoController>();
+    const mediaLoadstartListeners = new Map<HTMLMediaElement, () => void>();
+    const deferredVideoListeners = new Map<HTMLMediaElement, { listener: () => void }>();
 
     let settings = await loadSettings();
+    const pageHostname: string = await withTimeout(browser.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT' }))
+      .then(response => typeof response?.hostname === 'string' ? response.hostname : location.hostname)
+      .catch(() => location.hostname);
+    const isExcluded = () => isBlacklisted(settings.blacklist, location.hostname) || isBlacklisted(settings.blacklist, pageHostname);
 
     logger.debug('Content script initialized', {
       enabled: settings.enabled,
@@ -54,6 +54,7 @@ export default defineContentScript({
     let pointerBridge: CrossFramePointerBridge | null = null;
     let cleanupInterval: NodeJS.Timeout | null = null;
     let isActive = false;
+    let suspended = false;
     let syncAgent: SyncAgent | null = null;
     let syncKeepAlivePort: ReturnType<typeof browser.runtime.connect> | null = null;
     let syncKeepAliveReconnectTimer: NodeJS.Timeout | null = null;
@@ -136,6 +137,7 @@ export default defineContentScript({
      * filters and setting up listeners for dynamic source changes.
      */
     const handleMediaFound = (media: HTMLMediaElement): void => {
+      if (!isActive || !media.isConnected) return;
       if (controllers.has(media)) return;
 
       if (media instanceof HTMLAudioElement && !settings.enableAudio) return;
@@ -154,14 +156,7 @@ export default defineContentScript({
           media.addEventListener('play', retryCheck);
           media.addEventListener('canplay', retryCheck);
 
-          // Listeners live as long as the media element does; no timeout
-          // needed. WeakMap entries are GC'd with the element. A previous
-          // 30 s timeout was used as a "memory safety net" but its real
-          // effect was to permanently abandon any video whose
-          // `shouldIgnoreVideo` flipped to false later than 30 s — e.g. a
-          // late-loading SPA player. rescanMedia() picks up such elements
-          // for sync mode; the deferred listeners themselves are now
-          // sufficient for speed control.
+          // Keep retries for late-loading players. Removal and stop() explicitly release them.
           deferredVideoListeners.set(media, { listener: retryCheck });
         }
         return;
@@ -180,6 +175,8 @@ export default defineContentScript({
       });
 
       const loadstartHandler = () => {
+        // Reusing a video node for another episode invalidates the paired starting positions.
+        if (syncAgent?.isForMedia(media)) deactivateLocalSync(true);
         const controller = controllers.get(media);
 
         if (controller && !isValidMedia(media)) {
@@ -238,18 +235,18 @@ export default defineContentScript({
      */
     const rescanMedia = (): void => {
       if (!isActive) return;
-      for (const media of findAllMedia(document, settings.enableAudio)) {
+      for (const media of observerPool?.observe(document) ?? []) {
         handleMediaFound(media);
       }
     };
 
     /**
      * Initializes the observer pool and keybind handlers.
-     * Restricted to top-frame for keybinds to avoid duplicate execution.
+     * Each frame handles its own keys; parents forward only when they have no local media.
      */
     const start = (): void => {
-      if (isActive) return;
-      if (isBlacklisted(settings.blacklist, location.hostname)) return;
+      if (isActive || suspended) return;
+      if (isExcluded()) return;
 
       isActive = true;
       siteHandler = getSiteHandler();
@@ -263,20 +260,17 @@ export default defineContentScript({
 
       pointerBridge = createCrossFramePointerBridge(() => [...controllers.values()]);
 
-      const existingMedia = findAllMedia(document, settings.enableAudio);
+      const existingMedia = observerPool.observe(document);
       logger.debug('Initial media scan complete', {
         foundCount: existingMedia.length,
         siteHandler: siteHandler?.constructor.name || 'none'
       });
-      for (const media of existingMedia) {
-        handleMediaFound(media);
-      }
-
-      observerPool.observe(document);
-
       cleanupInterval = setInterval(() => {
         for (const [media] of controllers.entries()) {
           if (!media.isConnected) handleMediaRemoved(media);
+        }
+        for (const media of deferredVideoListeners.keys()) {
+          if (!media.isConnected) cleanupDeferredListener(media);
         }
       }, CLEANUP.STALE_CHECK_INTERVAL_MS);
     };
@@ -301,21 +295,28 @@ export default defineContentScript({
 
       deactivateLocalSync(true);
 
-      for (const controller of controllers.values()) {
-        controller.destroy();
-      }
-      controllers.clear();
+      for (const media of controllers.keys()) handleMediaRemoved(media);
+      for (const media of deferredVideoListeners.keys()) cleanupDeferredListener(media);
     };
 
     const unwatchSettings = watchSettings((newSettings) => {
+      const audioChanged = settings.enableAudio !== newSettings.enableAudio;
       settings = newSettings;
-      const shouldBeActive = settings.enabled && !isBlacklisted(settings.blacklist, location.hostname);
+      const shouldBeActive = settings.enabled && !isExcluded();
 
       if (shouldBeActive && !isActive) {
         start();
       } else if (!shouldBeActive && isActive) {
         stop();
       } else if (isActive) {
+        if (audioChanged) {
+          observerPool?.disconnect();
+          for (const media of controllers.keys()) {
+            if (media instanceof HTMLAudioElement && !settings.enableAudio) handleMediaRemoved(media);
+          }
+          observerPool = new ObserverPool(handleMediaFound, handleMediaRemoved, settings.enableAudio);
+          observerPool.observe(document);
+        }
         for (const controller of controllers.values()) {
           controller.updateSettings(settings);
         }
@@ -339,49 +340,50 @@ export default defineContentScript({
             // videos missed by the initial scan or the MutationObserver
             // (deferred-ignore timeouts, late SPA additions, shadow DOM, etc.)
             // so the user doesn't need to disable / re-enable the extension.
-            if (controllersArray.length === 0) {
-              rescanMedia();
-              controllersArray = [...controllers.values()].filter(c => c.media.isConnected);
-            }
+            rescanMedia();
+            controllersArray = [...controllers.values()].filter(c => c.media.isConnected);
             sendResponse({
               hasVideos: controllersArray.length > 0,
               currentSpeed: controllersArray[0]?.speed ?? 1.0,
               videoCount: controllersArray.length,
+              mixedSpeeds: controllersArray.some(c => Math.abs(c.speed - controllersArray[0].speed) > 0.001),
+              enabled: settings.enabled,
+              excluded: isExcluded(),
             });
             break;
           }
 
           case 'SET_SPEED': {
             const speed = message.payload as number;
-            if (typeof speed !== 'number' || isNaN(speed)) {
+            if (typeof speed !== 'number' || !Number.isFinite(speed)) {
               sendResponse({ success: false, error: 'Invalid speed' });
               break;
             }
             for (const controller of controllersArray) controller.setSpeed(speed);
-            sendResponse({ success: true });
+            sendResponse({ success: controllersArray.length > 0 });
             break;
           }
 
           case 'ADJUST_SPEED': {
             const delta = message.payload as number;
-            if (typeof delta !== 'number' || isNaN(delta)) {
+            if (typeof delta !== 'number' || !Number.isFinite(delta)) {
               sendResponse({ success: false, error: 'Invalid delta' });
               break;
             }
             for (const controller of controllersArray) controller.adjustSpeed(delta);
-            sendResponse({ success: true });
+            sendResponse({ success: controllersArray.length > 0 });
             break;
           }
 
           case 'RESET_SPEED': {
             for (const controller of controllersArray) controller.resetSpeed();
-            sendResponse({ success: true });
+            sendResponse({ success: controllersArray.length > 0 });
             break;
           }
 
           case 'TOGGLE_DISPLAY': {
             for (const controller of controllersArray) controller.toggleVisibility();
-            sendResponse({ success: true });
+            sendResponse({ success: controllersArray.length > 0 });
             break;
           }
 
@@ -392,7 +394,13 @@ export default defineContentScript({
             // activate sync without the user disabling and re-enabling the
             // extension.
             rescanMedia();
-            const primaryMedia = [...controllers.keys()].find(m => m.isConnected);
+            const candidates = [...controllers.keys()].filter(media => media.isConnected && media.readyState >= 1);
+            candidates.sort((a, b) => {
+              if (a.paused !== b.paused) return a.paused ? 1 : -1;
+              const rectA = a.getBoundingClientRect(), rectB = b.getBoundingClientRect();
+              return rectB.width * rectB.height - rectA.width * rectA.height;
+            });
+            const primaryMedia = candidates[0];
             if (!primaryMedia) {
               sendResponse({ success: false, error: 'No video found' });
               break;
@@ -470,8 +478,7 @@ export default defineContentScript({
               const compensatedPlayPos = playCmd.position + rate * (Date.now() - playCmd.timestamp) / 1000;
               syncAgent.executeSeek(compensatedPlayPos);
             }
-            syncAgent.executePlay();
-            sendResponse({ success: true });
+            void syncAgent.executePlay().then(success => sendResponse({ success }));
             break;
           }
 
@@ -487,10 +494,12 @@ export default defineContentScript({
           case 'SYNC_RATE': {
             if (!syncAgent) { sendResponse({ success: false }); break; }
             const rateCmd = message.payload as SyncCommandPayload;
-            if (typeof rateCmd.rate === 'number' && !isNaN(rateCmd.rate)) {
+            if (typeof rateCmd.rate === 'number' && Number.isFinite(rateCmd.rate) && rateCmd.rate > 0) {
               syncAgent.executeRateChange(rateCmd.rate);
+              sendResponse({ success: Math.abs(syncAgent.getPosition().playbackRate - rateCmd.rate) < 0.001 });
+            } else {
+              sendResponse({ success: false, error: 'Invalid speed' });
             }
-            sendResponse({ success: true });
             break;
           }
 
@@ -534,13 +543,25 @@ export default defineContentScript({
       if (cleanedUp) return;
       cleanedUp = true;
 
-      window.removeEventListener('pagehide', cleanup);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
       stop();
       unwatchSettings();
       browser.runtime.onMessage.removeListener(messageHandler);
     };
 
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (event.persisted) { suspended = true; stop(); }
+      else cleanup();
+    };
+    const handlePageShow = async (event: PageTransitionEvent) => {
+      if (!event.persisted || cleanedUp) return;
+      settings = await loadSettings();
+      suspended = false;
+      if (!cleanedUp && settings.enabled) start();
+    };
     ctx.onInvalidated(cleanup);
-    window.addEventListener('pagehide', cleanup);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
   },
 });

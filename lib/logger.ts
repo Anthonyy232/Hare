@@ -3,7 +3,7 @@
  * Set DEBUG = false in production to suppress debug logs.
  */
 
-const DEBUG = true; // Set to true during development, false in production
+const DEBUG = import.meta.env.DEV;
 const PREFIX = '[Hare]';
 
 export const logger = {

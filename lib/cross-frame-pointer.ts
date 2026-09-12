@@ -25,6 +25,7 @@ import { CROSS_FRAME } from './constants';
  */
 
 export type HitmapButton = {
+  controllerId: string;
   action: KeyAction;
   value: number;
   x: number;
@@ -40,6 +41,7 @@ type HareHitmapMessage = {
 
 type HareActionMessage = {
   __hareButtonAction: true;
+  controllerId: string;
   action: KeyAction;
   value: number;
 };
@@ -51,18 +53,21 @@ const VALID_ACTIONS: ReadonlySet<KeyAction> = new Set([
 function isHareHitmapMessage(data: unknown): data is HareHitmapMessage {
   if (typeof data !== 'object' || data === null) return false;
   const d = data as Record<string, unknown>;
-  if (d.__hareHitmap !== true || !Array.isArray(d.buttons)) return false;
+  if (d.__hareHitmap !== true || !Array.isArray(d.buttons) || d.buttons.length > 1000) return false;
   for (const b of d.buttons) {
     if (typeof b !== 'object' || b === null) return false;
     const btn = b as Record<string, unknown>;
     if (
+      typeof btn.controllerId !== 'string' ||
       typeof btn.action !== 'string' ||
       !VALID_ACTIONS.has(btn.action as KeyAction) ||
       typeof btn.value !== 'number' ||
       typeof btn.x !== 'number' ||
       typeof btn.y !== 'number' ||
       typeof btn.w !== 'number' ||
-      typeof btn.h !== 'number'
+      typeof btn.h !== 'number' ||
+      ![btn.value, btn.x, btn.y, btn.w, btn.h].every(Number.isFinite) ||
+      btn.w < 0 || btn.h < 0 || btn.value < 0
     ) return false;
   }
   return true;
@@ -73,9 +78,10 @@ function isHareActionMessage(data: unknown): data is HareActionMessage {
   const d = data as Record<string, unknown>;
   return (
     d.__hareButtonAction === true &&
+    typeof d.controllerId === 'string' &&
     typeof d.action === 'string' &&
     VALID_ACTIONS.has(d.action as KeyAction) &&
-    typeof d.value === 'number'
+    typeof d.value === 'number' && Number.isFinite(d.value) && d.value >= 0
   );
 }
 
@@ -156,8 +162,8 @@ export function createCrossFramePointerBridge(
       // Only accept forwarded actions from the direct parent. Mirrors the
       // ancestor check in keybinds.handleForwardMessage; window.top is
       // intentionally excluded to avoid trusting a distant, non-ancestor frame.
-      if (event.source !== window.parent) return;
-      const controllers = getControllers();
+      if (window.parent === window || event.source !== window.parent) return;
+      const controllers = getControllers().filter(controller => controller.id === event.data.controllerId);
       if (controllers.length === 0) return;
       const synthetic: KeyBinding = { action: event.data.action, value: event.data.value, key: '', force: false };
       executeAction(event.data.action, synthetic, controllers);
@@ -167,31 +173,34 @@ export function createCrossFramePointerBridge(
   const hitTestChildFrames = (
     clientX: number,
     clientY: number
-  ): { source: Window; action: KeyAction; value: number } | null => {
+  ): { source: Window; action: KeyAction; value: number; controllerId: string } | null => {
     for (const [source, entry] of childHitmaps) {
       if (!entry.iframe.isConnected) {
         childHitmaps.delete(source);
         continue;
       }
       const rect = entry.iframe.getBoundingClientRect();
+      if (!rect.width || !rect.height || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) continue;
+      const scaleX = rect.width / (entry.iframe.offsetWidth || rect.width);
+      const scaleY = rect.height / (entry.iframe.offsetHeight || rect.height);
       for (const btn of entry.buttons) {
-        const left = rect.left + btn.x;
-        const top = rect.top + btn.y;
+        const left = rect.left + (entry.iframe.clientLeft + btn.x) * scaleX;
+        const top = rect.top + (entry.iframe.clientTop + btn.y) * scaleY;
         if (
           clientX >= left &&
-          clientX <= left + btn.w &&
+          clientX <= left + btn.w * scaleX &&
           clientY >= top &&
-          clientY <= top + btn.h
+          clientY <= top + btn.h * scaleY
         ) {
-          return { source, action: btn.action, value: btn.value };
+          return { source, action: btn.action, value: btn.value, controllerId: btn.controllerId };
         }
       }
     }
     return null;
   };
 
-  const forwardAction = (target: Window, action: KeyAction, value: number): void => {
-    const msg: HareActionMessage = { __hareButtonAction: true, action, value };
+  const forwardAction = (target: Window, action: KeyAction, value: number, controllerId: string): void => {
+    const msg: HareActionMessage = { __hareButtonAction: true, action, value, controllerId };
     try {
       target.postMessage(msg, '*');
     } catch {}
@@ -215,7 +224,7 @@ export function createCrossFramePointerBridge(
     if (!hit) return;
     event.stopImmediatePropagation();
     event.preventDefault();
-    forwardAction(hit.source, hit.action, hit.value);
+    forwardAction(hit.source, hit.action, hit.value, hit.controllerId);
   };
 
   window.addEventListener('message', handleMessage);
