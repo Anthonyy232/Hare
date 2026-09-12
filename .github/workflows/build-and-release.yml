@@ -47,6 +47,8 @@ jobs:
         with:
           name: ${{ matrix.browser }}-package-v${{ steps.version.outputs.version }}
           path: .output/*.zip
+          # WXT writes its packages under a hidden directory; only ZIPs are selected.
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 30
 
