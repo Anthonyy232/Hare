@@ -1,61 +1,5 @@
-import { test as base, expect, chromium, type BrowserContext, type Page, type Worker } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import path from 'node:path';
-import { DEFAULT_SETTINGS, type Settings } from '../../lib/types';
-
-const fixture = 'http://127.0.0.1:41739/video.html';
-const test = base.extend<{ extension: { context: BrowserContext; worker: Worker; id: string } }>({
-  extension: async ({}, use, testInfo) => {
-    const extensionPath = path.resolve('.output/chrome-mv3');
-    const context = await chromium.launchPersistentContext(testInfo.outputPath('profile'), {
-      channel: 'chromium', headless: true,
-      ignoreDefaultArgs: ['--disable-back-forward-cache'],
-      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
-    });
-    try {
-      const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
-      const id = new URL(worker.url()).hostname;
-      await worker.evaluate(async settings => {
-        await (globalThis as any).chrome.storage.sync.set({ 'hare-settings': settings });
-      }, DEFAULT_SETTINGS);
-      await use({ context, worker, id });
-    } finally { await context.close(); }
-  },
-});
-
-async function openVideo(context: BrowserContext, query = '') {
-  const page = await context.newPage();
-  await page.goto(fixture + query);
-  if (!query.includes('empty') && !query.includes('frame')) {
-    await expect(page.locator('hare-controller')).toHaveCount(1);
-    await expect.poll(() => page.locator('video').evaluate((video: HTMLVideoElement) => video.readyState)).toBeGreaterThanOrEqual(2);
-  }
-  return page;
-}
-async function openUI(extension: { context: BrowserContext; id: string }, filename: string, active?: Page) {
-  const page = await extension.context.newPage();
-  if (active) await active.bringToFront();
-  await page.goto(`chrome-extension://${extension.id}/${filename}.html`);
-  return page;
-}
-async function rate(page: Page) { return page.locator('video').first().evaluate((video: HTMLVideoElement) => video.playbackRate); }
-async function setSettings(worker: Worker, patch: Partial<Settings>) {
-  await worker.evaluate(async patch => {
-    const api = (globalThis as any).chrome;
-    const stored = await api.storage.sync.get('hare-settings');
-    await api.storage.sync.set({ 'hare-settings': { ...stored['hare-settings'], ...patch } });
-  }, patch);
-}
-async function rpc(page: Page, type: string, payload?: unknown): Promise<any> {
-  return page.evaluate(({ type, payload }) => (globalThis as any).chrome.runtime.sendMessage({ type, payload }), { type, payload });
-}
-async function tabId(page: Page, target: Page): Promise<number> {
-  return page.evaluate(async url => {
-    const tabs = await (globalThis as any).chrome.tabs.query({});
-    return tabs.find((tab: any) => tab.url === url).id;
-  }, target.url());
-}
-
+import { test, expect, fixture, openVideo, openUI, rate, setSettings, rpc, tabId } from './fixtures/extension';
 test('keyboard speed, seeking boundaries, reset, and deliberate pause', async ({ extension }) => {
   const page = await openVideo(extension.context);
   await page.keyboard.press('d');
@@ -108,6 +52,21 @@ test('discovers and cleans up media in pre-existing nested shadow trees', async 
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
   await page.evaluate(() => document.querySelector('#shadow-host')!.remove());
   await expect(page.locator('hare-controller')).toHaveCount(0);
+});
+
+test('discovers and controls media inside a closed shadow root', async ({ extension }) => {
+  const page = await openVideo(extension.context, '?empty');
+  const root = await page.evaluateHandle(() => {
+    const host = document.createElement('div');
+    const root = host.attachShadow({ mode: 'closed' });
+    root.innerHTML = '<div><video controls src="/media.wav"></video></div>';
+    document.body.append(host);
+    return root;
+  });
+  await expect.poll(() => root.evaluate(root => !!root.querySelector('hare-controller'))).toBe(true);
+  await page.locator('h1').click();
+  await page.keyboard.press('d');
+  await expect.poll(() => root.evaluate(root => root.querySelector('video')!.playbackRate)).toBeCloseTo(1.1);
 });
 
 test('audio changes and enable/disable apply live without duplicate controllers', async ({ extension }) => {
@@ -323,6 +282,140 @@ test('settings save failure keeps the draft editable and retry succeeds', async 
   await expect(page.getByText('Settings saved', { exact: true })).toBeVisible();
 });
 
+test('popup site controls exclude and restore embedded media while preserving other settings', async ({ extension }, testInfo) => {
+  const video = await openVideo(extension.context, '?frame');
+  const media = video.frameLocator('iframe').locator('hare-controller');
+  await expect(media).toHaveCount(1);
+  const popup = await openUI(extension, 'popup', video);
+  await expect(popup.getByRole('button', { name: 'Exclude this site', exact: true })).toBeVisible();
+  await setSettings(extension.worker, { controllerOpacity: 0.7, blacklist: 'example.com' });
+  await popup.getByRole('button', { name: 'Exclude this site', exact: true }).click();
+  await expect(media).toHaveCount(0);
+  await expect(popup.getByText('This site is excluded', { exact: true })).toBeVisible();
+  await popup.locator('.popup').screenshot({ path: testInfo.outputPath('site-excluded.png') });
+  expect((await new AxeBuilder({ page: popup }).analyze()).violations).toEqual([]);
+  await popup.getByRole('button', { name: 'Use Hare on this site', exact: true }).click();
+  await expect(media).toHaveCount(1);
+  await expect(popup.locator('.speed-display')).toBeVisible();
+  const stored = await extension.worker.evaluate(async () => (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings']);
+  expect(stored.blacklist.trim()).toBe('example.com');
+  expect(stored.controllerOpacity).toBe(0.7);
+});
+
+test('popup preserves regex exclusions, recovers failed site saves, and can enable Hare', async ({ extension }) => {
+  const video = await openVideo(extension.context);
+  const popup = await openUI(extension, 'popup', video);
+  await setSettings(extension.worker, { blacklist: '/^127\\./\n127.0.0.1' });
+  await expect(popup.getByRole('button', { name: 'Edit site exclusions', exact: true })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Use Hare on this site', exact: true })).toHaveCount(0);
+  await setSettings(extension.worker, { blacklist: '' });
+  await expect(popup.getByRole('button', { name: 'Exclude this site', exact: true })).toBeVisible();
+  await popup.evaluate(() => {
+    const api = (globalThis as any).chrome.storage.sync;
+    const original = api.set.bind(api);
+    api.set = () => { api.set = original; return Promise.reject(new Error('Storage temporarily unavailable')); };
+  });
+  await popup.getByRole('button', { name: 'Exclude this site', exact: true }).click();
+  await expect(popup.getByRole('alert')).toContainText('Storage temporarily unavailable');
+  await expect(video.locator('hare-controller')).toHaveCount(1);
+  await popup.getByRole('button', { name: 'Exclude this site', exact: true }).click();
+  await expect(video.locator('hare-controller')).toHaveCount(0);
+  await popup.getByRole('button', { name: 'Use Hare on this site', exact: true }).click();
+  await expect(video.locator('hare-controller')).toHaveCount(1);
+  await setSettings(extension.worker, { enabled: false });
+  await expect(popup.getByRole('button', { name: 'Enable Hare', exact: true })).toBeVisible();
+  await popup.getByRole('button', { name: 'Enable Hare', exact: true }).click();
+  await expect(video.locator('hare-controller')).toHaveCount(1);
+});
+
+test('popup follows navigation in its target tab before applying site exclusions', async ({ extension }) => {
+  const video = await openVideo(extension.context);
+  const popup = await openUI(extension, 'popup', video);
+  await expect(popup.getByText('127.0.0.1', { exact: true })).toBeVisible();
+  await video.goto(fixture.replace('127.0.0.1', 'localhost'));
+  await expect(popup.getByText('localhost', { exact: true })).toBeVisible();
+  await popup.getByRole('button', { name: 'Exclude this site', exact: true }).click();
+  await expect(video.locator('hare-controller')).toHaveCount(0);
+  const stored = await extension.worker.evaluate(async () => (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings']);
+  expect(stored.blacklist.split('\n')).toContain('localhost');
+  expect(stored.blacklist.split('\n')).not.toContain('127.0.0.1');
+});
+
+test('shortcut value drafts can be committed with Enter and cancelled with Escape', async ({ extension }) => {
+  const options = await openUI(extension, 'options');
+  const target = options.getByRole('spinbutton', { name: 'Reset Speed Target speed' });
+  await target.fill('1.75');
+  await target.press('Escape');
+  await expect(target).toHaveValue('1');
+  await expect(options.getByRole('button', { name: 'Save Settings' })).toBeDisabled();
+  await target.fill('1.75');
+  await target.press('Enter');
+  await options.getByRole('button', { name: 'Save Settings' }).click();
+  await expect(options.getByText('Settings saved', { exact: true })).toBeVisible();
+  await options.reload();
+  await expect(target).toHaveValue('1.75');
+});
+
+test('dragging stays under the pointer and inside scaled, bordered players', async ({ extension }) => {
+  const page = await openVideo(extension.context);
+  for (const scale of [0.75, 1.25]) {
+    await page.locator('#player').evaluate((player, scale) => {
+      (player as HTMLElement).style.cssText = `position:relative;width:640px;height:360px;padding:24px;border:7px solid gray;transform:scale(${scale});transform-origin:top left`;
+    }, scale);
+    const handle = page.locator('.hare-speed');
+    await handle.focus();
+    const start = (await handle.boundingBox())!;
+    await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(start.x + start.width / 2 + 60, start.y + start.height / 2 + 40, { steps: 5 });
+    const moved = (await handle.boundingBox())!;
+    expect(moved.x - start.x).toBeCloseTo(60, 0);
+    expect(moved.y - start.y).toBeCloseTo(40, 0);
+    const video = (await page.locator('video').boundingBox())!;
+    await page.mouse.move(video.x + video.width - 1, video.y + video.height - 1, { steps: 5 });
+    const controller = (await page.locator('.hare-controller').boundingBox())!;
+    expect(controller.x).toBeGreaterThanOrEqual(video.x);
+    expect(controller.y).toBeGreaterThanOrEqual(video.y);
+    expect(controller.x + controller.width).toBeLessThanOrEqual(video.x + video.width);
+    expect(controller.y + controller.height).toBeLessThanOrEqual(video.y + video.height);
+    await page.mouse.move(video.x + video.width + 30, video.y + video.height + 30);
+    await page.mouse.up();
+    await expect(page.locator('.hare-controller')).not.toHaveClass(/dragging/);
+    const released = (await handle.boundingBox())!;
+    await page.mouse.move(video.x, video.y);
+    expect((await handle.boundingBox())!.x).toBeCloseTo(released.x, 0);
+    expect((await handle.boundingBox())!.y).toBeCloseTo(released.y, 0);
+    // Restore the start position by dragging back to the top-left before the next scale.
+    const end = (await handle.boundingBox())!;
+    await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(video.x, video.y, { steps: 5 });
+    await page.mouse.up();
+  }
+});
+
+test('dragging ends when pointer capture is lost and the controller can be removed mid-drag', async ({ extension }) => {
+  const page = await openVideo(extension.context);
+  const handle = page.locator('.hare-speed');
+  await handle.hover();
+  await page.mouse.down();
+  await page.mouse.move(200, 200, { steps: 5 });
+  await handle.evaluate((el: HTMLElement) => {
+    el.addEventListener('pointermove', event => el.releasePointerCapture(event.pointerId), { once: true });
+  });
+  await page.mouse.move(220, 220);
+  await page.mouse.move(240, 240);
+  await expect(page.locator('.hare-controller')).not.toHaveClass(/dragging/);
+  await page.mouse.up();
+
+  await handle.hover();
+  await page.mouse.down();
+  await expect(page.locator('.hare-controller')).toHaveClass(/dragging/);
+  await page.locator('video').evaluate(el => el.remove());
+  await expect(page.locator('hare-controller')).toHaveCount(0);
+  await page.mouse.up();
+});
+
 test('sync pairs two tabs, relays play/pause/rate/seek, and stops on close', async ({ extension }) => {
   const a = await openVideo(extension.context, '?a');
   const b = await openVideo(extension.context, '?b');
@@ -390,7 +483,7 @@ test('a forwarded iframe button targets only its own media', async ({ extension 
 });
 
 test('controller stays visible in a fullscreen player and restores its mount', async ({ extension }, testInfo) => {
-  const page = await openVideo(extension.context);
+  const page = await openVideo(extension.context, '?visual');
   await page.locator('#player').evaluate(element => element.requestFullscreen());
   await expect(page.locator('#player > hare-controller')).toHaveCount(1);
   await page.locator('.hare-speed').focus();

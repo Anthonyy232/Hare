@@ -3,9 +3,6 @@ import type { ControllerPosition } from '../types';
 import { MEDIA_VALIDATION } from '../constants';
 import { matchesDomains } from './utils';
 
-/**
- * Shared handler for Disney+, Hulu, and Hotstar platforms.
- */
 export class DisneyHandler extends BaseSiteHandler {
     private static readonly DOMAINS = ['disneyplus.com', 'hulu.com', 'hotstar.com'] as const;
 
@@ -32,14 +29,9 @@ export class DisneyHandler extends BaseSiteHandler {
         return null;
     }
 
-    /**
-     * Filters out landing page background loops and browse page previews.
-     */
     shouldIgnoreVideo(video: HTMLVideoElement): boolean {
         if (
-            video.closest('[data-testid="preview-player"]') ||
-            video.closest('.background-video') ||
-            video.closest('[class*="background"]')
+            video.closest('[data-testid="preview-player"], .background-video, [class*="background"]')
         ) {
             return true;
         }

@@ -9,8 +9,6 @@ export const SPEED = {
 
 export const SEEK = {
   DEFAULT_SECONDS: 10,
-  /** HTMLMediaElement.HAVE_METADATA - safest minimum state for seeking. */
-  MIN_READY_STATE: 1,
 } as const;
 
 export const CONTROLLER = {
@@ -50,8 +48,6 @@ export const MEDIA_VALIDATION = {
 export const OBSERVER = {
   DEBOUNCE_MS: 50,
   IDLE_TIMEOUT_MS: 100,
-  /** Limit depth to avoid stack exhaustion in exceptionally messy DOMs. */
-  MAX_SHADOW_DEPTH: 50,
 } as const;
 
 export const CLEANUP = {

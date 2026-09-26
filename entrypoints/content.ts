@@ -1,7 +1,6 @@
 import { loadSettings, watchSettings, isBlacklisted } from '../lib/settings';
 import { VideoController } from '../lib/controller';
 import { ObserverPool } from '../lib/observer-pool';
-import { isValidMedia } from '../lib/media-detector';
 import { createKeybindHandler, type KeybindHandler } from '../lib/keybinds';
 import { createCrossFramePointerBridge, type CrossFramePointerBridge } from '../lib/cross-frame-pointer';
 import { getSiteHandler } from '../lib/site-handlers';
@@ -9,7 +8,6 @@ import type { SiteHandler, HareMessage } from '../lib/types';
 import { CLEANUP } from '../lib/constants';
 import type { Browser } from 'wxt/browser';
 import { logger } from '../lib/logger';
-import { isTopFrame } from '../lib/browser-detect';
 import { SyncAgent } from '../lib/sync-agent';
 import { safeMedia } from '../lib/safe-media';
 import { withTimeout } from '../lib/async-utils';
@@ -32,8 +30,8 @@ export default defineContentScript({
 
   async main(ctx) {
     const controllers = new Map<HTMLMediaElement, VideoController>();
-    const mediaLoadstartListeners = new Map<HTMLMediaElement, () => void>();
-    const deferredVideoListeners = new Map<HTMLMediaElement, { listener: () => void }>();
+    const mediaLifecycleListeners = new Map<HTMLMediaElement, AbortController>();
+    const deferredVideoListeners = new Map<HTMLMediaElement, AbortController>();
 
     let settings = await loadSettings();
     const pageHostname: string = await withTimeout(browser.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT' }))
@@ -45,7 +43,7 @@ export default defineContentScript({
       enabled: settings.enabled,
       hostname: location.hostname,
       isBlacklisted: isBlacklisted(settings.blacklist, location.hostname),
-      isTopFrame: isTopFrame()
+      isTopFrame: window === window.top
     });
 
     let siteHandler: SiteHandler | null = null;
@@ -60,13 +58,7 @@ export default defineContentScript({
     let syncKeepAliveReconnectTimer: NodeJS.Timeout | null = null;
     let syncKeepAlivePingTimer: NodeJS.Timeout | null = null;
 
-    /**
-     * Open (or replace) the keep-alive port and arm the periodic-reconnect /
-     * ping timers. The port instance is short-lived: Chrome enforces a hard
-     * cap (~5 minutes) on a single connect() before forcibly disconnecting it,
-     * so we reconnect well before that. The 20s ping resets the SW's 30s
-     * idle timer continuously between drift checks.
-     */
+    // Ping and periodically rotate the port while sync is active.
     const openSyncKeepAlive = (): void => {
       if (syncKeepAlivePort) {
         try { syncKeepAlivePort.disconnect(); } catch { /* already gone */ }
@@ -79,9 +71,7 @@ export default defineContentScript({
         return;
       }
       syncKeepAlivePort.onDisconnect.addListener(() => {
-        // Note: don't auto-reopen here — the reconnect timer below handles
-        // scheduled rotation, and unexpected disconnects (extension reload,
-        // tab unload) shouldn't trigger respawn loops.
+        // Let scheduled rotation reconnect; immediate retries can loop during unload.
         syncKeepAlivePort = null;
       });
     };
@@ -132,10 +122,6 @@ export default defineContentScript({
       }
     };
 
-    /**
-     * Instantiates a new controller for discovered media, applying site-specific
-     * filters and setting up listeners for dynamic source changes.
-     */
     const handleMediaFound = (media: HTMLMediaElement): void => {
       if (!isActive || !media.isConnected) return;
       if (controllers.has(media)) return;
@@ -144,6 +130,8 @@ export default defineContentScript({
 
       if (media instanceof HTMLVideoElement && siteHandler?.shouldIgnoreVideo(media)) {
         if (!deferredVideoListeners.has(media)) {
+          const listeners = new AbortController();
+          const { signal } = listeners;
           const retryCheck = () => {
             if (!siteHandler?.shouldIgnoreVideo(media)) {
               cleanupDeferredListener(media);
@@ -151,18 +139,16 @@ export default defineContentScript({
             }
           };
 
-          media.addEventListener('loadedmetadata', retryCheck);
-          media.addEventListener('resize', retryCheck);
-          media.addEventListener('play', retryCheck);
-          media.addEventListener('canplay', retryCheck);
+          media.addEventListener('loadedmetadata', retryCheck, { signal });
+          media.addEventListener('resize', retryCheck, { signal });
+          media.addEventListener('play', retryCheck, { signal });
+          media.addEventListener('canplay', retryCheck, { signal });
 
           // Keep retries for late-loading players. Removal and stop() explicitly release them.
-          deferredVideoListeners.set(media, { listener: retryCheck });
+          deferredVideoListeners.set(media, listeners);
         }
         return;
       }
-
-      if (!isValidMedia(media)) return;
 
       cleanupDeferredListener(media);
 
@@ -174,35 +160,29 @@ export default defineContentScript({
         totalControllers: controllers.size
       });
 
-      const loadstartHandler = () => {
-        // Reusing a video node for another episode invalidates the paired starting positions.
+      const sourceChanged = () => {
+        // A replaced, emptied, or failed source cannot keep its old sync pair.
         if (syncAgent?.isForMedia(media)) deactivateLocalSync(true);
         const controller = controllers.get(media);
 
-        if (controller && !isValidMedia(media)) {
+        if (!media.isConnected) {
           handleMediaRemoved(media);
-        } else if (!controller && isValidMedia(media)) {
+        } else if (!controller) {
           handleMediaFound(media);
-        } else if (controller && isValidMedia(media)) {
-          // Media source changed but element is reused (common on SPAs like YouTube)
-          // Sync the display to reflect the new video's playback rate
+        } else {
           controller.updateSpeedDisplay();
         }
       };
-      media.addEventListener('loadstart', loadstartHandler);
-      mediaLoadstartListeners.set(media, loadstartHandler);
+      const listeners = new AbortController();
+      for (const type of ['loadstart', 'emptied', 'error']) {
+        media.addEventListener(type, sourceChanged, { signal: listeners.signal });
+      }
+      mediaLifecycleListeners.set(media, listeners);
     };
 
     const cleanupDeferredListener = (media: HTMLMediaElement): void => {
-      const entry = deferredVideoListeners.get(media);
-      if (entry) {
-        const { listener } = entry;
-        media.removeEventListener('loadedmetadata', listener);
-        media.removeEventListener('resize', listener);
-        media.removeEventListener('play', listener);
-        media.removeEventListener('canplay', listener);
-        deferredVideoListeners.delete(media);
-      }
+      deferredVideoListeners.get(media)?.abort();
+      deferredVideoListeners.delete(media);
     };
 
     const handleMediaRemoved = (media: HTMLMediaElement): void => {
@@ -216,23 +196,13 @@ export default defineContentScript({
         controllers.delete(media);
       }
 
-      const loadstartHandler = mediaLoadstartListeners.get(media);
-      if (loadstartHandler) {
-        media.removeEventListener('loadstart', loadstartHandler);
-        mediaLoadstartListeners.delete(media);
-      }
+      mediaLifecycleListeners.get(media)?.abort();
+      mediaLifecycleListeners.delete(media);
 
       cleanupDeferredListener(media);
     };
 
-    /**
-     * Re-scans the DOM for media elements and registers any that the initial
-     * scan / MutationObserver missed (deferred-ignore videos that timed out,
-     * SPA-swapped videos, shadow-DOM additions). Idempotent: existing
-     * controllers are skipped by `handleMediaFound`. Called on-demand from
-     * popup-driven message handlers so the user never has to disable / re-
-     * enable the extension to make tabs appear in Sync Mode.
-     */
+    // Recover late or shadow media on popup requests; existing controllers are skipped.
     const rescanMedia = (): void => {
       if (!isActive) return;
       for (const media of observerPool?.observe(document) ?? []) {
@@ -240,10 +210,7 @@ export default defineContentScript({
       }
     };
 
-    /**
-     * Initializes the observer pool and keybind handlers.
-     * Each frame handles its own keys; parents forward only when they have no local media.
-     */
+    // Each frame handles its own keys; parents forward when they have no local media.
     const start = (): void => {
       if (isActive || suspended) return;
       if (isExcluded()) return;
@@ -323,9 +290,6 @@ export default defineContentScript({
       }
     });
 
-    /**
-     * Routes remote messages from the popup or background script to active controllers.
-     */
     const messageHandler = (
       message: HareMessage,
       _sender: Browser.runtime.MessageSender,
@@ -336,10 +300,6 @@ export default defineContentScript({
       try {
         switch (message.type) {
           case 'GET_STATUS': {
-            // Self-heal: if we have nothing tracked, re-scan the DOM. Catches
-            // videos missed by the initial scan or the MutationObserver
-            // (deferred-ignore timeouts, late SPA additions, shadow DOM, etc.)
-            // so the user doesn't need to disable / re-enable the extension.
             rescanMedia();
             controllersArray = [...controllers.values()].filter(c => c.media.isConnected);
             sendResponse({
@@ -364,17 +324,6 @@ export default defineContentScript({
             break;
           }
 
-          case 'ADJUST_SPEED': {
-            const delta = message.payload as number;
-            if (typeof delta !== 'number' || !Number.isFinite(delta)) {
-              sendResponse({ success: false, error: 'Invalid delta' });
-              break;
-            }
-            for (const controller of controllersArray) controller.adjustSpeed(delta);
-            sendResponse({ success: controllersArray.length > 0 });
-            break;
-          }
-
           case 'RESET_SPEED': {
             for (const controller of controllersArray) controller.resetSpeed();
             sendResponse({ success: controllersArray.length > 0 });
@@ -389,12 +338,8 @@ export default defineContentScript({
 
           case 'SYNC_ACTIVATE': {
             deactivateLocalSync(false);
-            // Rescan first so a tab that was previously invisible to GET_STATUS
-            // (deferred-ignore timeout, late SPA addition, etc.) can still
-            // activate sync without the user disabling and re-enabling the
-            // extension.
             rescanMedia();
-            const candidates = [...controllers.keys()].filter(media => media.isConnected && media.readyState >= 1);
+            const candidates = [...controllers.keys()].filter(media => media.isConnected && media.readyState >= HTMLMediaElement.HAVE_METADATA);
             candidates.sort((a, b) => {
               if (a.paused !== b.paused) return a.paused ? 1 : -1;
               const rectA = a.getBoundingClientRect(), rectB = b.getBoundingClientRect();
@@ -417,8 +362,7 @@ export default defineContentScript({
                 }).catch(() => {});
               },
               baseRate,
-              // Coordinator-issued rate changes route through the controller so
-              // enforcement state (targetSpeed / isEnforcingSpeed) stays consistent.
+              // Keep controller enforcement consistent with remote rate changes.
               primaryController
                 ? (rate: number) => primaryController.setSpeed(rate)
                 : (rate: number) => safeMedia.setPlaybackRate(primaryMedia, rate),
@@ -426,7 +370,6 @@ export default defineContentScript({
                 ? (rate: number) => primaryController.applyTransientRate(rate)
                 : (rate: number) => safeMedia.setPlaybackRate(primaryMedia, rate),
             );
-            // User-initiated speed changes (keybind, popup) flow controller -> agent.
             if (primaryController) {
               primaryController.setIntendedSpeedListener((rate) => {
                 syncAgent?.notifyIntendedSpeedChange(rate);
@@ -435,10 +378,8 @@ export default defineContentScript({
             startSyncKeepAlive();
             sendResponse({
               success: true,
-              currentTime: safeMedia.getCurrentTime(primaryMedia),
+              ...syncAgent.getPosition(),
               playbackRate: baseRate,
-              paused: primaryMedia.paused,
-              timestamp: Date.now(),
             });
             break;
           }
@@ -452,15 +393,13 @@ export default defineContentScript({
           case 'SYNC_PAUSE': {
             if (!syncAgent) { sendResponse({ success: false }); break; }
             const pauseCmd = message.payload as SyncCommandPayload;
-            // Source was paused at command time and isn't advancing — don't
-            // time-compensate. Skip the seek if we're already close enough to
-            // avoid visible jitter when both tabs are already in sync.
+            // Do not extrapolate a paused source; skip tiny seeks to avoid visible jitter.
             const localPos = syncAgent.getPosition().currentTime;
             const driftSec = SYNC.DRIFT_IGNORE_THRESHOLD_MS / 1000;
             if (pauseCmd.position >= 0 && Math.abs(localPos - pauseCmd.position) > driftSec) {
               syncAgent.executeSeek(pauseCmd.position);
             }
-            syncAgent.executePause();
+            syncAgent.executePause(pauseCmd.buffering === true);
             sendResponse({ success: true });
             break;
           }
@@ -468,15 +407,12 @@ export default defineContentScript({
           case 'SYNC_PLAY': {
             if (!syncAgent) { sendResponse({ success: false }); break; }
             const playCmd = message.payload as SyncCommandPayload;
-            // position -1 means "resume without seeking" (e.g., buffering recovery)
             if (playCmd.position >= 0) {
-              // Source was playing — extrapolate using its rate (preferred) or
-              // fall back to local rate.
-              const rate = playCmd.rate
-                ?? syncAgent.getPosition().playbackRate
-                ?? 1.0;
+              const rate = playCmd.rate ?? syncAgent.getPosition().playbackRate;
               const compensatedPlayPos = playCmd.position + rate * (Date.now() - playCmd.timestamp) / 1000;
-              syncAgent.executeSeek(compensatedPlayPos);
+              if (Math.abs(syncAgent.getPosition().currentTime - compensatedPlayPos) > SYNC.DRIFT_IGNORE_THRESHOLD_MS / 1000) {
+                syncAgent.executeSeek(compensatedPlayPos);
+              }
             }
             void syncAgent.executePlay().then(success => sendResponse({ success }));
             break;
@@ -485,7 +421,6 @@ export default defineContentScript({
           case 'SYNC_SEEK': {
             if (!syncAgent) { sendResponse({ success: false }); break; }
             const seekCmd = message.payload as SyncCommandPayload;
-            // Seek is to an absolute position — no timestamp compensation needed
             syncAgent.executeSeek(seekCmd.position);
             sendResponse({ success: true });
             break;

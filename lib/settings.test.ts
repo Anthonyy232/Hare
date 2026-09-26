@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { validateKeyBindings, isBlacklisted, normalizeSettings, saveSettings, validateBlacklist } from './settings';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { validateKeyBindings, isBlacklisted, normalizeSettings, loadSettings, saveSettings, watchSettings, validateBlacklist, removeExactSiteExclusions } from './settings';
 import { DEFAULT_SETTINGS } from './types';
 
 describe('validateKeyBindings', () => {
@@ -41,6 +42,24 @@ describe('validateKeyBindings', () => {
 });
 
 describe('settings boundary', () => {
+    beforeEach(() => fakeBrowser.reset());
+
+    it('persists normalized settings and stops notifying after unwatch', async () => {
+        const changed = vi.fn();
+        const unwatch = watchSettings(changed);
+        try {
+            await saveSettings({ ...DEFAULT_SETTINGS, controllerOpacity: 5, blacklist: 'example.com' });
+            expect(await loadSettings()).toEqual({ ...DEFAULT_SETTINGS, controllerOpacity: 1, blacklist: 'example.com' });
+            await vi.waitFor(() => expect(changed).toHaveBeenCalledWith(
+                expect.objectContaining({ controllerOpacity: 1, blacklist: 'example.com' }),
+                DEFAULT_SETTINGS,
+            ));
+            unwatch();
+            await saveSettings(DEFAULT_SETTINGS);
+            expect(changed).toHaveBeenCalledTimes(1);
+        } finally { unwatch(); }
+    });
+
     it('normalizes corrupted storage and finite display ranges', () => {
         const settings = normalizeSettings({ controllerOpacity: NaN, controllerButtonSize: Infinity, enabled: 'false', keyBindings: null });
         expect(settings.controllerOpacity).toBe(DEFAULT_SETTINGS.controllerOpacity);
@@ -76,18 +95,16 @@ describe('settings boundary', () => {
 });
 
 describe('isBlacklisted', () => {
-    it('returns false for empty blacklist', () => {
-        expect(isBlacklisted('', 'youtube.com')).toBe(false);
+    it('removes equivalent exact site rules without removing unrelated exclusions', () => {
+        const blacklist = 'EXAMPLE.com.\n*.example.com\nhttps://example.com/watch\nother.test\n';
+        expect(removeExactSiteExclusions(blacklist, 'EXAMPLE.COM.')).toBe('other.test\n');
     });
 
-    it('matches exact domains', () => {
-        const blacklist = `
-      youtube.com
-      twitch.tv
-    `;
-        expect(isBlacklisted(blacklist, 'youtube.com')).toBe(true);
-        expect(isBlacklisted(blacklist, 'twitch.tv')).toBe(true);
-        expect(isBlacklisted(blacklist, 'google.com')).toBe(false);
+    it('preserves broader domains, regex rules, invalid entries, and subdomain exclusions', () => {
+        const blacklist = 'example.com\n/^player/\nplayer.example.com\nchild.player.example.com\n/unfinished';
+        const remaining = removeExactSiteExclusions(blacklist, 'player.example.com');
+        expect(remaining).toBe('example.com\n/^player/\nchild.player.example.com\n/unfinished');
+        expect(isBlacklisted(remaining, 'player.example.com')).toBe(true);
     });
 
     it('matches subdomains', () => {
@@ -98,17 +115,13 @@ describe('isBlacklisted', () => {
     });
 
     it('matches regex patterns', () => {
-        const blacklist = '/^http.*\\.com$/i';
-        // isBlacklisted expects hostname, so the regex should match hostname
-        // But let's check the implementation. It creates regex from lines /.../
-
-        // Test a simpler regex: /.*\.google\.com/
         const blacklistRegex = '/.*\\.google\\.com/';
         expect(isBlacklisted(blacklistRegex, 'mail.google.com')).toBe(true);
         expect(isBlacklisted(blacklistRegex, 'yahoo.com')).toBe(false);
     });
 
     it('handles mixed content and empty lines', () => {
+        expect(isBlacklisted('', 'youtube.com')).toBe(false);
         const blacklist = `
       youtube.com
       

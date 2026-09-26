@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { SyncCandidate, SyncStatusResponse } from "../lib/sync-types";
-  import { SYNC } from "../lib/sync-types";
-  import { logger } from "../lib/logger";
+  import { SYNC, NUDGE_STEPS } from "../lib/sync-types";
 
   let { onExpandedChange }: { onExpandedChange?: (expanded: boolean) => void } = $props();
 
@@ -13,18 +12,23 @@
   let starting = $state(false);
   let showSetup = $state(false);
   let error: string | null = $state(null);
-  let nudgeStep = $state(SYNC.DEFAULT_NUDGE_STEP);
+  const nudgeStep = $derived.by(() => syncStatus?.nudgeStep ?? SYNC.DEFAULT_NUDGE_STEP);
   const offsetDisplay = $derived.by(() => offsetLabel(syncStatus?.offset ?? 0));
   const expanded = $derived.by(() => showSetup || syncStatus?.active === true);
   $effect(() => { onExpandedChange?.(expanded); });
 
-  const NUDGE_STEPS = [0.01, 0.05, 0.1, 0.5];
+  let statusRequest: Promise<void> | null = null;
 
-  async function loadSyncStatus() {
+  function loadSyncStatus(): Promise<void> {
+    statusRequest ??= refreshSyncStatus().finally(() => { statusRequest = null; });
+    return statusRequest;
+  }
+
+  async function refreshSyncStatus() {
     try {
       syncStatus = await browser.runtime.sendMessage({ type: "GET_SYNC_STATUS" }) as SyncStatusResponse;
     } catch {
-      syncStatus = null;
+      // A failed poll does not mean the session ended; keep Stop available.
     }
   }
 
@@ -60,6 +64,7 @@
     starting = true;
     error = null;
     try {
+      await statusRequest;
       const result = await browser.runtime.sendMessage({
         type: "START_SYNC",
         payload: { tabIdA: selectedTabs[0], tabIdB: selectedTabs[1] },
@@ -76,39 +81,25 @@
     }
   }
 
-  async function stopSync() {
+  async function changeSync(type: 'STOP_SYNC' | 'NUDGE_OFFSET' | 'SET_NUDGE_STEP', payload?: number) {
     if (loading) return;
     loading = true;
     error = null;
     try {
-      const result = await browser.runtime.sendMessage({ type: "STOP_SYNC" });
-      if (!result?.success) throw new Error('Could not stop sync');
-      syncStatus = null;
-    } catch (e) {
-      logger.error("Failed to stop sync", e);
-      error = 'Could not stop sync. Try again.';
-    } finally {
-      loading = false;
-    }
-  }
-
-  async function nudge(direction: number) {
-    if (loading) return;
-    loading = true;
-    error = null;
-    try {
-      const result = await browser.runtime.sendMessage({
-        type: "NUDGE_OFFSET",
-        payload: direction * nudgeStep,
-      });
-      if (!result?.success) throw new Error(result?.error || 'Could not adjust offset');
+      await statusRequest;
+      const result = await browser.runtime.sendMessage({ type, payload });
+      if (!result?.success) throw new Error(result?.error || 'Could not update sync. Try again.');
+      if (type === 'STOP_SYNC') syncStatus = null;
       await loadSyncStatus();
     } catch (e) {
-      logger.error("Failed to nudge offset", e);
-      error = 'Could not adjust the offset. Check that both tabs are still open.';
-    } finally {
-      loading = false;
-    }
+      error = e instanceof Error ? e.message : 'Could not update sync. Try again.';
+    } finally { loading = false; }
+  }
+
+  async function changeNudgeStep(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    await changeSync('SET_NUDGE_STEP', Number(select.value));
+    select.value = String(nudgeStep);
   }
 
   function openSetup() {
@@ -123,7 +114,7 @@
   }
 
   function formatStep(step: number): string {
-    return step < 1 ? `${Math.round(step * 1000)} ms` : `${step.toFixed(1)} s`;
+    return `${Math.round(step * 1000)} ms`;
   }
 
   function offsetLabel(offset: number): { magnitude: string; direction: string } {
@@ -144,11 +135,10 @@
 <section class="sync-section" aria-label="Video sync">
   {#if error}<div class="sync-error" role="alert">{error}</div>{/if}
   {#if syncStatus?.active}
-    <!-- Active sync view -->
     <div class="sync-active">
       <div class="sync-header">
         <div class="sync-badge">SYNC</div>
-        <button class="stop-btn" onclick={stopSync} disabled={loading}>Stop</button>
+        <button class="stop-btn" onclick={() => changeSync('STOP_SYNC')} disabled={loading}>Stop</button>
       </div>
 
       <div class="sync-tabs">
@@ -178,13 +168,15 @@
           <button
             class="nudge-btn"
             disabled={loading}
-            onclick={() => nudge(-1)}
+            onclick={() => changeSync('NUDGE_OFFSET', -nudgeStep)}
             title="Shift B earlier by {formatStep(nudgeStep)}"
             aria-label="Shift B earlier"
           >◀</button>
           <select
             class="step-select"
-            bind:value={nudgeStep}
+            value={nudgeStep}
+            onchange={changeNudgeStep}
+            disabled={loading}
             aria-label="Nudge step"
           >
             {#each NUDGE_STEPS as step}
@@ -194,7 +186,7 @@
           <button
             class="nudge-btn"
             disabled={loading}
-            onclick={() => nudge(1)}
+            onclick={() => changeSync('NUDGE_OFFSET', nudgeStep)}
             title="Shift B later by {formatStep(nudgeStep)}"
             aria-label="Shift B later"
           >▶</button>
@@ -202,7 +194,6 @@
       </div>
     </div>
   {:else if showSetup}
-    <!-- Setup view -->
     <div class="sync-setup">
       <div class="setup-header">
         <span>Select 2 tabs to sync</span>
@@ -256,7 +247,6 @@
       <button class="sync-mode-btn" onclick={loadCandidates} disabled={loading}>Refresh tab list</button>
     </div>
   {:else}
-    <!-- Inactive — show button to open setup -->
     <button class="sync-mode-btn" onclick={openSetup}>
       <svg viewBox="0 0 24 24" class="sync-icon">
         <polyline points="23 4 23 10 17 10"></polyline>

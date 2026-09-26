@@ -28,11 +28,8 @@ export class RedditHandler extends BaseSiteHandler {
         return null;
     }
 
-    /**
-     * Filters out muted feed previews and avatar decorations.
-     */
     shouldIgnoreVideo(video: HTMLVideoElement): boolean {
-        if (video.closest('[data-collapsed="true"]') || video.closest('[data-testid="award-animations"]')) {
+        if (video.closest('[data-collapsed="true"], [data-testid="award-animations"]')) {
             return true;
         }
 

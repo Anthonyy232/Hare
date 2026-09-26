@@ -12,7 +12,7 @@ export default defineConfig({
   zip: {
     // Only build inputs belong in the Firefox source archive, never local test profiles/reports.
     includeSources: [
-      'entrypoints/**', 'components/**', 'lib/**', 'assets/**', 'public/**', 'tests/**', 'docs/**',
+      'entrypoints/**', 'components/**', 'lib/**', 'assets/**', 'public/**', 'tests/**',
       'README.md', 'LICENSE', 'package.json', 'package-lock.json', 'tsconfig.json',
       'wxt.config.ts', 'vitest.config.ts', 'playwright.config.ts',
     ],

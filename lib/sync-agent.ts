@@ -13,24 +13,16 @@ export class SyncAgent {
   private setTransientRate: (rate: number) => void;
   private pendingPause = 0;
   private pendingPlay = 0;
-  private pendingSeek = 0;
+  private pendingSeekPosition: number | null = null;
+  private playRevision = 0;
   private applyingRemoteRate = false;
-  private suppressNextPlaying = false;
-  private seeking = false;
+  private buffering: boolean;
   private destroyed = false;
   private seekDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingSeekTimeout: ReturnType<typeof setTimeout> | null = null;
   private rateCorrectionTimer: ReturnType<typeof setTimeout> | null = null;
   private rateCorrectionBaseRate: number = 1.0;
 
-  // Bound listeners for cleanup
-  private onPause: () => void;
-  private onPlay: () => void;
-  private onSeeking: () => void;
-  private onSeeked: () => void;
-  private onWaiting: () => void;
-  private onStalled: () => void;
-  private onPlaying: () => void;
+  private listeners = new AbortController();
 
   constructor(
     media: HTMLMediaElement,
@@ -44,22 +36,16 @@ export class SyncAgent {
     this.setIntendedSpeed = setIntendedSpeed;
     this.setTransientRate = setTransientRate;
     this.rateCorrectionBaseRate = baseRate;
+    this.buffering = !media.paused && media.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
 
-    this.onPause = this.handlePause.bind(this);
-    this.onPlay = this.handlePlay.bind(this);
-    this.onSeeking = () => { this.seeking = true; };
-    this.onSeeked = this.handleSeeked.bind(this);
-    this.onWaiting = this.handleWaiting.bind(this);
-    this.onStalled = this.handleStalled.bind(this);
-    this.onPlaying = this.handlePlaying.bind(this);
-
-    media.addEventListener('pause', this.onPause);
-    media.addEventListener('play', this.onPlay);
-    media.addEventListener('seeking', this.onSeeking);
-    media.addEventListener('seeked', this.onSeeked);
-    media.addEventListener('waiting', this.onWaiting);
-    media.addEventListener('stalled', this.onStalled);
-    media.addEventListener('playing', this.onPlaying);
+    const { signal } = this.listeners;
+    media.addEventListener('pause', this.handlePause.bind(this), { signal });
+    media.addEventListener('play', this.handlePlay.bind(this), { signal });
+    media.addEventListener('seeked', this.handleSeeked.bind(this), { signal });
+    media.addEventListener('waiting', this.handleWaiting.bind(this), { signal });
+    media.addEventListener('stalled', this.handleStalled.bind(this), { signal });
+    media.addEventListener('playing', this.handleReady.bind(this), { signal });
+    media.addEventListener('canplay', this.handleReady.bind(this), { signal });
   }
 
   private emit(action: Exclude<SyncEventPayload['action'], 'ratechange'>): void {
@@ -73,11 +59,12 @@ export class SyncAgent {
   }
 
   private handlePause(): void {
-    this.suppressNextPlaying = false;
     if (this.pendingPause > 0) {
       this.pendingPause--;
       return;
     }
+    this.playRevision++;
+    this.buffering = false;
     this.emit('pause');
   }
 
@@ -86,20 +73,15 @@ export class SyncAgent {
       this.pendingPlay--;
       return;
     }
+    this.playRevision++;
     this.emit('play');
   }
 
   private handleSeeked(): void {
-    this.seeking = false;
-    if (this.pendingSeek > 0) {
-      this.pendingSeek--;
-      if (this.pendingSeek === 0 && this.pendingSeekTimeout) {
-        clearTimeout(this.pendingSeekTimeout);
-        this.pendingSeekTimeout = null;
-      }
-      return;
-    }
-    // Debounce rapid seeks (scrubbing)
+    const remoteSeek = this.pendingSeekPosition !== null
+      && Math.abs(safeMedia.getCurrentTime(this.media) - this.pendingSeekPosition) < SYNC.DRIFT_IGNORE_THRESHOLD_MS / 1000;
+    this.pendingSeekPosition = null;
+    if (remoteSeek) return;
     if (this.seekDebounceTimer) clearTimeout(this.seekDebounceTimer);
     this.seekDebounceTimer = setTimeout(() => {
       this.seekDebounceTimer = null;
@@ -108,29 +90,24 @@ export class SyncAgent {
   }
 
   private handleWaiting(): void {
-    if (this.seeking || this.media.paused) return;
-    this.suppressNextPlaying = false;
+    if (this.media.paused || this.buffering) return;
+    this.buffering = true;
     this.emit('buffering_start');
   }
 
   private handleStalled(): void {
-    if (this.seeking || this.media.paused || this.media.readyState >= 3) return;
-    this.suppressNextPlaying = false;
-    this.emit('buffering_start');
+    if (this.media.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) this.handleWaiting();
   }
 
-  private handlePlaying(): void {
-    if (this.suppressNextPlaying) {
-      this.suppressNextPlaying = false;
-      return;
-    }
+  private handleReady(): void {
+    if (!this.buffering) return;
+    this.buffering = false;
     this.emit('buffering_end');
   }
 
-  // --- Commands from coordinator ---
-
-  executePause(): void {
-    this.suppressNextPlaying = false;
+  executePause(buffering = false): void {
+    this.playRevision++;
+    if (!buffering) this.buffering = false;
     if (!this.media.paused) {
       this.pendingPause++;
     }
@@ -139,17 +116,17 @@ export class SyncAgent {
 
   async executePlay(): Promise<boolean> {
     if (this.destroyed) return false;
+    const revision = ++this.playRevision;
     if (this.media.paused) {
       this.pendingPlay++;
-      this.suppressNextPlaying = true;
     }
     try {
       await safeMedia.play(this.media);
-      return true;
+      return !this.destroyed && revision === this.playRevision;
     } catch {
-      // play() can reject (e.g., autoplay policy). Decrement counters so they
-      // don't permanently suppress future user-initiated events.
-      this.suppressNextPlaying = false;
+      // A rejected play must not suppress later user events.
+      if (this.destroyed || revision !== this.playRevision) return false;
+      this.buffering = false;
       if (this.pendingPlay > 0) this.pendingPlay--;
       this.emit('pause');
       return false;
@@ -162,38 +139,17 @@ export class SyncAgent {
       clearTimeout(this.seekDebounceTimer);
       this.seekDebounceTimer = null;
     }
-    // Cancel any in-flight rate correction — its original target is now stale
-    // once the position changes, and leaving it running would smear the seek.
+    // A seek invalidates the current drift correction.
     if (this.rateCorrectionTimer) {
       clearTimeout(this.rateCorrectionTimer);
       this.rateCorrectionTimer = null;
       this.setTransientRate(this.rateCorrectionBaseRate);
     }
     const before = safeMedia.getCurrentTime(this.media);
-    this.pendingSeek++;
-    try {
-      safeMedia.setCurrentTime(this.media, position);
-      const after = safeMedia.getCurrentTime(this.media);
-      const likelySeekedEvent =
-        this.media.seeking ||
-        Math.abs(after - before) > 1e-3;
-      if (likelySeekedEvent) {
-        this.armPendingSeekTimeout();
-      } else {
-        this.pendingSeek--;
-      }
-    } catch (error) {
-      this.pendingSeek--;
-      throw error;
-    }
-  }
-
-  private armPendingSeekTimeout(): void {
-    if (this.pendingSeekTimeout) clearTimeout(this.pendingSeekTimeout);
-    this.pendingSeekTimeout = setTimeout(() => {
-      this.pendingSeek = 0;
-      this.pendingSeekTimeout = null;
-    }, SYNC.SEEK_ECHO_TIMEOUT_MS);
+    safeMedia.setCurrentTime(this.media, position);
+    const after = safeMedia.getCurrentTime(this.media);
+    // Browsers can coalesce multiple seeks into one seeked event.
+    this.pendingSeekPosition = this.media.seeking || Math.abs(after - before) > 1e-3 ? after : null;
   }
 
   /** Apply a coordinator-issued rate while suppressing the synchronous controller callback. */
@@ -209,12 +165,7 @@ export class SyncAgent {
     finally { this.applyingRemoteRate = false; }
   }
 
-  /**
-   * Notify this agent that the user (via controller) just changed the intended speed.
-   * Updates the rate-correction base and emits a ratechange event to the coordinator.
-   * Coordinator-issued rate changes (executeRateChange) should NOT call this — they
-   * call setIntendedSpeed directly while applyingRemoteRate suppresses the echo.
-   */
+  // Propagate local speed changes; suppress synchronous echoes from remote changes.
   notifyIntendedSpeedChange(rate: number): void {
     if (this.destroyed) return;
     if (this.applyingRemoteRate) return;
@@ -229,14 +180,11 @@ export class SyncAgent {
     });
   }
 
-  /** Apply temporary rate adjustment for small drift corrections */
   applyRateCorrection(rateFactor: number, durationMs: number): void {
     if (this.destroyed || !Number.isFinite(rateFactor) || !Number.isFinite(durationMs) || durationMs < 0) return;
     if (this.rateCorrectionTimer) {
       clearTimeout(this.rateCorrectionTimer);
     }
-    // rateCorrectionBaseRate is updated by notifyIntendedSpeedChange / executeRateChange
-    // so this stays accurate even when the user changes speed mid-session.
     this.setTransientRate(this.rateCorrectionBaseRate + rateFactor);
     this.rateCorrectionTimer = setTimeout(() => {
       this.rateCorrectionTimer = null;
@@ -250,6 +198,7 @@ export class SyncAgent {
     return {
       currentTime: safeMedia.getCurrentTime(this.media),
       paused: this.media.paused,
+      buffering: this.buffering,
       playbackRate: safeMedia.getPlaybackRate(this.media),
       timestamp: Date.now(),
     };
@@ -261,22 +210,12 @@ export class SyncAgent {
       clearTimeout(this.seekDebounceTimer);
       this.seekDebounceTimer = null;
     }
-    if (this.pendingSeekTimeout) {
-      clearTimeout(this.pendingSeekTimeout);
-      this.pendingSeekTimeout = null;
-    }
     if (this.rateCorrectionTimer) {
       clearTimeout(this.rateCorrectionTimer);
       this.rateCorrectionTimer = null;
       this.setTransientRate(this.rateCorrectionBaseRate);
     }
-    this.media.removeEventListener('pause', this.onPause);
-    this.media.removeEventListener('play', this.onPlay);
-    this.media.removeEventListener('seeking', this.onSeeking);
-    this.media.removeEventListener('seeked', this.onSeeked);
-    this.media.removeEventListener('waiting', this.onWaiting);
-    this.media.removeEventListener('stalled', this.onStalled);
-    this.media.removeEventListener('playing', this.onPlaying);
+    this.listeners.abort();
   }
 
   isForMedia(media: HTMLMediaElement): boolean {

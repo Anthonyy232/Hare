@@ -28,16 +28,9 @@ export class FacebookHandler extends BaseSiteHandler {
         return null;
     }
 
-    /**
-     * Filters out transient content like Stories, Reels previews, and profile videos.
-     */
     shouldIgnoreVideo(video: HTMLVideoElement): boolean {
         if (
-            video.closest('[data-pagelet="Stories"]') ||
-            video.closest('[aria-label*="Stories"]') ||
-            video.closest('[data-pagelet="ProfilePhoto"]') ||
-            video.closest('[data-ad-preview]') ||
-            video.closest('[data-pagelet*="AdPreferences"]')
+            video.closest('[data-pagelet="Stories"], [aria-label*="Stories"], [data-pagelet="ProfilePhoto"], [data-ad-preview], [data-pagelet*="AdPreferences"]')
         ) {
             return true;
         }

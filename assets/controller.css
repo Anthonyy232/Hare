@@ -14,6 +14,9 @@
 
 .hare-controller {
   display: flex;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  max-width: var(--hare-max-width, none);
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
@@ -28,7 +31,6 @@
   user-select: none;
   opacity: var(--hare-opacity, 0.3);
   transition: opacity 0.15s ease, backdrop-filter 0.15s ease, border-color 0.15s ease;
-  /** Performance optimization for frequently updated elements. */
   contain: layout style paint;
 }
 
@@ -70,9 +72,11 @@
 
 .hare-controls {
   display: none;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   gap: 2px;
   align-items: center;
-  /** Decouple button size from its own font-size to ensure consistency. */
   --hare-btn-size: 2em;
 }
 
@@ -83,9 +87,9 @@
 
 .hare-btn {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  /** Relative sizing based on controller font size, stored in variable. */
   width: var(--hare-btn-size);
   height: var(--hare-btn-size);
   padding: 0;
@@ -169,11 +173,6 @@
 
 .hare-osd.show {
   opacity: 1;
-}
-
-/** Specific override for Amazon SDK. */
-.atvwebplayersdk-video-surface .hare-controller {
-  height: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

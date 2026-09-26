@@ -5,7 +5,7 @@
   import type { StatusResponse, HareMessage } from "../../lib/types";
   import { SPEED, UI } from "../../lib/constants";
   import { MESSAGES } from "../../lib/messages";
-  import { loadSettings, isBlacklisted } from "../../lib/settings";
+  import { loadSettings, saveSettings, isBlacklisted, removeExactSiteExclusions } from "../../lib/settings";
   import { getTabMedia, aggregateStatus, sendToFrame } from "../../lib/tab-media";
 
   let status: StatusResponse | null = $state(null);
@@ -19,6 +19,7 @@
   let tabId: number | null = null;
   let tabUrl = '';
   let siteLabel = $state('Current tab');
+  let siteAction: 'enable' | 'include' | 'exclude' | 'settings' | null = $state(null);
   const speedPresets = [0.75, 1, 1.25, 1.5, 2];
   let disposed = false;
   let toastTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -41,25 +42,38 @@
   }
 
   async function refreshStatus() {
+    let nextHint = '';
+    let nextSiteAction: typeof siteAction = null;
     try {
+      if (tabId == null) throw new Error(MESSAGES.NO_ACTIVE_TAB);
+      const tab = await browser.tabs.get(tabId);
+      tabUrl = tab.url ?? '';
+      // Without the tabs permission, protected pages can omit their URL entirely.
+      const url = tabUrl ? new URL(tabUrl) : null;
+      siteLabel = url ? (url.protocol === 'file:' ? 'Local file' : url.hostname || 'Current tab') : 'Browser page';
       const settings = await loadSettings({ strict: true });
       if (!settings.enabled) {
-        hint = 'Enable Hare in Settings to control playback.';
+        nextSiteAction = 'enable';
+        nextHint = 'Enable Hare to control playback.';
         throw new Error('Hare is turned off');
       }
-      if (!/^(https?|file):/.test(tabUrl)) {
-        hint = 'Open a regular webpage with video or audio.';
+      if (!url || !/^(https?|file):/.test(tabUrl)) {
+        nextHint = 'Open a regular webpage with video or audio.';
         throw new Error('Hare cannot run on this browser page');
       }
-      if (isBlacklisted(settings.blacklist, new URL(tabUrl).hostname)) {
-        hint = 'Remove this site from Excluded sites in Settings to use Hare here.';
+      if (isBlacklisted(settings.blacklist, url.hostname)) {
+        const remaining = removeExactSiteExclusions(settings.blacklist, url.hostname);
+        nextSiteAction = isBlacklisted(remaining, url.hostname) ? 'settings' : 'include';
+        nextHint = nextSiteAction === 'include'
+          ? 'Use Hare on this site to restore playback controls, including embedded players.'
+          : 'A broader domain or regular expression excludes this site. Edit Excluded sites in Settings to use Hare here.';
         throw new Error('This site is excluded');
       }
-      if (tabId == null) throw new Error(MESSAGES.NO_ACTIVE_TAB);
+      if (url.hostname && /^https?:$/.test(url.protocol)) nextSiteAction = 'exclude';
       const frames = await getTabMedia(tabId);
       const result = aggregateStatus(frames.map(frame => frame.status));
       if (!result.hasVideos) {
-        hint = frames.length ? 'Start a video, or enable audio control in Settings.' : 'Reload this tab to connect Hare. For local files, enable file access in extension details.';
+        nextHint = frames.length ? 'Start a video, or enable audio control in Settings.' : 'Reload this tab to connect Hare. For local files, enable file access in extension details.';
         throw new Error('No media detected');
       }
       status = result;
@@ -68,6 +82,8 @@
       status = null;
       error = e instanceof Error ? e.message : 'Could not connect to this tab';
     } finally {
+      hint = nextHint;
+      siteAction = nextSiteAction;
       loading = false;
     }
   }
@@ -100,16 +116,45 @@
   function resetSpeed() { void command({ type: 'RESET_SPEED' }, SPEED.DEFAULT); }
   function openOptions() { void browser.runtime.openOptionsPage(); }
 
+  async function changeSiteAccess() {
+    if (busy || !siteAction) return;
+    const action = siteAction;
+    const actionUrl = tabUrl;
+    if (action === 'settings') { openOptions(); return; }
+    busy = true;
+    try {
+      await statusRequest;
+      // Read immediately before writing so unrelated settings changed elsewhere survive.
+      const settings = await loadSettings({ strict: true });
+      if (action === 'enable') settings.enabled = true;
+      else {
+        const tab = await browser.tabs.get(tabId!);
+        const url = new URL(tab.url ?? '');
+        if (url.href !== actionUrl) throw new Error('The tab navigated. Try again on the new page.');
+        const host = url.hostname.toLowerCase().replace(/\.$/, '');
+        if (!host || !/^https?:$/.test(url.protocol)) throw new Error('This page cannot be excluded by domain.');
+        if (action === 'include') {
+          const remaining = removeExactSiteExclusions(settings.blacklist, host);
+          if (isBlacklisted(remaining, host)) throw new Error('A broader rule excludes this site. Edit Excluded sites in Settings.');
+          settings.blacklist = remaining;
+        } else if (!isBlacklisted(settings.blacklist, host)) {
+          settings.blacklist += `${settings.blacklist && !settings.blacklist.endsWith('\n') ? '\n' : ''}${host}`;
+        }
+      }
+      await saveSettings(settings);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not save site settings. Try again.');
+    } finally {
+      await loadStatus();
+      busy = false;
+    }
+  }
+
   onMount(() => {
     void (async () => {
       try {
         const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
         tabId = tab?.id ?? null;
-        tabUrl = tab?.url ?? '';
-        try {
-          const url = new URL(tabUrl);
-          siteLabel = url.protocol === 'file:' ? 'Local file' : url.hostname || 'Current tab';
-        } catch { siteLabel = 'Current tab'; }
         await loadStatus();
       } catch { error = 'Could not find the active tab'; loading = false; }
     })();
@@ -151,7 +196,9 @@
       <div class="no-videos">
         <p>{error}</p>
         <p class="hint">{hint}</p>
-        <button class="settings-btn" onclick={loadStatus}>Try again</button>
+        {#if !siteAction || siteAction === 'exclude'}
+          <button class="settings-btn" disabled={busy} onclick={loadStatus}>Try again</button>
+        {/if}
       </div>
     {:else if status}
       <div class="speed-section">
@@ -194,6 +241,14 @@
         {/if}
       </div>
     {/if}
+    {#if siteAction && (!syncExpanded || siteAction !== 'exclude')}
+      <div class="site-controls">
+        <button class="settings-btn" disabled={busy} onclick={changeSiteAccess}
+          title={siteAction === 'exclude' ? `Exclude ${siteLabel} and its subdomains, including embedded players` : undefined}>
+          {siteAction === 'enable' ? 'Enable Hare' : siteAction === 'include' ? 'Use Hare on this site' : siteAction === 'exclude' ? 'Exclude this site' : 'Edit site exclusions'}
+        </button>
+      </div>
+    {/if}
   </main>
 
   <SyncMode onExpandedChange={(expanded) => { syncExpanded = expanded; }} />
@@ -216,7 +271,7 @@
     max-height: 600px;
     overflow-y: auto;
     font-family:
-      "DM Sans",
+      system-ui,
       -apple-system,
       BlinkMacSystemFont,
       "Segoe UI",
@@ -224,7 +279,6 @@
     background: linear-gradient(165deg, #1e1e1e 0%, #1a1a1a 100%);
     color: #f0f0f0;
     position: relative;
-    /* Hide scrollbar but allow scrolling */
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
   }
@@ -425,6 +479,8 @@
   .compact .speed-section { gap: 8px; }
 
   .controller-toggle { background: #ffffff06; border-color: #ffffff24; border-radius: 6px; color: #b9c5d6; font-size: 12px; }
+  .site-controls { margin-top: 14px; }
+  .site-controls .settings-btn { font-size: 12px; }
 
   .toast {
     position: fixed;

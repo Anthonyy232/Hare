@@ -1,26 +1,12 @@
 {
+  "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": false,
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "lib": [
-      "ESNext",
-      "DOM",
-      "DOM.Iterable"
-    ],
     "types": [],
-    "paths": {
-      "~/*": [
-        "./*"
-      ]
-    }
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": [
     ".wxt/wxt.d.ts",

@@ -28,9 +28,6 @@ export interface ControllerPosition {
   method: 'prepend' | 'append' | 'before' | 'after';
 }
 
-/**
- * Interface for site-specific logic to handle custom player structures.
- */
 export interface SiteHandler {
   matches(): boolean;
 
@@ -39,7 +36,6 @@ export interface SiteHandler {
     video: HTMLVideoElement
   ): ControllerPosition | null;
 
-  /** Identifies videos that should be ignored, such as tiny previews or hidden ads. */
   shouldIgnoreVideo(video: HTMLVideoElement): boolean;
 }
 
@@ -47,7 +43,6 @@ export type MessageType =
   | 'GET_PAGE_CONTEXT'
   | 'GET_STATUS'
   | 'SET_SPEED'
-  | 'ADJUST_SPEED'
   | 'RESET_SPEED'
   | 'TOGGLE_DISPLAY'
   // Sync coordination (background <-> content)
@@ -65,6 +60,7 @@ export type MessageType =
   | 'START_SYNC'
   | 'STOP_SYNC'
   | 'NUDGE_OFFSET'
+  | 'SET_NUDGE_STEP'
   | 'GET_SYNC_STATUS';
 
 export interface HareMessage {

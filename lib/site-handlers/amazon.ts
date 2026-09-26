@@ -30,9 +30,6 @@ export class AmazonHandler extends BaseSiteHandler {
     return null;
   }
 
-  /**
-   * Ignores product previews and gallery clips found across the Amazon ecosystem.
-   */
   shouldIgnoreVideo(video: HTMLVideoElement): boolean {
     if (
       video.offsetWidth < MEDIA_VALIDATION.MIN_WIDTH * 2 ||
@@ -41,7 +38,7 @@ export class AmazonHandler extends BaseSiteHandler {
       return true;
     }
 
-    if (video.closest('.a-image-wrapper') || video.closest('.imageBlock')) {
+    if (video.closest('.a-image-wrapper, .imageBlock')) {
       return true;
     }
 

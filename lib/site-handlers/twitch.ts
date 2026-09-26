@@ -28,14 +28,9 @@ export class TwitchHandler extends BaseSiteHandler {
         return null;
     }
 
-    /**
-     * Filters out channel preview cards and offline indicator loops.
-     */
     shouldIgnoreVideo(video: HTMLVideoElement): boolean {
         if (
-            video.closest('[data-a-target="preview-card-image-link"]') ||
-            video.closest('.preview-card-thumbnail') ||
-            video.closest('.channel-status-indicator--offline')
+            video.closest('[data-a-target="preview-card-image-link"], .preview-card-thumbnail, .channel-status-indicator--offline')
         ) {
             return true;
         }

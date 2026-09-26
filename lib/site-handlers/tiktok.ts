@@ -28,13 +28,9 @@ export class TikTokHandler extends BaseSiteHandler {
         return null;
     }
 
-    /**
-     * Ignores sidebar recommendations and muted preview loops in the feed.
-     */
     shouldIgnoreVideo(video: HTMLVideoElement): boolean {
         if (
-            video.closest('[data-e2e="recommend-list-item"]') ||
-            video.closest('[data-e2e="user-card"]')
+            video.closest('[data-e2e="recommend-list-item"], [data-e2e="user-card"]')
         ) {
             return true;
         }

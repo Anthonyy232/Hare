@@ -3,7 +3,6 @@
  * Uses prototype methods directly to avoid site tampering.
  */
 
-// We cache these at the earliest possible moment
 const mediaProto = HTMLMediaElement.prototype;
 
 const currentTimeDescriptor = Object.getOwnPropertyDescriptor(mediaProto, 'currentTime')!;
