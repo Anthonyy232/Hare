@@ -171,7 +171,7 @@ npm audit
 
 Browser tests use a local HTTP fixture with generated silent PCM media and a synthetic VP8 video, require no website accounts or external media downloads, and close their browser profiles after each test. They cover media events, seeking, editing, shadow DOMs, iframes, settings persistence/failure, fullscreen, picture-in-picture, sync, and browser/service-worker restart. Popup/options accessibility checks use axe. Reports and screenshots are written to `playwright-report/` and `test-results/`. Native Firefox testing has [separate instructions](tests/native/README.md).
 
-Site-specific selectors and DRM restrictions still require checks against the actual services. Browser-native video fullscreen and picture-in-picture may not display a custom DOM overlay; keyboard or popup control and player-container fullscreen are covered. See the [completed simplification audit](docs/SIMPLIFICATION-AUDIT.md), [the review notes](docs/REVIEW.md), [earlier improvements](docs/IMPROVEMENTS-2026-09-25.md), and [VM verification results](docs/VM-VERIFICATION-2026-09-25.md) for fixes, evidence, and scope.
+Site-specific selectors and DRM restrictions still require checks against the actual services. Browser-native video fullscreen and picture-in-picture may not display a custom DOM overlay; keyboard or popup control and player-container fullscreen are covered.
 
 ## Contributing
 
