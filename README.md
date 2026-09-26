@@ -25,7 +25,7 @@ Control HTML5 video/audio playback speed with keyboard shortcuts
 | Browser | Support     | Manifest |
 | ------- | ----------- | -------- |
 | Chrome / Chromium | Automated extension tests | V3 |
-| Firefox | Build verified; manual playback checks recommended | V3 |
+| Firefox | Automated native Firefox tests | V3 |
 | Edge | Uses the Chromium build; not separately tested | V3 |
 
 Safari packaging and playback are not validated by this repository.
@@ -58,6 +58,8 @@ Type a complete speed in the popup and press Enter or leave the field to apply i
 
 Presets highlight the actual playback speed. No preset is selected for a custom rate or when players have different speeds. Choosing a speed button replaces an unfinished custom value. The popup identifies the current site and provides Settings in its header.
 
+Use **Exclude this site** in the popup to turn off Hare for the current hostname and its subdomains, including embedded players. **Use Hare on this site** removes that hostname's exclusion and restores controls immediately. Broader domain or regular expression rules stay intact and can be edited in Settings. If Hare is turned off globally, the popup offers **Enable Hare**.
+
 To use Sync Mode, load media in two different tabs and cue each to the moment you want to pair. Select tab A, then tab B. A supplies the playback speed and play/pause state; B retains its starting offset. Use the offset buttons to fine-tune B. Closing a paired tab, replacing its media source, or disabling Hare ends the session. Sync is for one primary loaded media element per tab, preferring playing media and then the larger player.
 
 Use **Swap A / B** before starting to change their roles. Deselect a selected tab before choosing a different pair.
@@ -65,6 +67,7 @@ Use **Swap A / B** before starting to change their roles. Deselect a selected ta
 ### Configuration
 
 - **Keyboard Shortcuts**: Customize in Settings
+- **Shortcut Values**: Press Enter to apply a numeric edit, or Escape to cancel it before saving
 - **Excluded sites**: Add domains to exclude; exclusions also apply to embedded players on those pages (defaults include Instagram, Twitter/X, Imgur, Teams, and Google Meet)
 - **Controller Appearance**: Adjust opacity and button size with a live preview of the resting and expanded controller; save to apply changes to videos
 - **Audio Control**: Enable/disable audio speed control
@@ -144,7 +147,7 @@ Build outputs:
 
 ### Firefox source review
 
-Version 1.6.0 was built on Windows 11 x64 with Node.js 24.16.0 and npm 11.13.0. Install the matching Node.js distribution from [nodejs.org](https://nodejs.org/en/download). Dependencies and build tools are pinned by `package-lock.json`.
+Version 1.7.0 was verified on Windows 11 x64 and Ubuntu with Node.js 24.16.0 and npm 11.13.0. Release packages are built by GitHub Actions on Ubuntu with Node.js 24. Install Node.js from [nodejs.org](https://nodejs.org/en/download). Dependencies and build tools are pinned by `package-lock.json`.
 
 Extract the matching source ZIP into a fresh directory, open a terminal in that directory, and run:
 
@@ -155,7 +158,7 @@ npm run build:firefox
 
 Compare all files under `.output/firefox-mv3/` with the contents of the submitted Firefox extension ZIP. Run `npm run zip:firefox` to package that output. ZIP container timestamps can differ; the extension files must match. Dependency installation requires access to the public npm registry. The build runs locally and needs no credentials or private dependencies.
 
-Submit `.output/hare-1.6.0-firefox.zip` as the add-on and `.output/hare-1.6.0-sources.zip` as its matching source archive. See Mozilla's [source submission instructions](https://extensionworkshop.com/documentation/publish/source-code-submission/).
+Submit `.output/hare-1.7.0-firefox.zip` as the add-on and `.output/hare-1.7.0-sources.zip` as its matching source archive. See Mozilla's [source submission instructions](https://extensionworkshop.com/documentation/publish/source-code-submission/).
 
 ### Verification
 
@@ -166,9 +169,9 @@ npm run test:e2e          # Builds Chrome, then tests a separate temporary Chrom
 npm audit
 ```
 
-Browser tests use a local HTTP fixture with generated silent PCM media, require no website accounts or external media downloads, and close their browser profiles after each test. They cover media events, seeking, editing, shadow DOMs, iframes, settings persistence/failure, fullscreen, and sync. Popup/options accessibility checks use axe. Reports and screenshots are written to `playwright-report/` and `test-results/`.
+Browser tests use a local HTTP fixture with generated silent PCM media and a synthetic VP8 video, require no website accounts or external media downloads, and close their browser profiles after each test. They cover media events, seeking, editing, shadow DOMs, iframes, settings persistence/failure, fullscreen, picture-in-picture, sync, and browser/service-worker restart. Popup/options accessibility checks use axe. Reports and screenshots are written to `playwright-report/` and `test-results/`. Native Firefox testing has [separate instructions](tests/native/README.md).
 
-Site-specific selectors and DRM restrictions still require checks against the actual services. Browser-native video fullscreen and picture-in-picture may not display a custom DOM overlay; player-container fullscreen is covered. See [the review notes](docs/REVIEW.md) for the issues fixed and verification scope.
+Site-specific selectors and DRM restrictions still require checks against the actual services. Browser-native video fullscreen and picture-in-picture may not display a custom DOM overlay; keyboard or popup control and player-container fullscreen are covered. See the [completed simplification audit](docs/SIMPLIFICATION-AUDIT.md), [the review notes](docs/REVIEW.md), [earlier improvements](docs/IMPROVEMENTS-2026-09-25.md), and [VM verification results](docs/VM-VERIFICATION-2026-09-25.md) for fixes, evidence, and scope.
 
 ## Contributing
 

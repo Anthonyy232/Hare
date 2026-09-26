@@ -21,16 +21,11 @@
     onSpeedChange(Math.min(SPEED.MAX, speed + SPEED.STEP));
   }
 
-  /**
-   * Updates state during typing without clamping to allow free-form input.
-   */
+  // Allow incomplete input while typing; clamp only when committed.
   function handleInput(event: Event) {
     draft = (event.target as HTMLInputElement).value;
   }
 
-  /**
-   * Enforces min/max boundaries when the user finishes editing.
-   */
   function commit() {
     if (!editing) return;
     editing = false;

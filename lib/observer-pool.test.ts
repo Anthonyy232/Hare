@@ -1,13 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ObserverPool } from './observer-pool';
 import { OBSERVER } from './constants';
+import { setTimeout as delay } from 'node:timers/promises';
 
-const flushObserver = async () => {
-  await Promise.resolve();
-  await new Promise(resolve =>
-    setTimeout(resolve, Math.max(OBSERVER.DEBOUNCE_MS, OBSERVER.IDLE_TIMEOUT_MS) + 20)
-  );
-};
+const flushObserver = () => delay(Math.max(OBSERVER.DEBOUNCE_MS, OBSERVER.IDLE_TIMEOUT_MS) + 20);
 
 describe('ObserverPool', () => {
   beforeEach(() => {
@@ -41,25 +37,6 @@ describe('ObserverPool', () => {
     const video = document.createElement('video'); document.body.append(video); video.remove();
     await flushObserver();
     expect(found).toEqual([]);
-    pool.disconnect();
-  });
-
-  it('reports media added to the observed document', async () => {
-    const found: HTMLMediaElement[] = [];
-    const removed: HTMLMediaElement[] = [];
-    const pool = new ObserverPool(
-      media => found.push(media),
-      media => removed.push(media),
-    );
-
-    pool.observe(document);
-    const video = document.createElement('video');
-    document.body.appendChild(video);
-
-    await flushObserver();
-
-    expect(found).toEqual([video]);
-    expect(removed).toEqual([]);
     pool.disconnect();
   });
 

@@ -12,7 +12,7 @@
     validateBlacklist,
   } from "../../lib/settings";
   import { CONTROLLER, UI } from "../../lib/constants";
-  import type { Settings, KeyBinding } from "../../lib/types";
+  import type { Settings } from "../../lib/types";
   import { MESSAGES } from "../../lib/messages";
 
   let settings: Settings | null = $state(null);
@@ -81,80 +81,14 @@
     }
   }
 
-  async function discardChanges() {
-    await load();
-  }
-
-  function handleBindingsChange(bindings: KeyBinding[]) {
-    if (settings) {
-      settings = { ...settings, keyBindings: bindings };
-      saved = false;
-    }
-  }
-
-  function handleBlacklistChange(blacklist: string) {
-    if (settings) {
-      settings = { ...settings, blacklist };
-      saved = false;
-    }
-  }
-
-  function handleEnabledChange(event: Event) {
-    if (settings) {
-      settings = {
-        ...settings,
-        enabled: (event.target as HTMLInputElement).checked,
-      };
-      saved = false;
-    }
-  }
-
-  function handleAudioChange(event: Event) {
-    if (settings) {
-      settings = {
-        ...settings,
-        enableAudio: (event.target as HTMLInputElement).checked,
-      };
-      saved = false;
-    }
-  }
-
-  function handleStartHiddenChange(event: Event) {
-    if (settings) {
-      settings = {
-        ...settings,
-        startHidden: (event.target as HTMLInputElement).checked,
-      };
-      saved = false;
-    }
-  }
-
-  function handleOpacityChange(event: Event) {
-    if (settings) {
-      settings = {
-        ...settings,
-        controllerOpacity: parseFloat((event.target as HTMLInputElement).value),
-      };
-      saved = false;
-    }
-  }
-
-  function handleSizeChange(event: Event) {
-    if (settings) {
-      settings = {
-        ...settings,
-        controllerButtonSize: parseInt(
-          (event.target as HTMLInputElement).value,
-        ),
-      };
-      saved = false;
-    }
+  function updateSettings(patch: Partial<Settings>) {
+    if (!settings) return;
+    settings = { ...settings, ...patch };
+    saved = false;
   }
 
   onMount(() => {
-    // Arm the watch only after the initial load resolves. Otherwise an
-    // external storage change that races with load() can clobber `settings`
-    // (or trigger a spurious conflict warning) before we've shown the form.
+    // Watch after loading so a racing storage event cannot overwrite the initial form.
     (async () => {
       await load();
       if (disposed) return;
@@ -222,7 +156,7 @@
               <input
                 type="checkbox"
                 checked={settings.enabled}
-                onchange={handleEnabledChange}
+                onchange={(event) => updateSettings({ enabled: event.currentTarget.checked })}
               />
               <span class="toggle-slider"></span>
             </div>
@@ -239,7 +173,7 @@
               <input
                 type="checkbox"
                 checked={settings.enableAudio}
-                onchange={handleAudioChange}
+                onchange={(event) => updateSettings({ enableAudio: event.currentTarget.checked })}
               />
               <span class="toggle-slider"></span>
             </div>
@@ -256,7 +190,7 @@
               <input
                 type="checkbox"
                 checked={settings.startHidden}
-                onchange={handleStartHiddenChange}
+                onchange={(event) => updateSettings({ startHidden: event.currentTarget.checked })}
               />
               <span class="toggle-slider"></span>
             </div>
@@ -282,9 +216,9 @@
                 id="opacity"
                 min={CONTROLLER.MIN_OPACITY}
                 max={CONTROLLER.MAX_OPACITY}
-                step="0.1"
+                step="0.01"
                 value={settings.controllerOpacity}
-                oninput={handleOpacityChange}
+                oninput={(event) => updateSettings({ controllerOpacity: event.currentTarget.valueAsNumber })}
               />
               <span class="slider-value"
                 >{Math.round(settings.controllerOpacity * 100)}%</span
@@ -305,7 +239,7 @@
                 max={CONTROLLER.MAX_BUTTON_SIZE}
                 step="1"
                 value={settings.controllerButtonSize}
-                oninput={handleSizeChange}
+                oninput={(event) => updateSettings({ controllerButtonSize: event.currentTarget.valueAsNumber })}
               />
               <span class="slider-value">{settings.controllerButtonSize}px</span
               >
@@ -322,7 +256,7 @@
         </div>
         <KeybindEditor
           bindings={settings.keyBindings}
-          onBindingsChange={handleBindingsChange}
+          onBindingsChange={(keyBindings) => updateSettings({ keyBindings })}
           onDraftChange={(dirty) => { hasDraftInput = dirty; if (dirty) saved = false; }}
         />
       </section>
@@ -334,7 +268,7 @@
         </div>
         <BlacklistEditor
           blacklist={settings.blacklist}
-          onBlacklistChange={handleBlacklistChange}
+          onBlacklistChange={(blacklist) => updateSettings({ blacklist })}
         />
       </section>
       </fieldset>
@@ -345,7 +279,7 @@
             <strong>Warning:</strong>
             {MESSAGES.SETTINGS_CONFLICT}
           </div>
-          <button class="conflict-discard" onclick={discardChanges}>
+          <button class="conflict-discard" onclick={load}>
             Discard local changes
           </button>
         </div>
@@ -401,7 +335,7 @@
     margin: 0 auto;
     padding: 32px 24px 100px;
     font-family:
-      "DM Sans",
+      system-ui,
       -apple-system,
       BlinkMacSystemFont,
       "Segoe UI",
@@ -474,7 +408,6 @@
     backdrop-filter: blur(10px);
   }
 
-  /* Make grid cards the same height */
   .settings-grid .card {
     margin-bottom: 0;
     display: flex;

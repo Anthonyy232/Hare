@@ -28,9 +28,6 @@ export class TwitterHandler extends BaseSiteHandler {
         return null;
     }
 
-    /**
-     * Filters out header decorations and small format promoted videos.
-     */
     shouldIgnoreVideo(video: HTMLVideoElement): boolean {
         if (video.closest('[data-testid="UserProfileHeader_Items"]')) return true;
 

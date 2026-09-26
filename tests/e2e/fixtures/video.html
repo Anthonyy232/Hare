@@ -19,6 +19,7 @@
     <div id="shadow-host"></div>
     <script>
         const params = new URLSearchParams(location.search);
+        if (params.has('visual')) document.getElementById('test-video').src = '/motion.webm';
         if (params.has('empty') || params.has('frame')) document.getElementById('player').remove();
         if (params.has('frame')) {
           const frame = document.createElement('iframe');
