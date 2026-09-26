@@ -29,15 +29,9 @@ export class CrunchyrollHandler extends BaseSiteHandler {
         return null;
     }
 
-    /**
-     * Filters out hero carousels and browse card previews common in the CR interface.
-     */
     shouldIgnoreVideo(video: HTMLVideoElement): boolean {
         if (
-            video.closest('[data-testid="trailer-player"]') ||
-            video.closest('.hero-carousel') ||
-            video.closest('[class*="Hero"]') ||
-            video.closest('.browse-card')
+            video.closest('[data-testid="trailer-player"], .hero-carousel, [class*="Hero"], .browse-card')
         ) {
             return true;
         }

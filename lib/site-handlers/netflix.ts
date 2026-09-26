@@ -24,21 +24,11 @@ export class NetflixHandler extends BaseSiteHandler {
     return null;
   }
 
-  /**
-   * Filters out billboard ads, hover previews, and 'More Like This' thumbnails
-   * to ensure the controller only attaches to the primary player.
-   */
   shouldIgnoreVideo(video: HTMLVideoElement): boolean {
     if (
-      video.closest('.billboard-row') ||
-      video.closest('.jawBone') ||
-      video.closest('[data-uia="billboard"]') ||
-      video.closest('[data-uia="hero-billboard"]') ||
+      video.closest('.billboard-row, .jawBone, [data-uia="billboard"], [data-uia="hero-billboard"]') ||
       video.classList.contains('preview-video') ||
-      video.closest('.moreLikeThis') ||
-      video.closest('[data-uia="more-like-this"]') ||
-      video.closest('.title-card') ||
-      video.closest('.slider-item')
+      video.closest('.moreLikeThis, [data-uia="more-like-this"], .title-card, .slider-item')
     ) {
       return true;
     }

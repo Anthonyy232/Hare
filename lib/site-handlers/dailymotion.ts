@@ -27,15 +27,9 @@ export class DailymotionHandler extends BaseSiteHandler {
         return null;
     }
 
-    /**
-     * Filters out sidebar suggestions and ad-related containers.
-     */
     shouldIgnoreVideo(video: HTMLVideoElement): boolean {
         if (
-            video.closest('.sidebar') ||
-            video.closest('.video__suggestion') ||
-            video.closest('.ad-container') ||
-            video.closest('[class*="ad-"]')
+            video.closest('.sidebar, .video__suggestion, .ad-container, [class*="ad-"]')
         ) {
             return true;
         }

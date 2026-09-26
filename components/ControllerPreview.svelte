@@ -10,7 +10,7 @@
     const shadow = node.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     style.textContent = controllerCSS + `
-      :host { position: static; z-index: auto; pointer-events: none !important; }
+      :host { position: static; z-index: auto; pointer-events: none !important; max-width: 100%; --hare-max-width: 100%; }
       .hare-controller, .hare-controller:hover { opacity: var(--preview-opacity); }
       .hare-controls { display: var(--preview-controls) !important; }
     `;
@@ -63,6 +63,6 @@
   button { padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: #aaa; font-size: 11px; cursor: pointer; }
   button[aria-pressed="true"] { background: #93c5fd26; color: #c9e0fc; }
   .preview-frame { min-height: 100px; display: flex; align-items: center; padding: 16px; overflow-x: auto; border-radius: 8px; border: 1px solid #ffffff12; background: radial-gradient(ellipse at 85% 90%, #34505f, transparent 75%), linear-gradient(135deg, #222e3c, #1a2732); }
-  .preview-overlay { flex-shrink: 0; }
+  .preview-overlay { min-width: 0; max-width: 100%; }
   p { margin: 8px 0 0; font-size: 11px; line-height: 1.5; color: #aaa; }
 </style>

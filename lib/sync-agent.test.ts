@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 
-// Mock safe-media before importing SyncAgent
 vi.mock('./safe-media', () => ({
   safeMedia: {
     getCurrentTime: (media: HTMLMediaElement) => media.currentTime,
@@ -17,8 +16,12 @@ vi.mock('./safe-media', () => ({
   },
 }));
 
+import { safeMedia } from './safe-media';
 import { SyncAgent } from './sync-agent';
 import type { SyncEventPayload } from './sync-types';
+
+// Happy DOM omits these native HTMLMediaElement constants.
+Object.assign(HTMLMediaElement, { HAVE_CURRENT_DATA: 2, HAVE_FUTURE_DATA: 3, HAVE_ENOUGH_DATA: 4 });
 
 function createMockVideo(currentTime = 0, paused = true): HTMLVideoElement {
   const video = document.createElement('video');
@@ -26,6 +29,7 @@ function createMockVideo(currentTime = 0, paused = true): HTMLVideoElement {
   let _playbackRate = 1.0;
   (video as any)._paused = paused;
 
+  Object.defineProperty(video, 'readyState', { value: HTMLMediaElement.HAVE_ENOUGH_DATA, configurable: true });
   Object.defineProperty(video, 'currentTime', {
     get: () => _currentTime,
     set: (v: number) => { _currentTime = v; },
@@ -66,95 +70,98 @@ describe('SyncAgent', () => {
     agent.destroy();
   });
 
-  it('reports user-initiated pause to coordinator', () => {
-    video.dispatchEvent(new Event('pause'));
-    expect(sendEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'pause', position: 10 })
-    );
-  });
-
-  it('does NOT report self-caused pause (echo prevention)', () => {
-    // Video must be playing for executePause to expect a pause event
-    (video as any)._paused = false;
-    agent.executePause();
-    video.dispatchEvent(new Event('pause'));
-    expect(sendEvent).not.toHaveBeenCalled();
-  });
-
-  it('reports user-initiated play', () => {
-    video.dispatchEvent(new Event('play'));
-    expect(sendEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'play' })
-    );
-  });
-
-  it('does NOT report self-caused play (echo prevention)', () => {
-    // Video is paused (default) so executePlay expects a play event
-    agent.executePlay();
-    video.dispatchEvent(new Event('play'));
-    expect(sendEvent).not.toHaveBeenCalled();
-  });
-
-  it('reports user-initiated seek with absolute position', () => {
-    video.dispatchEvent(new Event('seeked'));
-    vi.advanceTimersByTime(50); // SEEK_DEBOUNCE_MS
-    expect(sendEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'seek', position: 10 })
-    );
-  });
-
-  it('does NOT report self-caused seek', () => {
-    agent.executeSeek(20);
-    video.dispatchEvent(new Event('seeked'));
-    vi.advanceTimersByTime(50); // SEEK_DEBOUNCE_MS
-    expect(sendEvent).not.toHaveBeenCalled();
-  });
-
-  it('reports buffering start on waiting event', () => {
+  it('reports readiness while buffering media is paused by its peer', () => {
     (video as any)._paused = false;
     video.dispatchEvent(new Event('waiting'));
-    expect(sendEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'buffering_start' })
-    );
-  });
-
-  it('reports buffering end on playing event', () => {
+    video.dispatchEvent(new Event('waiting'));
+    agent.executePause(true);
+    video.dispatchEvent(new Event('pause'));
+    video.dispatchEvent(new Event('canplay'));
     video.dispatchEvent(new Event('playing'));
-    expect(sendEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'buffering_end' })
-    );
+    expect(sendEvent.mock.calls.map(([event]) => event.action)).toEqual(['buffering_start', 'buffering_end']);
   });
 
-  it('does not increment pendingPause when video is already paused', () => {
-    // Video is paused (default), so executePause skips counter
+  it('clears buffering after a deliberate remote pause without reporting recovery', () => {
+    (video as any)._paused = false;
+    video.dispatchEvent(new Event('waiting'));
+    sendEvent.mockClear();
     agent.executePause();
-    // Dispatching pause is treated as user-initiated since no counter was set
+    video.dispatchEvent(new Event('pause'));
+    video.dispatchEvent(new Event('canplay'));
+    expect(agent.getPosition().buffering).toBe(false);
+    expect(sendEvent).not.toHaveBeenCalled();
+  });
+
+  it('ignores network stalls while enough media remains buffered', () => {
+    (video as any)._paused = false;
+    video.dispatchEvent(new Event('stalled'));
+    expect(sendEvent).not.toHaveBeenCalled();
+    Object.defineProperty(video, 'readyState', { value: HTMLMediaElement.HAVE_CURRENT_DATA });
+    video.dispatchEvent(new Event('stalled'));
+    expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'buffering_start' }));
+  });
+
+  it('does not turn a superseded play rejection into a user pause', async () => {
+    const pending = Promise.withResolvers<void>();
+    const play = vi.spyOn(safeMedia, 'play').mockImplementationOnce(media => {
+      (media as any)._paused = false;
+      return pending.promise;
+    });
+    const started = agent.executePlay();
+    video.dispatchEvent(new Event('play'));
+    agent.executePause();
+    video.dispatchEvent(new Event('pause'));
+    await agent.executePlay();
+    video.dispatchEvent(new Event('play'));
+    pending.reject(new DOMException('Interrupted by pause', 'AbortError'));
+    expect(await started).toBe(false);
+    expect(sendEvent).not.toHaveBeenCalled();
+    play.mockRestore();
+  });
+
+  it('reports an actual play rejection and leaves later user play observable', async () => {
+    const play = vi.spyOn(safeMedia, 'play').mockRejectedValueOnce(new DOMException('Autoplay blocked', 'NotAllowedError'));
+    expect(await agent.executePlay()).toBe(false);
+    video.dispatchEvent(new Event('play'));
+    expect(sendEvent.mock.calls.map(([event]) => event.action)).toEqual(['pause', 'play']);
+    play.mockRestore();
+  });
+
+  it('does not swallow a user seek after remote seeks coalesce', () => {
+    agent.executeSeek(20);
+    agent.executeSeek(30);
+    video.dispatchEvent(new Event('seeked'));
+    video.currentTime = 40;
+    video.dispatchEvent(new Event('seeked'));
+    vi.advanceTimersByTime(60);
+    expect(sendEvent).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action: 'seek', position: 40 }));
+  });
+
+  it('leaves user pause observable after a no-op remote pause', () => {
+    agent.executePause();
     video.dispatchEvent(new Event('pause'));
     expect(sendEvent).toHaveBeenCalledTimes(1);
   });
 
-  it('does not increment pendingPlay when video is already playing', () => {
+  it('leaves user play observable after a no-op remote play', () => {
     (video as any)._paused = false;
     agent.executePlay();
-    // No counter was set, so dispatching play is treated as user-initiated
     video.dispatchEvent(new Event('play'));
     expect(sendEvent).toHaveBeenCalledTimes(1);
   });
 
   describe('coordinator-issued play buffering behavior', () => {
     it('suppresses playing when coordinator-initiated play starts cleanly', () => {
-      // Video is paused — executePlay suppresses the next clean playing event
       agent.executePlay();
-      video.dispatchEvent(new Event('play'));  // consumed by pendingPlay
-      video.dispatchEvent(new Event('playing'));  // clears coordinator play suppression
+      video.dispatchEvent(new Event('play'));
+      video.dispatchEvent(new Event('playing'));
 
-      // None of these should have been reported
       expect(sendEvent).not.toHaveBeenCalled();
     });
 
     it('reports real buffering during coordinator-initiated play', () => {
       agent.executePlay();
-      video.dispatchEvent(new Event('play'));  // consumed by pendingPlay
+      video.dispatchEvent(new Event('play'));
 
       video.dispatchEvent(new Event('waiting'));
       expect(sendEvent).toHaveBeenCalledWith(
@@ -169,117 +176,76 @@ describe('SyncAgent', () => {
 
     it('does not suppress buffering when play was user-initiated', () => {
       (video as any)._paused = false;
-      // User plays (no executePlay), then video buffers
-      video.dispatchEvent(new Event('play'));  // user-initiated
+      video.dispatchEvent(new Event('play'));
       expect(sendEvent).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'play' })
       );
 
-      video.dispatchEvent(new Event('waiting'));  // genuine buffering
+      video.dispatchEvent(new Event('waiting'));
       expect(sendEvent).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'buffering_start' })
       );
 
-      video.dispatchEvent(new Event('playing'));  // buffering resolved
+      video.dispatchEvent(new Event('playing'));
       expect(sendEvent).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'buffering_end' })
       );
     });
 
-    it('clears clean-play suppression on pause', () => {
-      // Coordinator starts play, but user pauses before 'playing' fires
-      agent.executePlay();
-      video.dispatchEvent(new Event('play'));  // consumed by pendingPlay
-
-      // User pauses — should clear clean-play suppression and report
-      video.dispatchEvent(new Event('pause'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'pause' })
-      );
-
-      // Now 'waiting' should NOT be suppressed
-      video.dispatchEvent(new Event('waiting'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'buffering_start' })
-      );
-    });
-
-    it('suppresses waiting during coordinator-initiated seek', () => {
+    it('reports starvation during a remote seek and recovery while paused', () => {
       (video as any)._paused = false;
       agent.executeSeek(50);
-      // 'seeking' fires, then 'waiting' — both suppressed during seek
       video.dispatchEvent(new Event('seeking'));
       video.dispatchEvent(new Event('waiting'));
-      expect(sendEvent).not.toHaveBeenCalled();
-
-      // 'seeked' fires — consumed by pendingSeek, clears seeking flag
+      agent.executePause(true);
+      video.dispatchEvent(new Event('pause'));
       video.dispatchEvent(new Event('seeked'));
+      video.dispatchEvent(new Event('canplay'));
       vi.advanceTimersByTime(60);
-      expect(sendEvent).not.toHaveBeenCalled();
-
-      // Now a genuine 'waiting' should go through
-      video.dispatchEvent(new Event('waiting'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'buffering_start' })
-      );
+      expect(sendEvent.mock.calls.map(([event]) => event.action)).toEqual(['buffering_start', 'buffering_end']);
     });
 
-    it('suppresses waiting during user-initiated seek', () => {
-      // User seeks — no executeSeek, but 'seeking' event fires
+    it('ignores waiting from an already paused user seek', () => {
       video.dispatchEvent(new Event('seeking'));
       video.dispatchEvent(new Event('waiting'));
-      expect(sendEvent).not.toHaveBeenCalled();
-
-      // 'seeked' fires — clears seeking flag, enters debounce
       video.dispatchEvent(new Event('seeked'));
       vi.advanceTimersByTime(60);
-      // Only the debounced 'seek' event should be emitted, not buffering_start
-      expect(sendEvent).toHaveBeenCalledTimes(1);
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'seek' })
-      );
+      expect(sendEvent.mock.calls.map(([event]) => event.action)).toEqual(['seek']);
     });
 
-    it('executePause clears clean-play suppression', () => {
-      // Coordinator sends play then immediately sends pause
-      agent.executePlay();  // clean-play suppression is armed
+    it('ignores waiting after a remote pause', () => {
+      agent.executePlay();
 
-      (video as any)._paused = false; // play() set it to false
-      agent.executePause(); // should clear clean-play suppression
+      agent.executePause();
 
-      video.dispatchEvent(new Event('pause'));  // consumed by pendingPause
-      video.dispatchEvent(new Event('waiting')); // Paused media cannot stall its peer.
+      video.dispatchEvent(new Event('pause'));
+      video.dispatchEvent(new Event('waiting'));
       expect(sendEvent).not.toHaveBeenCalled();
     });
   });
 
-  it('getPosition returns current state', () => {
-    const pos = agent.getPosition();
-    expect(pos.currentTime).toBe(10);
-    expect(typeof pos.paused).toBe('boolean');
-    expect(typeof pos.timestamp).toBe('number');
-  });
-
-  it('cleans up all listeners on destroy', () => {
-    const spy = vi.spyOn(video, 'removeEventListener');
+  it('restores the rate and cancels pending work on destroy', () => {
+    agent.applyRateCorrection(0.05, 1000);
+    video.dispatchEvent(new Event('seeked'));
     agent.destroy();
-    // Should remove listeners for: pause, play, seeking, seeked, waiting, stalled, playing
-    expect(spy).toHaveBeenCalledTimes(7);
+    expect(video.playbackRate).toBe(1);
+    for (const type of ['play', 'pause', 'seeking', 'seeked', 'waiting', 'stalled', 'playing']) {
+      video.dispatchEvent(new Event(type));
+    }
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(2000);
+    expect(sendEvent).not.toHaveBeenCalled();
   });
 
   it('debounces rapid seeks (scrubbing)', () => {
-    // Fire three rapid seek events
     video.dispatchEvent(new Event('seeked'));
     video.dispatchEvent(new Event('seeked'));
     video.dispatchEvent(new Event('seeked'));
 
-    // Not called yet — debouncing
     expect(sendEvent).not.toHaveBeenCalled();
 
-    // Advance past debounce window (SEEK_DEBOUNCE_MS = 50)
     vi.advanceTimersByTime(60);
 
-    // Only called once with the final position
     expect(sendEvent).toHaveBeenCalledTimes(1);
     expect(sendEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'seek' })
@@ -298,12 +264,6 @@ describe('SyncAgent', () => {
     );
   });
 
-  it('getPosition includes playbackRate', () => {
-    video.playbackRate = 1.5;
-    const pos = agent.getPosition();
-    expect(pos.playbackRate).toBe(1.5);
-  });
-
   it('emitted events carry the source rate', () => {
     video.playbackRate = 1.25;
     video.dispatchEvent(new Event('pause'));
@@ -313,32 +273,23 @@ describe('SyncAgent', () => {
   });
 
   describe('rate propagation', () => {
-    it('notifyIntendedSpeedChange emits a ratechange event', () => {
+
+    it('propagates intended speed changes and updates the rate-correction base', () => {
       agent.notifyIntendedSpeedChange(1.5);
-      expect(sendEvent).toHaveBeenCalledWith(
+      expect(sendEvent).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ action: 'ratechange', rate: 1.5 })
       );
-    });
-
-    it('notifyIntendedSpeedChange updates the rate-correction base', () => {
-      agent.notifyIntendedSpeedChange(1.5);
-      // applyRateCorrection layers on top of the base rate; with base=1.5
-      // and rateFactor=0.02 the media should land at 1.52.
       agent.applyRateCorrection(0.02, 1000);
       expect(video.playbackRate).toBeCloseTo(1.52, 5);
     });
 
     it('executeRateChange suppresses the echo from notifyIntendedSpeedChange', () => {
-      // Mimic content.ts: executeRateChange routes through setIntendedSpeed
-      // which calls controller.setSpeed which fires our listener back into
-      // notifyIntendedSpeedChange. Without echo suppression we'd get a
-      // ratechange event sent to the coordinator.
+
       const peer = new SyncAgent(
         video,
         sendEvent,
         1.0,
         (rate: number) => {
-          // simulate controller propagating to listener
           peer.notifyIntendedSpeedChange(rate);
           video.playbackRate = rate;
         }

@@ -7,9 +7,6 @@ const settingsStorage = storage.defineItem<Settings>(`sync:${STORAGE_KEY}`, {
   defaultValue: DEFAULT_SETTINGS,
 });
 
-/**
- * Normalizes user-provided keybindings, falling back to defaults for invalid entries.
- */
 const DEFAULT_KEY_ACTIONS = new Set(DEFAULT_SETTINGS.keyBindings.map((binding) => binding.action));
 
 function cloneBinding(binding: KeyBinding): KeyBinding {
@@ -146,6 +143,17 @@ export function validateBlacklist(blacklist: string): string[] {
   });
 }
 
+/** Remove only domain rules for this host, preserving broader domains and regex rules. */
+export function removeExactSiteExclusions(blacklist: string, hostname: string): string {
+  const host = hostname.toLowerCase().replace(/\.$/, '');
+  return blacklist.split('\n').filter(line => {
+    try {
+      const rule = parsePattern(line.trim());
+      return rule.type !== 'domain' || rule.pattern !== host;
+    } catch { return true; }
+  }).join('\n');
+}
+
 /**
  * Compiles the blacklist string into an executable array of regex/domain patterns.
  * Results are cached to avoid expensive string parsing during frequent media detection checks.
@@ -168,25 +176,12 @@ function compileBlacklistPatterns(blacklist: string): CompiledPattern[] {
   return cachedPatterns;
 }
 
-/**
- * Performs a broad check against the current hostname to determine if the controller
- * should be active. Supports both exact domain matches and regex patterns.
- */
 export function isBlacklisted(blacklist: string, hostname: string): boolean {
   const patterns = compileBlacklistPatterns(blacklist);
-  if (patterns.length === 0) return false;
 
   const normalizedHost = hostname.toLowerCase().replace(/\.$/, '');
 
-  for (const compiled of patterns) {
-    if (compiled.type === 'regex') {
-      if (compiled.pattern.test(hostname)) return true;
-    } else {
-      if (normalizedHost === compiled.pattern || normalizedHost.endsWith('.' + compiled.pattern)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+  return patterns.some(compiled => compiled.type === 'regex'
+    ? compiled.pattern.test(hostname)
+    : normalizedHost === compiled.pattern || normalizedHost.endsWith('.' + compiled.pattern));
 }

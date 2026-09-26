@@ -14,13 +14,6 @@ import { TwitterHandler } from './twitter';
 import { TikTokHandler } from './tiktok';
 import { DailymotionHandler } from './dailymotion';
 
-/**
- * Site handlers are evaluated in order. The first handler whose `matches()` method
- * returns true will be used. BaseSiteHandler MUST be last as it matches all sites
- * (returns true for all domains) and serves as a catch-all fallback.
- *
- * CRITICAL: Do not reorder without understanding this constraint.
- */
 const handlers: SiteHandler[] = [
   new YouTubeHandler(),
   new NetflixHandler(),
@@ -35,17 +28,10 @@ const handlers: SiteHandler[] = [
   new FacebookHandler(),
   new TwitterHandler(),
   new TikTokHandler(),
-  new BaseSiteHandler(), // MUST be last - catch-all for all domains
 ];
 
-/**
- * Returns the first matching site handler for the current domain.
- * BaseSiteHandler at the end of the array ensures a handler is always found.
- */
+const fallback = new BaseSiteHandler();
+
 export function getSiteHandler(): SiteHandler {
-  for (const handler of handlers) {
-    if (handler.matches()) return handler;
-  }
-  // Unreachable: BaseSiteHandler always matches
-  throw new Error('No site handler matched (this should never happen).');
+  return handlers.find(handler => handler.matches()) ?? fallback;
 }

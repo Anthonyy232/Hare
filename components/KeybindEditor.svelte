@@ -12,7 +12,6 @@
   let { bindings, onBindingsChange, onDraftChange }: Props = $props();
 
   let editingIndex: number | null = $state(null);
-  let listeningForKey = $state(false);
   let errorMessage: string | null = $state(null);
   let errorTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -43,26 +42,19 @@
     errorMessage = null;
     if (errorTimeout) clearTimeout(errorTimeout);
     editingIndex = index;
-    listeningForKey = true;
   }
 
   function clearBinding(index: number) {
-    listeningForKey = false;
     editingIndex = null;
     const newBindings = [...bindings];
     newBindings[index] = { ...newBindings[index], key: "" };
     onBindingsChange(newBindings);
   }
 
-  /**
-   * Captures the next key press to update a binding.
-   * Stops propagation to prevent side effects on other UI elements.
-   */
   function handleKeyDown(event: KeyboardEvent) {
-    if (!listeningForKey || editingIndex === null) return;
+    if (editingIndex === null) return;
 
     if (event.code === 'Tab') {
-      listeningForKey = false;
       editingIndex = null;
       return;
     }
@@ -78,16 +70,12 @@
     errorMessage = null;
 
     if (event.code === "Escape") {
-      listeningForKey = false;
       editingIndex = null;
       return;
     }
 
-    // Backspace / Delete clears the binding (leaving it unbound).
     if (event.code === "Backspace" || event.code === "Delete") {
       clearBinding(editingIndex);
-      listeningForKey = false;
-      editingIndex = null;
       return;
     }
 
@@ -103,7 +91,6 @@
         errorMessage = null;
         errorTimeout = null;
       }, 3000);
-      listeningForKey = false;
       editingIndex = null;
       return;
     }
@@ -115,7 +102,6 @@
     };
 
     onBindingsChange(newBindings);
-    listeningForKey = false;
     editingIndex = null;
   }
 
@@ -124,6 +110,7 @@
     const action = bindings[index].action;
     const max = action === 'rewind' || action === 'advance' ? 86400 : 16;
     const validValue = Math.min(max, Math.max(action === 'reset' ? 0.07 : 0.01, value));
+    if (validValue === bindings[index].value) return;
     const newBindings = [...bindings];
     newBindings[index] = { ...newBindings[index], value: validValue };
     onBindingsChange(newBindings);
@@ -131,8 +118,7 @@
 
   function handleBlur(index: number, event: Event) {
     const target = event.target as HTMLInputElement;
-    const value = parseFloat(target.value);
-    updateValue(index, value);
+    updateValue(index, target.valueAsNumber);
     target.value = bindings[index].value.toString();
     onDraftChange?.(false);
   }
@@ -146,14 +132,6 @@
     onBindingsChange(newBindings);
   }
 
-  /** Intercepts global key events while in "learning" mode to capture any key combination. */
-  $effect(() => {
-    if (listeningForKey) {
-      window.addEventListener("keydown", handleKeyDown, true);
-      return () => window.removeEventListener("keydown", handleKeyDown, true);
-    }
-  });
-
   onDestroy(() => {
     if (errorTimeout) {
       clearTimeout(errorTimeout);
@@ -161,6 +139,8 @@
     }
   });
 </script>
+
+<svelte:window onkeydowncapture={handleKeyDown} />
 
 <div class="keybind-editor">
   <p class="intro">Select a shortcut, then press a single key. Escape cancels; Backspace clears it.</p>
@@ -176,14 +156,14 @@
           <div class="key-cell">
             <button
               class="key-btn"
-              class:listening={editingIndex === index && listeningForKey}
-              class:unbound={!binding.key && !(editingIndex === index && listeningForKey)}
+              class:listening={editingIndex === index}
+              class:unbound={!binding.key && editingIndex !== index}
               onclick={() => startListening(index)}
-              onblur={() => { listeningForKey = false; editingIndex = null; }}
+              onblur={() => { editingIndex = null; }}
               aria-label={`Change shortcut for ${actionLabels[binding.action]}`}
-              aria-pressed={editingIndex === index && listeningForKey}
+              aria-pressed={editingIndex === index}
             >
-              {#if editingIndex === index && listeningForKey}Press a key…
+              {#if editingIndex === index}Press a key…
               {:else if binding.key}{formatKey(binding.key)}
               {:else}Unbound{/if}
             </button>
@@ -201,6 +181,12 @@
                 min={binding.action === 'reset' ? 0.07 : 0.01}
                 max={binding.action === 'rewind' || binding.action === 'advance' ? 86400 : 16}
                 aria-label={`${actionLabels[binding.action]} ${actionValueLabels[binding.action]}`}
+                onkeydown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== 'Escape') return;
+                  event.preventDefault();
+                  if (event.key === 'Escape') event.currentTarget.value = binding.value.toString();
+                  event.currentTarget.blur();
+                }}
                 oninput={() => onDraftChange?.(true)} onblur={(e) => handleBlur(index, e)} />
               <span class="unit" aria-hidden="true">{binding.action === 'rewind' || binding.action === 'advance' ? 'sec' : '×'}</span>
             </div>

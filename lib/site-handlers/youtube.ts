@@ -29,15 +29,12 @@ export class YouTubeHandler extends BaseSiteHandler {
     return null;
   }
 
-  /**
-   * Ignores ads, shorts, and previews to prevent UI clutter on non-primary content.
-   */
   shouldIgnoreVideo(video: HTMLVideoElement): boolean {
-    if (video.closest('.ytp-ad-player-overlay') || video.closest('.ytp-ad-module')) return true;
-    if (video.closest('ytd-shorts') || video.closest('ytd-reel-video-renderer')) return true;
-    if (video.closest('ytmusic-player-bar') || video.closest('.ytmusic-player-bar')) return true;
+    if (video.closest('.ytp-ad-player-overlay, .ytp-ad-module')) return true;
+    if (video.closest('ytd-shorts, ytd-reel-video-renderer')) return true;
+    if (video.closest('ytmusic-player-bar, .ytmusic-player-bar')) return true;
     if (video.closest('#channel-header-container')) return true;
-    if (video.closest('#video-preview') || video.closest('ytd-video-preview')) return true;
+    if (video.closest('#video-preview, ytd-video-preview')) return true;
 
     if (
       video.offsetWidth < MEDIA_VALIDATION.MIN_WIDTH ||
