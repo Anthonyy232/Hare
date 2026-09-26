@@ -3,9 +3,6 @@ import type { ControllerPosition } from '../types';
 import { MEDIA_VALIDATION } from '../constants';
 import { matchesDomains } from './utils';
 
-/**
- * Handler for Max (formerly HBO Max). Supports legacy and new domains.
- */
 export class HBOMaxHandler extends BaseSiteHandler {
     private static readonly DOMAINS = ['max.com', 'hbomax.com'] as const;
 
@@ -31,14 +28,9 @@ export class HBOMaxHandler extends BaseSiteHandler {
         return null;
     }
 
-    /**
-     * Ignores trailer previews and hero promotional videos on the home page.
-     */
     shouldIgnoreVideo(video: HTMLVideoElement): boolean {
         if (
-            video.closest('[data-testid="trailer-player"]') ||
-            video.closest('.HeroPlayer') ||
-            video.closest('[class*="Preview"]')
+            video.closest('[data-testid="trailer-player"], .HeroPlayer, [class*="Preview"]')
         ) {
             return true;
         }

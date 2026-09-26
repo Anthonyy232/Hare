@@ -13,6 +13,12 @@ const fixture = fs.readFileSync(new URL('./fixtures/video.html', import.meta.url
 
 http.createServer((req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1:41739');
+  if (url.pathname === '/motion.webm') {
+    const media = fs.readFileSync(new URL('./fixtures/motion.webm', import.meta.url));
+    res.writeHead(200, { 'Content-Type': 'video/webm', 'Content-Length': media.length });
+    res.end(media);
+    return;
+  }
   if (url.pathname === '/media.wav') {
     const range = /bytes=(\d+)-(\d*)/.exec(req.headers.range || '');
     const start = range ? Number(range[1]) : 0;

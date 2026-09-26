@@ -1,5 +1,7 @@
 # Hare review and fixes — September 12, 2026
 
+> Historical record. See the [completed simplification audit](SIMPLIFICATION-AUDIT.md) for the current file inventory, changes, and verification results.
+
 The review covered all extension entry points, settings and message boundaries, media/controller lifecycle, frame bridges, sync coordination, Svelte UI, platform handlers, dependencies, and the existing tests. The original 93 unit tests passed, but did not exercise the Svelte UI or several lifecycle failures.
 
 ## Main issues fixed

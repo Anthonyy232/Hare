@@ -10,34 +10,19 @@ import { ICONS } from './controller-icons';
 
 let sharedStyleSheet: CSSStyleSheet | null = null;
 
-/**
- * Lazily initializes and returns a shared CSSStyleSheet to be used across all instances.
- * Using adoptedStyleSheets is more memory-efficient than injecting <style> tags per instance.
- */
 function getStyleSheet(): CSSStyleSheet {
   if (!sharedStyleSheet) {
     sharedStyleSheet = new CSSStyleSheet();
-    try {
-      sharedStyleSheet.replaceSync(controllerCSS);
-    } catch (error) {
-      logger.error('Failed to parse controller CSS:', error);
-      sharedStyleSheet.replaceSync('');
-    }
+    sharedStyleSheet.replaceSync(controllerCSS);
   }
   return sharedStyleSheet;
 }
 
-
-
 let controllerIdCounter = 0;
 const positionedParents = new WeakMap<HTMLElement, { count: number; value: string; priority: string }>();
 
-// Cache parsed SVGs to avoid repetitive DOMParser usage
 const svgCache: Record<string, SVGElement> = {};
 
-/**
- * Manages the speed control UI and playback interaction for a specific media element.
- */
 export class VideoController {
   readonly id: string;
   readonly media: HTMLMediaElement;
@@ -53,18 +38,17 @@ export class VideoController {
   private settings: Settings;
   private siteHandler: SiteHandler | null;
 
-  private isDragging = false;
+  private dragPointerId: number | null = null;
+  private listeners = new AbortController();
   private dragOffsetX = 0;
   private dragOffsetY = 0;
   private positionX = 0;
   private positionY = 0;
-  private hasInitializedDragPosition = false;
   private resizeObserver: ResizeObserver | null = null;
   private resizeDebounceTimeout: NodeJS.Timeout | null = null;
   private positionCheckInterval: NodeJS.Timeout | null = null;
   private static readonly POSITION_CHECK_INTERVAL_MS = 2000;
 
-  // Cached values to avoid repeated Lookups during keybind execution
   private cachedSpeedStep: number = SPEED.STEP;
   private cachedSeekValue: number = SEEK.DEFAULT_SECONDS;
   private cachedSlowerStep: number = SPEED.STEP;
@@ -73,8 +57,6 @@ export class VideoController {
   private positionedParent: HTMLElement | null = null;
   private speedRequest = 0;
 
-
-  // Speed enforcement: reactive enforcement to counter sites resetting speed
   private targetSpeed: number = SPEED.DEFAULT;
   private isEnforcingSpeed = false;
   private suppressRateEnforcementCount = 0;
@@ -83,7 +65,6 @@ export class VideoController {
 
   private dragBounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null;
 
-  /** Optional listener notified when setSpeed/resetSpeed change the intended speed. Used by Sync Mode to propagate rate to peer tab. */
   private intendedSpeedListener: ((speed: number) => void) | null = null;
 
   constructor(
@@ -106,13 +87,6 @@ export class VideoController {
   }
 
   private cacheKeybindingValues(): void {
-    if (!Array.isArray(this.settings.keyBindings)) {
-      logger.error('Invalid keyBindings detected - using defaults');
-      this.cachedSpeedStep = SPEED.STEP;
-      this.cachedSeekValue = SEEK.DEFAULT_SECONDS;
-      return;
-    }
-
     const fasterBinding = this.settings.keyBindings.find((b) => b.action === 'faster');
     const advanceBinding = this.settings.keyBindings.find((b) => b.action === 'advance');
     this.cachedSpeedStep = fasterBinding?.value ?? SPEED.STEP;
@@ -124,9 +98,11 @@ export class VideoController {
   private init(): void {
     this.createController();
 
-    this.media.addEventListener('ratechange', this.handleRateChange, { capture: true });
-    this.media.addEventListener('play', this.handlePlay);
-    document.addEventListener('fullscreenchange', this.handleFullscreenChange);
+    const { signal } = this.listeners;
+    this.media.addEventListener('ratechange', this.handleRateChange, { capture: true, signal });
+    this.media.addEventListener('play', this.handlePlay, { signal });
+    document.addEventListener('fullscreenchange', this.handleFullscreenChange, { signal });
+    window.addEventListener('blur', this.handleDragEnd, { signal });
 
     if (safeMedia.getPlaybackRate(this.media) !== SPEED.DEFAULT) {
       this.updateSpeedDisplay();
@@ -135,24 +111,16 @@ export class VideoController {
     this.startPositionCheck();
   }
 
-  /**
-   * Starts a periodic check to detect and repair positioning issues.
-   * This handles cases where the parent loses positioning context or the
-   * controller becomes orphaned due to dynamic DOM changes.
-   */
+  // Repair positioning after dynamic player DOM changes.
   private startPositionCheck(): void {
     this.positionCheckInterval = setInterval(() => {
       this.verifyAndRepairPosition();
     }, VideoController.POSITION_CHECK_INTERVAL_MS);
   }
 
-  /**
-   * Checks if the controller is still properly positioned and repairs if needed.
-   */
   private verifyAndRepairPosition(): void {
     if (!this.wrapper || !this.media.isConnected) return;
 
-    // Repair 1: Controller became orphaned (removed from DOM)
     if (!this.wrapper.isConnected) {
       this.insertController();
       return;
@@ -166,7 +134,6 @@ export class VideoController {
       return;
     }
 
-    // Repair 2: Video moved to a different parent (common in SPAs)
     const position = this.getControllerPosition();
     const expectedParent = position
       ? (position.method === 'before' || position.method === 'after' ? position.target.parentElement : position.target)
@@ -176,30 +143,16 @@ export class VideoController {
       return;
     }
 
-    // Repair 3: Parent lost positioning context
-    // We use offsetParent to efficiently check if the parent is the current positioning context.
-    // This handles cases where the parent is static but has a transform (which makes it a container).
-    // Accessing offsetParent forces a layout, but so does getComputedStyle, and this check is more semantic.
-    if (parent && parent !== document.body) {
-      if (this.wrapper.offsetParent !== parent) {
-        // Double check style before mutating to avoid fighting with some frameworks
-        const style = getComputedStyle(parent);
-        if (style.position === 'static' && style.transform === 'none') {
-          this.ensurePositioningContext(parent);
-        } else if (this.wrapper.offsetParent !== parent) {
-          // If parent supposedly has potential (transform!=none) but offsetParent is still wrong,
-          // it might be because the browser doesn't consider it a container yet.
-          // We fallback to re-inserting to force a refresh of the layout tree ties.
-          this.insertController();
-        }
+    if (parent !== document.body && this.wrapper.offsetParent !== parent) {
+      const style = getComputedStyle(parent);
+      if (style.position === 'static' && style.transform === 'none') {
+        this.ensurePositioningContext(parent);
+      } else {
+        this.insertController();
       }
     }
   }
 
-  /**
-   * Constructs the Shadow DOM UI. Encapsulation prevents site styles from leaking in
-   * and HARE styles from leaking out.
-   */
   private createController(): void {
     this.wrapper = document.createElement(CONTROLLER.ELEMENT_TAG);
     this.wrapper.id = this.id;
@@ -238,11 +191,12 @@ export class VideoController {
     this.speedDisplay.setAttribute('aria-label', 'Current playback speed');
     this.speedDisplay.setAttribute('tabindex', '0');
 
-    if (BrowserFeatures.hasPointerEvents) {
-      this.speedDisplay.addEventListener('pointerdown', this.handleDragStart as EventListener);
-    } else {
-      this.speedDisplay.addEventListener('mousedown', this.handleDragStart as EventListener);
-    }
+    const { signal } = this.listeners;
+    this.speedDisplay.addEventListener('pointerdown', this.handleDragStart, { signal });
+    this.speedDisplay.addEventListener('pointermove', this.handleDragMove, { signal });
+    this.speedDisplay.addEventListener('pointerup', this.handleDragEnd, { signal });
+    this.speedDisplay.addEventListener('pointercancel', this.handleDragEnd, { signal });
+    this.speedDisplay.addEventListener('lostpointercapture', this.handleDragEnd, { signal });
 
     const controls = document.createElement('span');
     controls.className = 'hare-controls';
@@ -272,22 +226,16 @@ export class VideoController {
     this.wrapper!.style.transform = `translate(${this.positionX}px, ${this.positionY}px)`;
   }
 
-  /**
-   * Safely creates an SVG element from a string.
-   * Uses caching to avoid overhead of DOMParser for repeated icons.
-   */
   private createSVGFromString(svgString: string): SVGElement | null {
     if (svgCache[svgString]) {
       return svgCache[svgString].cloneNode(true) as SVGElement;
     }
 
     const parser = new DOMParser();
-    // Parsing as HTML ensures we get elements that work correctly in our DOM context
     const doc = parser.parseFromString(`<body>${svgString}</body>`, 'text/html');
     const svgElement = doc.body.querySelector('svg');
 
     if (svgElement) {
-      // Import the node into current document to ensure it's properly adopted
       const importedNode = document.importNode(svgElement, true) as SVGElement;
       svgCache[svgString] = importedNode;
       return importedNode.cloneNode(true) as SVGElement;
@@ -320,9 +268,6 @@ export class VideoController {
     return btn;
   }
 
-  /**
-   * Ensures parent has a stacking context for absolute positioning.
-   */
   private ensurePositioningContext(parent: HTMLElement): void {
     if (this.positionedParent !== parent) {
       this.releasePositioningContext();
@@ -355,10 +300,6 @@ export class VideoController {
     positionedParents.delete(parent);
   }
 
-  /**
-   * Mounts the controller into the DOM, preferring site-specific locations
-   * defined in site handlers to avoid overlapping with native player UI.
-   */
   private insertController(): void {
     if (!this.wrapper) return;
 
@@ -367,9 +308,7 @@ export class VideoController {
     if (position) {
       const target = position.target as HTMLElement;
 
-      // Validate target is still connected to DOM before mutation
       if (!target.isConnected) {
-        // Site handler returned a stale reference - fallback to default positioning
         logger.debug('Site handler returned disconnected element, using fallback positioning');
         position = null;
       } else {
@@ -385,7 +324,6 @@ export class VideoController {
       }
     }
 
-    // Fallback to default positioning if no site-specific position or target was disconnected
     if (!position) {
       const parent = this.media.parentElement;
       if (parent) {
@@ -415,16 +353,11 @@ export class VideoController {
     this.clampPosition();
   };
 
-  /**
-   * Monitors parent container size to keep controller within visible bounds.
-   * Uses debouncing to avoid layout thrashing during active resizing.
-   */
   private setupResizeObserver(): void {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
     }
 
-    // Clear any pending debounce timeout from previous observer
     if (this.resizeDebounceTimeout) {
       clearTimeout(this.resizeDebounceTimeout);
       this.resizeDebounceTimeout = null;
@@ -433,7 +366,6 @@ export class VideoController {
     const parent = this.wrapper?.parentElement;
     if (!parent) return;
 
-    // ResizeObserver not available in older Safari/mobile browsers
     if (!BrowserFeatures.hasResizeObserver) {
       logger.debug('ResizeObserver not available - controller position may not adjust on resize');
       return;
@@ -445,7 +377,6 @@ export class VideoController {
           clearTimeout(this.resizeDebounceTimeout);
         }
         this.resizeDebounceTimeout = setTimeout(() => {
-          this.hasInitializedDragPosition = false;
           this.clampPosition();
           this.resizeDebounceTimeout = null;
         }, OBSERVER.DEBOUNCE_MS);
@@ -456,40 +387,54 @@ export class VideoController {
     }
   }
 
-  /**
-   * Calculates valid move boundaries for all four borders (top, left, right, bottom).
-   * Includes expanded buttons when hovered or focused so controls remain reachable.
-   */
+  /** Convert viewport pixels into the containing block's CSS coordinates. */
+  private getPositionGeometry() {
+    const parent = this.wrapper?.offsetParent instanceof HTMLElement
+      ? this.wrapper.offsetParent : this.wrapper?.parentElement;
+    if (!parent) return null;
+    const rect = parent.getBoundingClientRect();
+    const scaleX = parent.offsetWidth && rect.width ? rect.width / parent.offsetWidth : 1;
+    const scaleY = parent.offsetHeight && rect.height ? rect.height / parent.offsetHeight : 1;
+    return {
+      parent, scaleX, scaleY,
+      left: rect.left + (parent.clientLeft - parent.scrollLeft) * scaleX,
+      top: rect.top + (parent.clientTop - parent.scrollTop) * scaleY,
+    };
+  }
+
+  /** Keep the expanded controls within the media box, in local CSS coordinates. */
   private getClampedBounds(): { minX: number; maxX: number; minY: number; maxY: number } | null {
     if (!this.wrapper || !this.controllerEl) return null;
-
-    const parent = this.wrapper.parentElement;
-    if (!parent) return null;
-
-    const parentRect = parent.getBoundingClientRect();
-    let parentWidth = parentRect.width || parent.offsetWidth || window.innerWidth;
-    let parentHeight = parentRect.height || parent.offsetHeight || window.innerHeight;
+    const geometry = this.getPositionGeometry();
+    if (!geometry) return null;
+    const { parent, scaleX, scaleY, left, top } = geometry;
+    let minX = parent.scrollLeft;
+    let minY = parent.scrollTop;
+    let maxX = minX + (parent.clientWidth || parent.offsetWidth || window.innerWidth / scaleX);
+    let maxY = minY + (parent.clientHeight || parent.offsetHeight || window.innerHeight / scaleY);
 
     // Site-specific containers often extend beyond the video; we clamp to the actual video element.
     const videoRect = this.media.getBoundingClientRect();
     if (videoRect.width > 0 && videoRect.height > 0) {
-      parentWidth = Math.min(parentWidth, videoRect.width);
-      parentHeight = Math.min(parentHeight, videoRect.height);
+      minX = Math.max(minX, (videoRect.left - left) / scaleX);
+      minY = Math.max(minY, (videoRect.top - top) / scaleY);
+      maxX = Math.min(maxX, (videoRect.right - left) / scaleX);
+      maxY = Math.min(maxY, (videoRect.bottom - top) / scaleY);
     }
 
-    if (parentWidth === 0 || parentHeight === 0) return null;
-
+    // Wrap controls before measuring them, including large buttons on narrow players.
+    this.controllerEl.style.setProperty('--hare-max-width', `${Math.max(0, maxX - minX - CONTROLLER.BOUNDARY_PADDING * 2)}px`);
     const controllerRect = this.controllerEl.getBoundingClientRect();
-    const controllerWidth = controllerRect.width;
-    const controllerHeight = controllerRect.height;
+    const controllerWidth = controllerRect.width / scaleX;
+    const controllerHeight = controllerRect.height / scaleY;
 
     const padding = CONTROLLER.BOUNDARY_PADDING;
 
     return {
-      minX: padding,
-      maxX: Math.max(padding, parentWidth - controllerWidth - padding),
-      minY: padding,
-      maxY: Math.max(padding, parentHeight - controllerHeight - padding),
+      minX: minX + padding,
+      maxX: Math.max(minX + padding, maxX - controllerWidth - padding),
+      minY: minY + padding,
+      maxY: Math.max(minY + padding, maxY - controllerHeight - padding),
     };
   }
 
@@ -498,7 +443,7 @@ export class VideoController {
   }
 
   private clampPosition(): void {
-    if (!this.wrapper || this.isDragging) return;
+    if (!this.wrapper || this.dragPointerId !== null) return;
 
     const bounds = this.getClampedBounds();
     if (!bounds) return;
@@ -524,8 +469,7 @@ export class VideoController {
     }
 
     if (this.isEnforcingSpeed || shouldSkipEnforcement) {
-      // Swallow the event so the website doesn't know the speed changed.
-      // This prevents sites from running their own logic to reset the speed.
+      // Prevent player listeners from resetting the requested rate.
       e.stopImmediatePropagation();
     }
     this.updateSpeedDisplay();
@@ -540,7 +484,7 @@ export class VideoController {
     }
   };
 
-  private handleDragStart = (e: MouseEvent | PointerEvent): void => {
+  private handleDragStart = (e: PointerEvent): void => {
     if (e.button !== 0) return;
     if (!this.wrapper) return;
 
@@ -549,48 +493,24 @@ export class VideoController {
       return;
     }
 
-    if (this.isDragging) return;
+    if (this.dragPointerId !== null) return;
+    const geometry = this.getPositionGeometry();
+    if (!geometry) return;
 
     e.preventDefault();
     e.stopPropagation();
 
-    this.isDragging = true;
+    this.speedDisplay!.setPointerCapture(e.pointerId);
+    this.dragPointerId = e.pointerId;
     this.controllerEl?.classList.add('dragging');
     this.dragBounds = this.getClampedBounds();
 
-    if (!this.hasInitializedDragPosition) {
-      const rect = this.wrapper.getBoundingClientRect();
-      const parentRect = this.wrapper.parentElement?.getBoundingClientRect();
-      if (parentRect) {
-        this.positionX = rect.left - parentRect.left;
-        this.positionY = rect.top - parentRect.top;
-        this.hasInitializedDragPosition = true;
-      }
-    }
-
-    const clientX = 'clientX' in e ? e.clientX : 0;
-    const clientY = 'clientY' in e ? e.clientY : 0;
-
-    const wrapperRect = this.wrapper.getBoundingClientRect();
-    this.dragOffsetX = clientX - wrapperRect.left;
-    this.dragOffsetY = clientY - wrapperRect.top;
-
-    this.cleanupDragListeners();
-
-    if (e instanceof PointerEvent) {
-      document.addEventListener('pointermove', this.handleDragMove);
-      document.addEventListener('pointerup', this.handleDragEnd);
-      document.addEventListener('pointercancel', this.handleDragEnd);
-    } else {
-      document.addEventListener('mousemove', this.handleDragMove);
-      document.addEventListener('mouseup', this.handleDragEnd);
-    }
-
-    window.addEventListener('blur', this.handleDragEnd);
+    this.dragOffsetX = (e.clientX - geometry.left) / geometry.scaleX - this.positionX;
+    this.dragOffsetY = (e.clientY - geometry.top) / geometry.scaleY - this.positionY;
   };
 
-  private handleDragMove = (e: MouseEvent | PointerEvent): void => {
-    if (!this.isDragging || !this.wrapper) return;
+  private handleDragMove = (e: PointerEvent): void => {
+    if (e.pointerId !== this.dragPointerId || !this.wrapper) return;
 
     if (!this.media.isConnected) {
       this.handleDragEnd();
@@ -599,43 +519,30 @@ export class VideoController {
 
     e.preventDefault();
 
-    const parent = this.wrapper.parentElement;
-    if (!parent) return;
-
-    const parentRect = parent.getBoundingClientRect();
+    const geometry = this.getPositionGeometry();
     const bounds = this.dragBounds;
-    if (!bounds) return;
+    if (!geometry || !bounds) return;
 
-    const clientX = 'clientX' in e ? e.clientX : 0;
-    const clientY = 'clientY' in e ? e.clientY : 0;
-
-    const newX = clientX - parentRect.left - this.dragOffsetX;
-    const newY = clientY - parentRect.top - this.dragOffsetY;
+    const newX = (e.clientX - geometry.left) / geometry.scaleX - this.dragOffsetX;
+    const newY = (e.clientY - geometry.top) / geometry.scaleY - this.dragOffsetY;
 
     this.positionX = this.clampValue(newX, bounds.minX, bounds.maxX);
     this.positionY = this.clampValue(newY, bounds.minY, bounds.maxY);
-
     this.wrapper.style.transform = `translate(${this.positionX}px, ${this.positionY}px)`;
   };
 
-  private handleDragEnd = (): void => {
-    if (!this.isDragging) return;
+  private handleDragEnd = (event?: Event): void => {
+    if (this.dragPointerId === null) return;
+    if (event instanceof PointerEvent && event.pointerId !== this.dragPointerId) return;
 
-    this.isDragging = false;
+    const pointerId = this.dragPointerId;
+    this.dragPointerId = null;
     this.dragBounds = null;
     this.controllerEl?.classList.remove('dragging');
-
-    this.cleanupDragListeners();
+    if (this.speedDisplay?.hasPointerCapture(pointerId)) {
+      this.speedDisplay.releasePointerCapture(pointerId);
+    }
   };
-
-  private cleanupDragListeners(): void {
-    document.removeEventListener('mousemove', this.handleDragMove);
-    document.removeEventListener('mouseup', this.handleDragEnd);
-    document.removeEventListener('pointermove', this.handleDragMove);
-    document.removeEventListener('pointerup', this.handleDragEnd);
-    document.removeEventListener('pointercancel', this.handleDragEnd);
-    window.removeEventListener('blur', this.handleDragEnd);
-  }
 
   updateSpeedDisplay(): void {
     if (this.speedDisplay) {
@@ -643,10 +550,7 @@ export class VideoController {
     }
   }
 
-  /**
-   * Sets playback speed and verifies implementation. Some DRM/players may reject changes
-   * or enforce limits; we notify the user via OSD if the actual speed differs from requested.
-   */
+  // Notify the user when the player rejects or limits the requested speed.
   setSpeed(speed: number): boolean {
     if (this.destroyed || !Number.isFinite(speed)) return false;
     const clampedSpeed = Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed));
@@ -691,10 +595,7 @@ export class VideoController {
     this.setSpeed(SPEED.DEFAULT);
   }
 
-  /**
-   * Applies a temporary coordinator-controlled playback rate without changing
-   * the user's intended speed. Used for small drift corrections in Sync Mode.
-   */
+  // Correct drift without changing the user's intended speed.
   applyTransientRate(speed: number): void {
     if (this.destroyed || !Number.isFinite(speed)) return;
     const clampedSpeed = Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed));
@@ -706,12 +607,7 @@ export class VideoController {
     this.updateSpeedDisplay();
   }
 
-  /**
-   * Reactively enforces the target speed when a ratechange event occurs.
-   * Uses debouncing to prevent infinite loops if the site fights back.
-   * This is triggered by ratechange events rather than polling to avoid
-   * unnecessary writes that can cause side effects on sites like YouTube.
-   */
+  // Throttle reactive rate writes to avoid fighting player scripts.
   private enforceSpeedIfNeeded(): void {
     if (!this.isEnforcingSpeed) return;
 
@@ -726,19 +622,15 @@ export class VideoController {
         this.lastEnforcementTime = now;
         safeMedia.setPlaybackRate(this.media, this.targetSpeed);
       } catch (error) {
-        // Some browsers/DRM systems may reject speed changes
         logger.debug('Speed enforcement failed (may be DRM-protected):', error);
         // Don't disable enforcement - retry on next ratechange
       }
     }
   }
 
-  /**
-   * Seeks the media by duration.
-   */
   seek(seconds: number): void {
     if (!Number.isFinite(seconds) || this.destroyed) return;
-    if (this.media.readyState < SEEK.MIN_READY_STATE) return;
+    if (this.media.readyState < HTMLMediaElement.HAVE_METADATA) return;
 
     try {
       const targetTime = safeMedia.getCurrentTime(this.media) + seconds;
@@ -757,16 +649,10 @@ export class VideoController {
     this.hideBtn?.setAttribute('aria-pressed', String(this.isManuallyHidden));
   }
 
-  /**
-   * Viewport-relative rects of each interactive button, used by the cross-frame
-   * pointer bridge so a host frame can forward clicks that can't reach this frame.
-   * Each entry carries the action's value so the receiving frame can replay it
-   * via `executeAction` without re-deriving from settings.
-   * Returns null when the badge is detached or hidden.
-   */
-  getButtonHitmap(): HitmapButton[] | null {
-    if (!this.wrapper || !this.shadow || !this.controllerEl) return null;
-    if (this.controllerEl.classList.contains('hidden')) return null;
+  // Viewport button bounds and actions for clicks forwarded by a host frame.
+  getButtonHitmap(): HitmapButton[] {
+    if (!this.wrapper || !this.shadow || !this.controllerEl) return [];
+    if (this.controllerEl.classList.contains('hidden')) return [];
 
     const buttons: HitmapButton[] = [];
     const btnEls = this.shadow.querySelectorAll<HTMLButtonElement>('button[data-action]');
@@ -780,7 +666,7 @@ export class VideoController {
           : action === 'rewind' ? this.cachedRewindValue : action === 'advance' ? this.cachedSeekValue : 0;
       buttons.push({ controllerId: this.id, action, value, x: r.left, y: r.top, w: r.width, h: r.height });
     }
-    return buttons.length > 0 ? buttons : null;
+    return buttons;
   }
 
   updateSettings(settings: Settings): void {
@@ -791,6 +677,7 @@ export class VideoController {
       this.controllerEl.style.setProperty('--hare-opacity', String(settings.controllerOpacity));
       this.controllerEl.style.setProperty('--hare-font-size', `${settings.controllerButtonSize}px`);
     }
+    this.clampPosition();
   }
 
   get speed(): number {
@@ -802,14 +689,10 @@ export class VideoController {
     return this.targetSpeed;
   }
 
-  /** Register a listener notified when the intended speed changes. Pass null to clear. */
   setIntendedSpeedListener(listener: ((speed: number) => void) | null): void {
     this.intendedSpeedListener = listener;
   }
 
-  /**
-   * Displays on-screen feedback for actions that don't have immediate visual state changes.
-   */
   showOSD(message: string): void {
     if (!this.osdEl) return;
 
@@ -829,18 +712,9 @@ export class VideoController {
     this.destroyed = true;
     this.isEnforcingSpeed = false;
 
-    this.media.removeEventListener('ratechange', this.handleRateChange, { capture: true });
-    this.media.removeEventListener('play', this.handlePlay);
-    document.removeEventListener('fullscreenchange', this.handleFullscreenChange);
+    this.listeners.abort();
+    this.handleDragEnd();
     this.intendedSpeedListener = null;
-
-    if (BrowserFeatures.hasPointerEvents) {
-      this.speedDisplay?.removeEventListener('pointerdown', this.handleDragStart as EventListener);
-    } else {
-      this.speedDisplay?.removeEventListener('mousedown', this.handleDragStart as EventListener);
-    }
-
-    this.cleanupDragListeners();
 
     if (this.osdTimeout) clearTimeout(this.osdTimeout);
     if (this.resizeDebounceTimeout) clearTimeout(this.resizeDebounceTimeout);

@@ -3,26 +3,8 @@ import type { KeyAction, KeyBinding } from './types';
 import { executeAction } from './keybinds';
 import { CROSS_FRAME } from './constants';
 
-/**
- * Cross-frame pointer bridge.
- *
- * Sites like Google Drive render the <video> inside a cross-origin iframe
- * (e.g. youtube.googleapis.com/embed/) and keep focus pinned on a top-frame
- * <section>, so pointerdown/click events fired on what visually looks like
- * Hare's badge never reach the frame where the badge actually lives. The
- * bridge closes that gap:
- *
- *   - Each frame that owns VideoControllers publishes a "button hitmap"
- *     (per-button rects in its own viewport) to its parent window.
- *   - Each frame listens for hitmaps from its direct child frames, tracks
- *     them, and at capture phase intercepts document-level clicks whose
- *     coordinates fall inside a registered button's rect. When one hits,
- *     it cancels the host-frame event and posts the resolved action down
- *     into the child frame for local execution.
- *
- * Only direct-parent / direct-child relationships are handled. Nested
- * chains aren't relayed — that's a separate feature.
- */
+// Host overlays can intercept clicks above cross-origin players. Child frames publish
+// button bounds so their direct parent can forward the matching controller action.
 
 export type HitmapButton = {
   controllerId: string;
@@ -92,7 +74,6 @@ export type CrossFramePointerBridge = {
 export function createCrossFramePointerBridge(
   getControllers: () => VideoController[]
 ): CrossFramePointerBridge {
-  // --- Publisher: advertise our controllers' button geometry to the parent ---
   let publishInterval: ReturnType<typeof setInterval> | null = null;
   // Init to '[]' so a frame that never has visible buttons stays silent on destroy.
   let lastPublishedJson = '[]';
@@ -100,12 +81,7 @@ export function createCrossFramePointerBridge(
   const publishHitmap = (): void => {
     if (window.parent === window) return;
 
-    const controllers = getControllers();
-    const buttons: HitmapButton[] = [];
-    for (const controller of controllers) {
-      const hitmap = controller.getButtonHitmap();
-      if (hitmap) buttons.push(...hitmap);
-    }
+    const buttons = getControllers().flatMap(controller => controller.getButtonHitmap());
 
     const json = JSON.stringify(buttons);
     if (json === lastPublishedJson) return;
@@ -122,7 +98,6 @@ export function createCrossFramePointerBridge(
     publishInterval = setInterval(publishHitmap, CROSS_FRAME.HITMAP_POLL_MS);
   }
 
-  // --- Interceptor: track child hitmaps and hijack matching pointer events ---
   type ChildEntry = {
     iframe: HTMLIFrameElement;
     buttons: HitmapButton[];
@@ -159,9 +134,7 @@ export function createCrossFramePointerBridge(
     }
 
     if (isHareActionMessage(event.data)) {
-      // Only accept forwarded actions from the direct parent. Mirrors the
-      // ancestor check in keybinds.handleForwardMessage; window.top is
-      // intentionally excluded to avoid trusting a distant, non-ancestor frame.
+      // Hitmaps describe direct children, so only the direct parent may forward actions.
       if (window.parent === window || event.source !== window.parent) return;
       const controllers = getControllers().filter(controller => controller.id === event.data.controllerId);
       if (controllers.length === 0) return;
@@ -216,7 +189,6 @@ export function createCrossFramePointerBridge(
     event.stopImmediatePropagation();
   };
 
-  // click: this is where we commit — cancel and forward the action.
   const handleClick = (event: Event): void => {
     if (childHitmaps.size === 0) return;
     const me = event as MouseEvent;
@@ -227,10 +199,12 @@ export function createCrossFramePointerBridge(
     forwardAction(hit.source, hit.action, hit.value, hit.controllerId);
   };
 
-  window.addEventListener('message', handleMessage);
-  document.addEventListener('pointerdown', handleEarlyPress, { capture: true });
-  document.addEventListener('mousedown', handleEarlyPress, { capture: true });
-  document.addEventListener('click', handleClick, { capture: true });
+  const listeners = new AbortController();
+  const { signal } = listeners;
+  window.addEventListener('message', handleMessage, { signal });
+  document.addEventListener('pointerdown', handleEarlyPress, { capture: true, signal });
+  document.addEventListener('mousedown', handleEarlyPress, { capture: true, signal });
+  document.addEventListener('click', handleClick, { capture: true, signal });
 
   return {
     destroy: () => {
@@ -238,17 +212,12 @@ export function createCrossFramePointerBridge(
         clearInterval(publishInterval);
         publishInterval = null;
       }
-      // Tell the parent to drop our entry, but only if we ever published a
-      // non-empty hitmap (otherwise the parent has nothing to forget).
       if (window.parent !== window && lastPublishedJson !== '[]') {
         try {
           window.parent.postMessage({ __hareHitmap: true, buttons: [] }, '*');
         } catch {}
       }
-      window.removeEventListener('message', handleMessage);
-      document.removeEventListener('pointerdown', handleEarlyPress, { capture: true });
-      document.removeEventListener('mousedown', handleEarlyPress, { capture: true });
-      document.removeEventListener('click', handleClick, { capture: true });
+      listeners.abort();
       childHitmaps.clear();
       lastPublishedJson = '[]';
     },

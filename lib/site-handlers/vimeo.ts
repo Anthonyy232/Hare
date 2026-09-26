@@ -28,11 +28,8 @@ export class VimeoHandler extends BaseSiteHandler {
         return null;
     }
 
-    /**
-     * Prevents attaching to small thumbnails and preview posters.
-     */
     shouldIgnoreVideo(video: HTMLVideoElement): boolean {
-        if (video.closest('.vp-preview') || video.closest('.iris_thumbnail')) return true;
+        if (video.closest('.vp-preview, .iris_thumbnail')) return true;
 
         if (
             video.offsetWidth < MEDIA_VALIDATION.SOCIAL_MIN_WIDTH ||

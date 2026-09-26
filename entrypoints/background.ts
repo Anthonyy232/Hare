@@ -52,10 +52,15 @@ export default defineBackground(() => {
         }
         case 'STOP_SYNC': {
           // A late stop from a removed/nonparticipating content frame must not kill a new pair.
-          if (sender.tab?.id != null && !coordinator.hasEndpoint(sender.tab.id, sender.frameId)) return { success: true };
+          const fromExtensionPage = sender.url?.startsWith(browser.runtime.getURL('/')) === true;
+          if (!fromExtensionPage && sender.tab?.id != null && !coordinator.hasEndpoint(sender.tab.id, sender.frameId)) return { success: true };
           await startup.stop();
           return { success: true };
         }
+        case 'SET_NUDGE_STEP':
+          if (typeof message.payload !== 'number') throw new Error('Choose a valid nudge step.');
+          await coordinator.setNudgeStep(message.payload);
+          return { success: true };
         case 'NUDGE_OFFSET':
           if (typeof message.payload !== 'number' || !Number.isFinite(message.payload)) throw new Error('Invalid offset.');
           if (!coordinator.getStatus().active) throw new Error('The sync session has ended.');

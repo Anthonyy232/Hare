@@ -44,42 +44,41 @@ export class SyncStartup {
           try {
             const result = await sendToFrame(tabId, frameId, { type: 'SYNC_ACTIVATE' }) as Partial<Activation> & { success?: boolean };
             if (result?.success && Number.isFinite(result.currentTime) && Number.isFinite(result.playbackRate)
-              && result.playbackRate! > 0 && Number.isFinite(result.timestamp) && typeof result.paused === 'boolean') {
+              && result.playbackRate! > 0 && Number.isFinite(result.timestamp) && typeof result.paused === 'boolean'
+              && typeof result.buffering === 'boolean') {
               return { ...result, frameId } as Activation;
             }
           } catch { /* Try the next frame. All attempted frames are cleaned up on failure. */ }
         }
         throw new Error('A selected tab has no available media. Reload it and refresh the tab list.');
       };
-      // Wait for BOTH attempts even on failure, so a late success cannot escape rollback.
-      const results = await Promise.allSettled([activate(tabIdA), activate(tabIdB), browser.tabs.get(tabIdA), browser.tabs.get(tabIdB)] as const);
-      const [a, b, tabA, tabB] = results;
-      const failure = results.find(result => result.status === 'rejected');
-      if (failure?.status === 'rejected') throw failure.reason;
+      const attempts = [activate(tabIdA), activate(tabIdB), browser.tabs.get(tabIdA), browser.tabs.get(tabIdB)] as const;
+      // Wait for late activations before propagating a rejection, so rollback includes them.
+      await Promise.allSettled(attempts);
+      const [a, b, tabA, tabB] = await Promise.all(attempts);
       if (revision !== this.revision) throw new Error('Sync startup cancelled.');
-      if (a.status !== 'fulfilled' || b.status !== 'fulfilled' || tabA.status !== 'fulfilled' || tabB.status !== 'fulfilled') return;
 
-      const rateResponse = await sendToFrame(tabIdB, b.value.frameId, {
-        type: 'SYNC_RATE', payload: { action: 'ratechange', rate: a.value.playbackRate, position: 0, timestamp: Date.now(), generation: 0 },
+      const rateResponse = await sendToFrame(tabIdB, b.frameId, {
+        type: 'SYNC_RATE', payload: { action: 'ratechange', rate: a.playbackRate, position: 0, timestamp: Date.now(), generation: 0 },
       }) as { success?: boolean };
       if (!rateResponse?.success) throw new Error('The second player could not match the playback speed.');
       // Align play/pause state without changing the two user-selected starting positions.
-      if (a.value.paused !== b.value.paused) {
-        const stateResponse = await sendToFrame(tabIdB, b.value.frameId, {
-          type: a.value.paused ? 'SYNC_PAUSE' : 'SYNC_PLAY',
-          payload: { action: a.value.paused ? 'pause' : 'play', position: -1, timestamp: Date.now(), generation: 0 },
+      if (a.paused !== b.paused) {
+        const stateResponse = await sendToFrame(tabIdB, b.frameId, {
+          type: a.paused ? 'SYNC_PAUSE' : 'SYNC_PLAY',
+          payload: { action: a.paused ? 'pause' : 'play', position: -1, timestamp: Date.now(), generation: 0 },
         }) as { success?: boolean };
         if (!stateResponse?.success) throw new Error('Press play in both tabs, then try starting sync again.');
       }
       if (revision !== this.revision) throw new Error('Sync startup cancelled.');
-      for (const tab of [tabA.value, tabB.value]) {
+      for (const tab of [tabA, tabB]) {
         this.coordinator.setTabMeta(tab.id!, tab.title || 'Untitled', tab.url ? new URL(tab.url).hostname : '');
       }
-      this.coordinator.startSync({ tabId: tabIdA, frameId: a.value.frameId }, { tabId: tabIdB, frameId: b.value.frameId }, {
-        currentTimeA: a.value.currentTime, currentTimeB: b.value.currentTime,
-        timestampA: a.value.timestamp, timestampB: b.value.timestamp,
-        rateA: a.value.playbackRate, rateB: b.value.playbackRate,
-        pausedA: a.value.paused, pausedB: b.value.paused,
+      this.coordinator.startSync({ tabId: tabIdA, frameId: a.frameId }, { tabId: tabIdB, frameId: b.frameId }, {
+        currentTimeA: a.currentTime, currentTimeB: b.currentTime,
+        timestampA: a.timestamp, timestampB: b.timestamp,
+        rateA: a.playbackRate, rateB: b.playbackRate,
+        pausedA: a.paused, pausedB: b.paused, bufferingA: a.buffering, bufferingB: b.buffering,
       });
     } catch (error) {
       await Promise.allSettled(attempted.map(({ tabId, frameId }) => sendToFrame(tabId, frameId, { type: 'SYNC_DEACTIVATE' })));
