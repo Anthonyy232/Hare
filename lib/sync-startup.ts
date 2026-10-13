@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { getFrameIds, sendToFrame } from './tab-media';
+import { getFrameIds, sendToTab } from './messaging';
 import type { SyncCoordinator } from './sync-coordinator';
 import type { SyncPositionResponse } from './sync-types';
 
@@ -42,12 +42,8 @@ export class SyncStartup {
           if (revision !== this.revision) throw new Error('Sync startup cancelled.');
           attempted.push({ tabId, frameId });
           try {
-            const result = await sendToFrame(tabId, frameId, { type: 'SYNC_ACTIVATE' }) as Partial<Activation> & { success?: boolean };
-            if (result?.success && Number.isFinite(result.currentTime) && Number.isFinite(result.playbackRate)
-              && result.playbackRate! > 0 && Number.isFinite(result.timestamp) && typeof result.paused === 'boolean'
-              && typeof result.buffering === 'boolean') {
-              return { ...result, frameId } as Activation;
-            }
+            const result = await sendToTab(tabId, { type: 'SYNC_ACTIVATE' }, frameId);
+            if (result.success) return { ...result, frameId };
           } catch { /* Try the next frame. All attempted frames are cleaned up on failure. */ }
         }
         throw new Error('A selected tab has no available media. Reload it and refresh the tab list.');
@@ -58,17 +54,17 @@ export class SyncStartup {
       const [a, b, tabA, tabB] = await Promise.all(attempts);
       if (revision !== this.revision) throw new Error('Sync startup cancelled.');
 
-      const rateResponse = await sendToFrame(tabIdB, b.frameId, {
+      const rateResponse = await sendToTab(tabIdB, {
         type: 'SYNC_RATE', payload: { action: 'ratechange', rate: a.playbackRate, position: 0, timestamp: Date.now(), generation: 0 },
-      }) as { success?: boolean };
-      if (!rateResponse?.success) throw new Error('The second player could not match the playback speed.');
+      }, b.frameId);
+      if (!rateResponse.success) throw new Error('The second player could not match the playback speed.');
       // Align play/pause state without changing the two user-selected starting positions.
       if (a.paused !== b.paused) {
-        const stateResponse = await sendToFrame(tabIdB, b.frameId, {
+        const stateResponse = await sendToTab(tabIdB, {
           type: a.paused ? 'SYNC_PAUSE' : 'SYNC_PLAY',
           payload: { action: a.paused ? 'pause' : 'play', position: -1, timestamp: Date.now(), generation: 0 },
-        }) as { success?: boolean };
-        if (!stateResponse?.success) throw new Error('Press play in both tabs, then try starting sync again.');
+        }, b.frameId);
+        if (!stateResponse.success) throw new Error('Press play in both tabs, then try starting sync again.');
       }
       if (revision !== this.revision) throw new Error('Sync startup cancelled.');
       for (const tab of [tabA, tabB]) {
@@ -81,7 +77,7 @@ export class SyncStartup {
         pausedA: a.paused, pausedB: b.paused, bufferingA: a.buffering, bufferingB: b.buffering,
       });
     } catch (error) {
-      await Promise.allSettled(attempted.map(({ tabId, frameId }) => sendToFrame(tabId, frameId, { type: 'SYNC_DEACTIVATE' })));
+      await Promise.allSettled(attempted.map(({ tabId, frameId }) => sendToTab(tabId, { type: 'SYNC_DEACTIVATE' }, frameId)));
       throw error;
     }
   }

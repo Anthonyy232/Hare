@@ -7,16 +7,16 @@ import type {
   SyncStatusResponse,
   SyncPositionResponse,
 } from './sync-types';
-import type { HareMessage, MessageType } from './types';
+import type { HareMessage, Reply } from './types';
 import { logger } from './logger';
-import { withTimeout } from './async-utils';
+import { sendToTab } from './messaging';
 
-const COMMAND_TYPE: Record<'pause' | 'play' | 'seek' | 'ratechange', MessageType> = {
+const COMMAND_TYPE = {
   pause: 'SYNC_PAUSE',
   play: 'SYNC_PLAY',
   seek: 'SYNC_SEEK',
   ratechange: 'SYNC_RATE',
-};
+} as const satisfies Record<SyncCommandPayload['action'], HareMessage['type']>;
 
 interface TabRef {
   tabId: number;
@@ -124,24 +124,16 @@ export class SyncCoordinator {
     });
   }
 
-  // Session storage survives worker restarts and clears when the browser exits.
+  // Session storage survives worker restarts but is cleared on browser exit and extension reload/update,
+  // so it only ever holds this build's schema.
   async restoreSession(): Promise<void> {
     try {
       const stored = await browser.storage.session.get(SYNC.STORAGE_KEY);
       const state = stored[SYNC.STORAGE_KEY] as PersistedSyncState | undefined;
-      if (!state || !state.session) return;
-      const session = state.session;
-      const validEndpoint = (endpoint: SyncSession['videoA'] | undefined) => endpoint && Number.isInteger(endpoint.tabId) && endpoint.tabId >= 0
-        && (endpoint.frameId == null || (Number.isInteger(endpoint.frameId) && endpoint.frameId >= 0));
-      if (!validEndpoint(session.videoA) || !validEndpoint(session.videoB) || session.videoA.tabId === session.videoB.tabId
-        || ![null, 'A', 'B', 'both'].includes(session.bufferingTab)
-        || !Number.isFinite(session.offset) || !Number.isInteger(session.generation) || !NUDGE_STEPS.includes(session.nudgeStep)) {
-        await this.clearPersistedSession();
-        return;
-      }
+      if (!state?.session) return;
 
       this.session = state.session;
-      this.tabMeta = new Map(Array.isArray(state.tabMeta) ? state.tabMeta.filter(entry => Array.isArray(entry) && typeof entry[1]?.title === 'string' && typeof entry[1]?.domain === 'string') : []);
+      this.tabMeta = new Map(state.tabMeta);
       this.sendFailures.clear();
       this.startDriftCorrection();
       logger.debug('Sync session restored after SW restart', {
@@ -190,12 +182,12 @@ export class SyncCoordinator {
     const tabBId = this.session?.videoB.tabId;
     const frameAId = this.session?.videoA.frameId;
     const frameBId = this.session?.videoB.frameId;
-    this.session = null; // null first to prevent re-entry from sendToTab error handler
+    this.session = null; // null first to prevent re-entry from the send error handler
     this.sendFailures.clear();
 
     const pending: Promise<unknown>[] = [this.clearPersistedSession()];
-    if (tabAId != null) pending.push(this.sendToTab(tabAId, { type: 'SYNC_DEACTIVATE' }, frameAId));
-    if (tabBId != null) pending.push(this.sendToTab(tabBId, { type: 'SYNC_DEACTIVATE' }, frameBId));
+    if (tabAId != null) pending.push(this.send(tabAId, { type: 'SYNC_DEACTIVATE' }, frameAId));
+    if (tabBId != null) pending.push(this.send(tabBId, { type: 'SYNC_DEACTIVATE' }, frameBId));
 
     if (wasActive) {
       logger.debug(`Sync session stopped. Reason: ${reason ?? 'unknown'}`);
@@ -274,8 +266,8 @@ export class SyncCoordinator {
     return undefined;
   }
 
-  private async sendToSyncedTab(tabId: number, message: HareMessage): Promise<unknown> {
-    return this.sendToTab(tabId, message, this.getFrameId(tabId));
+  private sendToSyncedTab<M extends HareMessage>(tabId: number, message: M): Promise<Reply<M> | null> {
+    return this.send(tabId, message, this.getFrameId(tabId));
   }
 
   async handleSyncEvent(fromTabId: number, event: SyncEventPayload, fromFrameId?: number): Promise<void> {
@@ -303,7 +295,7 @@ export class SyncCoordinator {
         }
         this.session.generation++;
         void this.persistSession();
-        const targetPosition = this.toTargetPosition(sourceSide, event.position);
+        const targetPosition = Math.max(0, this.toTargetPosition(sourceSide, event.position));
         await this.sendToSyncedTab(targetTabId, {
           type: COMMAND_TYPE[event.action],
           payload: {
@@ -344,20 +336,10 @@ export class SyncCoordinator {
     }
   }
 
+  /** Maps a position to the other side; negative when the offset can't be maintained there. */
   private toTargetPosition(fromSide: 'A' | 'B', position: number): number {
-    if (!this.session) return Math.max(0, position);
-    const { offset } = this.session;
-    const delta = fromSide === 'A' ? offset : -offset;
-    return Math.max(0, position + delta);
-  }
-
-  /** Converts a position, returning -1 when the current offset can't be maintained. */
-  private toTargetPositionOrNoSeek(fromSide: 'A' | 'B', position: number): number {
-    if (!this.session) return Math.max(0, position);
-    const { offset } = this.session;
-    const delta = fromSide === 'A' ? offset : -offset;
-    const target = position + delta;
-    return target < 0 ? -1 : target;
+    const { offset } = this.session!;
+    return position + (fromSide === 'A' ? offset : -offset);
   }
 
   private syncedSide(tabId: number, frameId?: number): 'A' | 'B' | null {
@@ -391,6 +373,7 @@ export class SyncCoordinator {
     this.bufferStableTimers.delete(fromSide);
     if (this.isBuffering(fromSide)) return;
 
+    const target = this.toTargetPosition(fromSide, event.position);
     this.session.bufferingTab = this.session.bufferingTab === null ? fromSide : 'both';
     this.session.generation++;
     void this.persistSession();
@@ -399,7 +382,7 @@ export class SyncCoordinator {
       payload: {
         action: 'pause',
         buffering: true,
-        position: this.toTargetPositionOrNoSeek(fromSide, event.position),
+        position: target < 0 ? -1 : target, // -1 pauses without seeking
         timestamp: event.timestamp,
         generation: this.session.generation,
       } satisfies SyncCommandPayload,
@@ -469,8 +452,7 @@ export class SyncCoordinator {
       const expectedB = correctedA + this.session.offset;
       const expectedA = correctedB - this.session.offset;
 
-      // If either expected position is negative, the offset can't be maintained
-      // at this position (one video is near its start). Don't fight the user.
+      // One video is near its start, so the offset can't be maintained here. Don't fight the user.
       if (expectedB < 0 || expectedA < 0) return;
 
       const driftMs = (correctedB - expectedB) * 1000;
@@ -485,7 +467,6 @@ export class SyncCoordinator {
         await this.sendToSyncedTab(behindTabId, {
           type: 'SYNC_DRIFT_CORRECT',
           payload: {
-            position: 0,
             method: 'rate',
             rateFactor: SYNC.RATE_ADJUST_FACTOR,
             durationMs: SYNC.RATE_ADJUST_DURATION_MS,
@@ -513,22 +494,21 @@ export class SyncCoordinator {
     }
   }
 
-  private async requestPosition(tabId: number): Promise<SyncPositionResponse | null> {
-    return await this.sendToSyncedTab(tabId, { type: 'SYNC_GET_POSITION' }) as SyncPositionResponse | null;
+  private requestPosition(tabId: number): Promise<SyncPositionResponse | null> {
+    return this.sendToSyncedTab(tabId, { type: 'SYNC_GET_POSITION' });
   }
 
-  private async sendToTab(tabId: number, message: HareMessage, frameId?: number): Promise<unknown> {
+  private async send<M extends HareMessage>(tabId: number, message: M, frameId?: number): Promise<Reply<M> | null> {
     const sessionAtSend = this.session;
     try {
-      const result = await withTimeout(frameId != null
-        ? browser.tabs.sendMessage(tabId, message, { frameId })
-        : browser.tabs.sendMessage(tabId, message), message.type === 'SYNC_GET_POSITION' ? SYNC.POSITION_TIMEOUT_MS : undefined);
+      const timeout = message.type === 'SYNC_GET_POSITION' ? SYNC.POSITION_TIMEOUT_MS : undefined;
+      const result = await sendToTab(tabId, message, frameId, timeout);
       if (sessionAtSend !== this.session) return null;
       if (this.isFailedResponse(message, result)) {
         this.recordSendFailure(tabId, frameId, result);
         return null;
       }
-      this.clearSendFailure(tabId, frameId);
+      this.sendFailures.delete(this.endpointKey(tabId, frameId));
       return result;
     } catch (error) {
       if (sessionAtSend === this.session) this.recordSendFailure(tabId, frameId, error);
@@ -540,17 +520,9 @@ export class SyncCoordinator {
     return `${tabId}:${frameId ?? 'all'}`;
   }
 
-  private isSyncedEndpoint(tabId: number): boolean {
-    return !!this.session && (
-      tabId === this.session.videoA.tabId ||
-      tabId === this.session.videoB.tabId
-    );
+  private isSyncedTab(tabId: number): boolean {
+    return tabId === this.session?.videoA.tabId || tabId === this.session?.videoB.tabId;
   }
-
-  private clearSendFailure(tabId: number, frameId?: number): void {
-    this.sendFailures.delete(this.endpointKey(tabId, frameId));
-  }
-
   private isFailedResponse(message: HareMessage, result: unknown): boolean {
     if (message.type === 'SYNC_DEACTIVATE') return false;
     if (result == null || typeof result !== 'object') return true;
@@ -579,7 +551,7 @@ export class SyncCoordinator {
     frameId: number | undefined,
     reason: unknown
   ): void {
-    if (!this.isSyncedEndpoint(tabId)) return;
+    if (!this.isSyncedTab(tabId)) return;
 
     const key = this.endpointKey(tabId, frameId);
     const failures = (this.sendFailures.get(key) ?? 0) + 1;
@@ -591,10 +563,7 @@ export class SyncCoordinator {
   }
 
   handleTabRemoved(tabId: number): void {
-    if (!this.session) return;
-    if (tabId === this.session.videoA.tabId || tabId === this.session.videoB.tabId) {
-      this.stopSync(`tab ${tabId} was closed`);
-    }
+    if (this.isSyncedTab(tabId)) void this.stopSync(`tab ${tabId} was closed`);
   }
 
   destroy(): void {

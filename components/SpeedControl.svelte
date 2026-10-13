@@ -114,7 +114,7 @@
     border: 1px solid rgba(59, 130, 246, 0.3);
     border-radius: 4px;
     background: rgba(59, 130, 246, 0.1);
-    color: #f0f0f0;
+    color: var(--color-text);
     font-size: 18px;
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
@@ -146,7 +146,7 @@
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 4px;
     background: rgba(40, 40, 40, 0.6);
-    color: #f0f0f0;
+    color: var(--color-text);
     font-size: 16px;
     font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', monospace;
     font-variant-numeric: tabular-nums;

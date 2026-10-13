@@ -2,7 +2,7 @@ export interface SyncSession {
   videoA: { tabId: number; frameId?: number };
   videoB: { tabId: number; frameId?: number };
   offset: number; // seconds. videoB_position = videoA_position + offset
-  nudgeStep: number; // default 0.1s
+  nudgeStep: number;
   generation: number; // incremented on each user action, used to invalidate stale drift corrections
   bufferingTab: 'A' | 'B' | 'both' | null;
 }
@@ -30,12 +30,10 @@ export interface SyncCommandPayload {
   rate?: number; // source playback rate (used by receiver for time compensation; required for ratechange)
 }
 
-export interface DriftCorrectPayload {
-  position: number;
-  method: 'rate' | 'seek'; // rate = gradual playback rate adjustment, seek = hard seek
-  rateFactor?: number; // e.g., 0.02 means play at baseRate + 0.02
-  durationMs?: number; // how long to apply rate adjustment
-}
+export type DriftCorrectPayload =
+  | { method: 'seek'; position: number }
+  // Gradual catch-up: play at baseRate + rateFactor for durationMs.
+  | { method: 'rate'; rateFactor: number; durationMs: number };
 
 export interface SyncPositionResponse {
   currentTime: number;

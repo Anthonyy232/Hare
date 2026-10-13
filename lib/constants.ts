@@ -3,12 +3,7 @@ export const SPEED = {
   MAX: 16,
   DEFAULT: 1.0,
   STEP: 0.1,
-  /** Tolerance for speed comparison to handle floating-point precision issues */
   TOLERANCE: 0.01,
-} as const;
-
-export const SEEK = {
-  DEFAULT_SECONDS: 10,
 } as const;
 
 export const CONTROLLER = {
@@ -22,27 +17,6 @@ export const CONTROLLER = {
   BOUNDARY_PADDING: 10,
   /** High enough to beat common player overlays, but stays below system modals. */
   Z_INDEX: 999999,
-} as const;
-
-export const MEDIA_VALIDATION = {
-  MIN_WIDTH: 100,
-  MIN_HEIGHT: 100,
-  /** Thresholds for streaming services to filter out previews/ads. */
-  STREAMING_MIN_WIDTH: 300,
-  STREAMING_MIN_HEIGHT: 170,
-  SOCIAL_MIN_WIDTH: 200,
-  SOCIAL_MIN_HEIGHT: 150,
-  /** Site-specific dimension thresholds for filtering decorative videos */
-  TWITTER_SMALL_WIDTH: 150,
-  TWITTER_SMALL_HEIGHT: 100,
-  TWITTER_MUTED_MIN_WIDTH: 300,
-  TWITTER_AD_MIN_WIDTH: 400,
-  TIKTOK_MIN_WIDTH: 200,
-  TIKTOK_MIN_HEIGHT: 300,
-  TIKTOK_LOOP_MIN_HEIGHT: 400,
-  REDDIT_MIN_WIDTH: 300,
-  REDDIT_MIN_HEIGHT: 200,
-  REDDIT_MUTED_MIN_WIDTH: 400,
 } as const;
 
 export const OBSERVER = {

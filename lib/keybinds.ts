@@ -1,4 +1,4 @@
-import type { Settings, KeyAction, KeyBinding } from './types';
+import { isKeyAction, type Settings, type KeyAction } from './types';
 import type { VideoController } from './controller';
 
 function isInputElement(element: Element): boolean {
@@ -7,40 +7,7 @@ function isInputElement(element: Element): boolean {
     || !!element.closest('[contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="searchbox"], [role="combobox"]');
 }
 
-export function executeAction(
-  action: KeyAction,
-  binding: KeyBinding,
-  controllers: VideoController[]
-): void {
-  for (const controller of controllers) {
-    switch (action) {
-      case 'slower':
-        controller.adjustSpeed(-binding.value);
-        controller.showOSD(`${controller.speed.toFixed(2)}x`);
-        break;
-      case 'faster':
-        controller.adjustSpeed(binding.value);
-        controller.showOSD(`${controller.speed.toFixed(2)}x`);
-        break;
-      case 'rewind':
-        controller.seek(-binding.value);
-        break;
-      case 'advance':
-        controller.seek(binding.value);
-        break;
-      case 'reset':
-        controller.setSpeed(binding.value);
-        controller.showOSD(`${controller.speed.toFixed(2)}x`);
-        break;
-      case 'display':
-        controller.toggleVisibility();
-        break;
-    }
-  }
-}
-
 export type KeybindHandler = {
-  handleKeyDown: (event: KeyboardEvent) => void;
   destroy: () => void;
 };
 
@@ -56,8 +23,7 @@ function isHareKeyForwardMessage(data: unknown): data is HareKeyForwardMessage {
   const d = data as Record<string, unknown>;
   return (
     d.__hareKeyForward === true &&
-    typeof d.action === 'string' &&
-    ['slower', 'faster', 'rewind', 'advance', 'reset', 'display'].includes(d.action) &&
+    isKeyAction(d.action) &&
     typeof d.value === 'number' && Number.isFinite(d.value) && d.value >= 0
   );
 }
@@ -65,11 +31,7 @@ function isHareKeyForwardMessage(data: unknown): data is HareKeyForwardMessage {
 function forwardToChildFrames(action: KeyAction, value: number): void {
   const msg: HareKeyForwardMessage = { __hareKeyForward: true, action, value };
   for (let i = 0; i < window.frames.length; i++) {
-    try {
-      window.frames[i].postMessage(msg, '*');
-    } catch {
-      /* postMessage is allowed cross-origin; swallow exotic failures */
-    }
+    window.frames[i].postMessage(msg, '*');
   }
 }
 
@@ -79,9 +41,7 @@ export function createKeybindHandler(
 ): KeybindHandler {
   const handleKeyDown = (event: KeyboardEvent): void => {
     if (event.isComposing || event.keyCode === 229 || document.designMode === 'on') return;
-    const path = event.composedPath();
-    if (path.some(target => target instanceof Element && isInputElement(target))) return;
-    if (event.target instanceof Element && isInputElement(event.target)) return;
+    if (event.composedPath().some(target => target instanceof Element && isInputElement(target))) return;
 
     if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
 
@@ -94,7 +54,7 @@ export function createKeybindHandler(
 
     const controllers = getControllers();
     if (controllers.length > 0) {
-      executeAction(binding.action, binding, controllers);
+      for (const controller of controllers) controller.perform(binding.action, binding.value);
     } else if (window.frames.length > 0) {
       forwardToChildFrames(binding.action, binding.value);
     } else {
@@ -112,15 +72,12 @@ export function createKeybindHandler(
     // Accept only the direct parent, which forwards through nested frame chains.
     if (window.parent === window || event.source !== window.parent) return;
 
-    const settings = getSettings();
-    if (!settings.enabled) return;
+    if (!getSettings().enabled) return;
 
     const { action, value } = event.data;
-
     const controllers = getControllers();
     if (controllers.length > 0) {
-      const syntheticBinding: KeyBinding = { action, value, key: '', force: false };
-      executeAction(action, syntheticBinding, controllers);
+      for (const controller of controllers) controller.perform(action, value);
     } else if (window.frames.length > 0) {
       forwardToChildFrames(action, value);
     }
@@ -131,7 +88,6 @@ export function createKeybindHandler(
   window.addEventListener('message', handleForwardMessage);
 
   return {
-    handleKeyDown,
     destroy: () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
       window.removeEventListener('message', handleForwardMessage);

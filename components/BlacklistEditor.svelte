@@ -48,7 +48,7 @@
 </div>
 
 <style>
-  .validation-error { color: #fca5a5; font-size: 13px; }
+  .validation-error { color: var(--color-danger-text); font-size: 13px; }
   .blacklist-editor {
     width: 100%;
   }
@@ -59,7 +59,7 @@
   }
 
   label strong {
-    color: #f0f0f0;
+    color: var(--color-text);
     font-weight: 600;
     font-size: 15px;
   }
@@ -67,7 +67,7 @@
   .sublabel {
     display: block;
     font-size: 13px;
-    color: #999;
+    color: var(--color-text-muted);
     font-weight: normal;
     margin-top: 6px;
   }
@@ -79,7 +79,7 @@
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 4px;
     background: rgba(40, 40, 40, 0.6);
-    color: #f0f0f0;
+    color: var(--color-text);
     font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
     font-size: 13px;
     line-height: 1.7;
@@ -111,7 +111,7 @@
   .examples strong {
     display: block;
     margin-bottom: 12px;
-    color: #f0f0f0;
+    color: var(--color-text);
     font-weight: 600;
     font-size: 14px;
   }
@@ -119,7 +119,7 @@
   .examples ul {
     margin: 0;
     padding-left: 24px;
-    color: #999;
+    color: var(--color-text-muted);
   }
 
   .examples li {
@@ -128,7 +128,7 @@
 
   .examples code {
     background: rgba(40, 40, 40, 0.8);
-    color: #93c5fd;
+    color: var(--color-focus);
     padding: 3px 8px;
     border-radius: 3px;
     font-size: 12px;

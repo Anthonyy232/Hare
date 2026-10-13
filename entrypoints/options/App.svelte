@@ -13,7 +13,6 @@
   } from "../../lib/settings";
   import { CONTROLLER, UI } from "../../lib/constants";
   import type { Settings } from "../../lib/types";
-  import { MESSAGES } from "../../lib/messages";
 
   let settings: Settings | null = $state(null);
   let loading = $state(true);
@@ -68,7 +67,7 @@
 
   async function reset() {
     if (saving) return;
-    if (confirm(MESSAGES.RESET_SETTINGS_CONFIRM)) {
+    if (confirm('Reset all settings to defaults?')) {
       saving = true;
       error = null;
       try {
@@ -277,7 +276,7 @@
         <div class="conflict-warning" role="alert">
           <div class="conflict-text">
             <strong>Warning:</strong>
-            {MESSAGES.SETTINGS_CONFLICT}
+            Settings were changed in another tab. Save to overwrite, or reload to discard your changes.
           </div>
           <button class="conflict-discard" onclick={load}>
             Discard local changes
@@ -314,7 +313,7 @@
   :global(body) {
     margin: 0;
     padding: 0;
-    background: #1a1a1a;
+    background: var(--color-surface);
     min-height: 100%;
   }
 
@@ -326,7 +325,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(165deg, #1e1e1e 0%, #1a1a1a 100%);
+    background: linear-gradient(165deg, #1e1e1e 0%, var(--color-surface) 100%);
     z-index: -1;
   }
 
@@ -340,7 +339,7 @@
       BlinkMacSystemFont,
       "Segoe UI",
       sans-serif;
-    color: #f0f0f0;
+    color: var(--color-text);
   }
 
   header {
@@ -356,7 +355,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #3b82f6, #60a5fa);
+    background: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent));
     border-radius: 10px;
     font-size: 28px;
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
@@ -371,7 +370,7 @@
     font-size: 28px;
     font-weight: 700;
     letter-spacing: -0.02em;
-    background: linear-gradient(135deg, #60a5fa, #93c5fd);
+    background: linear-gradient(135deg, var(--color-accent), var(--color-focus));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -379,7 +378,7 @@
 
   .subtitle {
     margin: 0;
-    color: #60a5fa;
+    color: var(--color-accent);
     font-size: 14px;
     font-weight: 500;
     opacity: 0.9;
@@ -388,7 +387,7 @@
   .loading {
     text-align: center;
     padding: 60px 40px;
-    color: #999;
+    color: var(--color-text-muted);
     font-size: 16px;
   }
 
@@ -424,7 +423,7 @@
   .section-accent {
     width: 3px;
     height: 20px;
-    background: linear-gradient(180deg, #60a5fa, #93c5fd);
+    background: linear-gradient(180deg, var(--color-accent), var(--color-focus));
     border-radius: 2px;
   }
 
@@ -432,7 +431,7 @@
     margin: 0;
     font-size: 18px;
     font-weight: 700;
-    color: #f0f0f0;
+    color: var(--color-text);
     letter-spacing: -0.01em;
   }
 
@@ -464,12 +463,12 @@
   .toggle-label {
     font-size: 14px;
     font-weight: 600;
-    color: #f0f0f0;
+    color: var(--color-text);
   }
 
   .toggle-description {
     font-size: 12px;
-    color: #888;
+    color: var(--color-text-muted);
   }
 
   .toggle-switch {
@@ -507,15 +506,15 @@
     width: 16px;
     left: 3px;
     bottom: 3px;
-    background-color: #f0f0f0;
+    background-color: var(--color-text);
     transition: all 0.2s ease;
     border-radius: 50%;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
   input[type="checkbox"]:checked + .toggle-slider {
-    background: linear-gradient(135deg, #3b82f6, #60a5fa);
-    border-color: #60a5fa;
+    background: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent));
+    border-color: var(--color-accent);
   }
 
   input[type="checkbox"]:focus-visible + .toggle-slider {
@@ -548,12 +547,12 @@
   .slider-label-group label {
     font-size: 14px;
     font-weight: 600;
-    color: #f0f0f0;
+    color: var(--color-text);
   }
 
   .slider-description {
     font-size: 12px;
-    color: #888;
+    color: var(--color-text-muted);
   }
 
   .slider-control {
@@ -579,7 +578,7 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #60a5fa, #93c5fd);
+    background: linear-gradient(135deg, var(--color-accent), var(--color-focus));
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   }
@@ -591,7 +590,7 @@
     font-variant-numeric: tabular-nums;
     font-size: 14px;
     font-weight: 600;
-    color: #93c5fd;
+    color: var(--color-focus);
   }
 
   .conflict-warning {
@@ -666,7 +665,7 @@
   }
 
   .btn.primary {
-    background: linear-gradient(135deg, #3b82f6, #60a5fa);
+    background: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent));
     color: #0d172b;
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
   }
@@ -683,19 +682,19 @@
 
   .btn.secondary {
     background: rgba(40, 40, 40, 0.6);
-    color: #f0f0f0;
+    color: var(--color-text);
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .btn.secondary:hover {
     background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    color: var(--color-danger);
     border-color: rgba(239, 68, 68, 0.3);
   }
 
   fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
   .save-status { margin-right: auto; align-self: center; font-size: 13px; color: #b5b5b5; }
-  .save-error { margin: 0 0 10px; color: #fca5a5; font-size: 13px; }
+  .save-error { margin: 0 0 10px; color: var(--color-danger-text); font-size: 13px; }
   @media (max-width: 600px) {
     .options { padding: 24px 16px 140px; }
     .card { padding: 16px; }
