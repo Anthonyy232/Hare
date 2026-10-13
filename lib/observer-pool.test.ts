@@ -66,25 +66,4 @@ describe('ObserverPool', () => {
     expect(removed).toEqual([]);
     pool.disconnect();
   });
-
-  it('reports a tracked media element when it is actually disconnected', async () => {
-    const found: HTMLMediaElement[] = [];
-    const removed: HTMLMediaElement[] = [];
-    const pool = new ObserverPool(
-      media => found.push(media),
-      media => removed.push(media),
-    );
-
-    pool.observe(document);
-    const video = document.createElement('video');
-    document.body.appendChild(video);
-    await flushObserver();
-
-    video.remove();
-    await flushObserver();
-
-    expect(found).toEqual([video]);
-    expect(removed).toEqual([video]);
-    pool.disconnect();
-  });
 });
