@@ -202,6 +202,9 @@ test('shortcut capture rejects duplicates and modifiers, clears keys, and suppor
   await options.getByRole('button', { name: 'Clear shortcut for Increase Speed', exact: true }).click();
   await options.getByRole('button', { name: 'Save Settings' }).click();
   await expect(key).toHaveText('Unbound');
+  // The label updates before the save lands; wait for storage so the page has the cleared key.
+  await expect.poll(() => extension.worker.evaluate(async () => (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings']
+    .keyBindings.find((binding: { action: string }) => binding.action === 'faster').key)).toBe('');
   await video.keyboard.press('k');
   expect(await rate(video)).toBeCloseTo(1.1);
 });
