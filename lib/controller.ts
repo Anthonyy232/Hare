@@ -1,12 +1,10 @@
-import { SPEED, CONTROLLER, UI, OBSERVER, SEEK } from './constants';
-import type { Settings, SiteHandler, ControllerPosition, KeyAction } from './types';
+import { SPEED, CONTROLLER, UI, OBSERVER } from './constants';
+import type { Settings, SiteHandler, KeyAction } from './types';
 import type { HitmapButton } from './cross-frame-pointer';
 import controllerCSS from '../assets/controller.css?raw';
 import { logger } from './logger';
-import { MESSAGES } from './messages';
-import { BrowserFeatures } from './browser-detect';
 import { safeMedia } from './safe-media';
-import { ICONS } from './controller-icons';
+import { createIcon, type ICONS } from './controller-icons';
 
 let sharedStyleSheet: CSSStyleSheet | null = null;
 
@@ -18,666 +16,131 @@ function getStyleSheet(): CSSStyleSheet {
   return sharedStyleSheet;
 }
 
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
+const formatSpeed = (speed: number) => `${speed.toFixed(2)}x`;
+
 let controllerIdCounter = 0;
 const positionedParents = new WeakMap<HTMLElement, { count: number; value: string; priority: string }>();
+const SPEED_BLOCKED = 'Speed control blocked';
+const POSITION_CHECK_INTERVAL_MS = 2000;
+const ENFORCEMENT_DEBOUNCE_MS = 500;
 
-const svgCache: Record<string, SVGElement> = {};
+type ControllerPosition = { target: Element; method: 'prepend' | 'append' };
+type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
+
+const BUTTONS: ReadonlyArray<[icon: keyof typeof ICONS, action: KeyAction, label: string]> = [
+  ['rewind', 'rewind', 'Rewind'],
+  ['slower', 'slower', 'Slower'],
+  ['faster', 'faster', 'Faster'],
+  ['advance', 'advance', 'Advance'],
+  ['hide', 'display', 'Hide controller'],
+];
 
 export class VideoController {
-  readonly id: string;
-  readonly media: HTMLMediaElement;
+  readonly id = `hare-${++controllerIdCounter}`;
 
-  private wrapper: HTMLElement | null = null;
-  private shadow: ShadowRoot | null = null;
-  private speedDisplay: HTMLElement | null = null;
-  private controllerEl: HTMLElement | null = null;
-  private osdEl: HTMLElement | null = null;
-  private hideBtn: HTMLButtonElement | null = null;
-  private osdTimeout: NodeJS.Timeout | null = null;
-  private isManuallyHidden = false;
-  private settings: Settings;
-  private siteHandler: SiteHandler | null;
+  private readonly wrapper = document.createElement(CONTROLLER.ELEMENT_TAG);
+  private readonly controllerEl = document.createElement('div');
+  private readonly speedDisplay = document.createElement('span');
+  private readonly osdEl = document.createElement('div');
+  private readonly buttons: HTMLButtonElement[];
+  private readonly listeners = new AbortController();
+  private readonly resizeObserver = new ResizeObserver(() => {
+    clearTimeout(this.resizeDebounceTimeout);
+    this.resizeDebounceTimeout = setTimeout(() => this.clampPosition(), OBSERVER.DEBOUNCE_MS);
+  });
+  private readonly positionCheckInterval = setInterval(() => this.verifyAndRepairPosition(), POSITION_CHECK_INTERVAL_MS);
+  private resizeDebounceTimeout?: ReturnType<typeof setTimeout>;
+  private osdTimeout?: ReturnType<typeof setTimeout>;
 
-  private dragPointerId: number | null = null;
-  private listeners = new AbortController();
-  private dragOffsetX = 0;
-  private dragOffsetY = 0;
-  private positionX = 0;
-  private positionY = 0;
-  private resizeObserver: ResizeObserver | null = null;
-  private resizeDebounceTimeout: NodeJS.Timeout | null = null;
-  private positionCheckInterval: NodeJS.Timeout | null = null;
-  private static readonly POSITION_CHECK_INTERVAL_MS = 2000;
-
-  private cachedSpeedStep: number = SPEED.STEP;
-  private cachedSeekValue: number = SEEK.DEFAULT_SECONDS;
-  private cachedSlowerStep: number = SPEED.STEP;
-  private cachedRewindValue: number = SEEK.DEFAULT_SECONDS;
+  private hidden: boolean;
   private destroyed = false;
   private positionedParent: HTMLElement | null = null;
-  private speedRequest = 0;
+  private positionX: number = CONTROLLER.DEFAULT_OFFSET_X;
+  private positionY: number = CONTROLLER.DEFAULT_OFFSET_Y;
+  private drag: { pointerId: number; offsetX: number; offsetY: number; bounds: Bounds | null } | null = null;
 
-  private targetSpeed: number = SPEED.DEFAULT;
+  private targetSpeed: number;
   private isEnforcingSpeed = false;
   private suppressRateEnforcementCount = 0;
   private lastEnforcementTime = 0;
-  private static readonly ENFORCEMENT_DEBOUNCE_MS = 500;
-
-  private dragBounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null;
-
+  private speedRequest = 0;
   private intendedSpeedListener: ((speed: number) => void) | null = null;
 
   constructor(
-    media: HTMLMediaElement,
-    settings: Settings,
-    siteHandler: SiteHandler | null = null
+    readonly media: HTMLMediaElement,
+    private settings: Settings,
+    private readonly siteHandler: SiteHandler | null = null,
   ) {
-    this.id = `hare-${++controllerIdCounter}`;
-    this.media = media;
-    this.settings = settings;
-    this.siteHandler = siteHandler;
-    this.isManuallyHidden = settings.startHidden;
+    this.hidden = settings.startHidden;
     this.targetSpeed = safeMedia.getPlaybackRate(media);
 
-    this.positionX = CONTROLLER.DEFAULT_OFFSET_X;
-    this.positionY = CONTROLLER.DEFAULT_OFFSET_Y;
-
-    this.cacheKeybindingValues();
-    this.init();
-  }
-
-  private cacheKeybindingValues(): void {
-    const fasterBinding = this.settings.keyBindings.find((b) => b.action === 'faster');
-    const advanceBinding = this.settings.keyBindings.find((b) => b.action === 'advance');
-    this.cachedSpeedStep = fasterBinding?.value ?? SPEED.STEP;
-    this.cachedSeekValue = advanceBinding?.value ?? SEEK.DEFAULT_SECONDS;
-    this.cachedSlowerStep = this.settings.keyBindings.find(b => b.action === 'slower')?.value ?? SPEED.STEP;
-    this.cachedRewindValue = this.settings.keyBindings.find(b => b.action === 'rewind')?.value ?? SEEK.DEFAULT_SECONDS;
-  }
-
-  private init(): void {
-    this.createController();
-
-    const { signal } = this.listeners;
-    this.media.addEventListener('ratechange', this.handleRateChange, { capture: true, signal });
-    this.media.addEventListener('play', this.handlePlay, { signal });
-    document.addEventListener('fullscreenchange', this.handleFullscreenChange, { signal });
-    window.addEventListener('blur', this.handleDragEnd, { signal });
-
-    if (safeMedia.getPlaybackRate(this.media) !== SPEED.DEFAULT) {
-      this.updateSpeedDisplay();
-    }
-
-    this.startPositionCheck();
-  }
-
-  // Repair positioning after dynamic player DOM changes.
-  private startPositionCheck(): void {
-    this.positionCheckInterval = setInterval(() => {
-      this.verifyAndRepairPosition();
-    }, VideoController.POSITION_CHECK_INTERVAL_MS);
-  }
-
-  private verifyAndRepairPosition(): void {
-    if (!this.wrapper || !this.media.isConnected) return;
-
-    if (!this.wrapper.isConnected) {
-      this.insertController();
-      return;
-    }
-
-    const parent = this.wrapper.parentElement;
-
-    // If wrapper has no parent but is connected, it's in a document fragment - reinsert
-    if (!parent) {
-      this.insertController();
-      return;
-    }
-
-    const position = this.getControllerPosition();
-    const expectedParent = position
-      ? (position.method === 'before' || position.method === 'after' ? position.target.parentElement : position.target)
-      : this.media.parentElement;
-    if (parent !== expectedParent && expectedParent) {
-      this.insertController();
-      return;
-    }
-
-    if (parent !== document.body && this.wrapper.offsetParent !== parent) {
-      const style = getComputedStyle(parent);
-      if (style.position === 'static' && style.transform === 'none') {
-        this.ensurePositioningContext(parent);
-      } else {
-        this.insertController();
-      }
-    }
-  }
-
-  private createController(): void {
-    this.wrapper = document.createElement(CONTROLLER.ELEMENT_TAG);
-    this.wrapper.id = this.id;
-
-    this.shadow = this.wrapper.attachShadow({ mode: 'open' });
-
-    // Firefox content scripts throw "Accessing from Xray wrapper" when setting adoptedStyleSheets
+    const shadow = this.wrapper.attachShadow({ mode: 'open' });
+    // Firefox content scripts throw "Accessing from Xray wrapper" on adoptedStyleSheets; fall back to <style>.
     // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1411641
-    // Workaround: Fall back to <style> tag injection
     try {
-      this.shadow.adoptedStyleSheets = [getStyleSheet()];
-    } catch (error) {
-      logger.debug('adoptedStyleSheets not available, using <style> fallback:', error);
-      const styleEl = document.createElement('style');
-      styleEl.textContent = controllerCSS;
-      this.shadow.appendChild(styleEl);
+      shadow.adoptedStyleSheets = [getStyleSheet()];
+    } catch {
+      const style = document.createElement('style');
+      style.textContent = controllerCSS;
+      shadow.append(style);
     }
-
-    this.controllerEl = document.createElement('div');
-    this.controllerEl.className = 'hare-controller';
-    this.controllerEl.addEventListener('mouseenter', () => this.clampPosition());
-    this.controllerEl.addEventListener('focusin', () => this.clampPosition());
-    if (this.isManuallyHidden) {
-      this.controllerEl.classList.add('hidden');
-    }
-
-    this.controllerEl.style.setProperty('--hare-opacity', String(this.settings.controllerOpacity));
-    this.controllerEl.style.setProperty('--hare-font-size', `${this.settings.controllerButtonSize}px`);
+    this.wrapper.id = this.id;
     this.wrapper.style.setProperty('--hare-z-index', String(CONTROLLER.Z_INDEX));
 
-    this.speedDisplay = document.createElement('span');
+    const { signal } = this.listeners;
     this.speedDisplay.className = 'hare-speed';
-    this.speedDisplay.textContent = this.formatSpeed(safeMedia.getPlaybackRate(this.media));
     this.speedDisplay.setAttribute('role', 'status');
     this.speedDisplay.setAttribute('aria-live', 'polite');
     this.speedDisplay.setAttribute('aria-label', 'Current playback speed');
-    this.speedDisplay.setAttribute('tabindex', '0');
-
-    const { signal } = this.listeners;
+    this.speedDisplay.tabIndex = 0;
     this.speedDisplay.addEventListener('pointerdown', this.handleDragStart, { signal });
     this.speedDisplay.addEventListener('pointermove', this.handleDragMove, { signal });
-    this.speedDisplay.addEventListener('pointerup', this.handleDragEnd, { signal });
-    this.speedDisplay.addEventListener('pointercancel', this.handleDragEnd, { signal });
-    this.speedDisplay.addEventListener('lostpointercapture', this.handleDragEnd, { signal });
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      this.speedDisplay.addEventListener(type, this.handleDragEnd, { signal });
+    }
+    this.updateSpeedDisplay();
 
+    this.buttons = BUTTONS.map(([icon, action, label]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'hare-btn';
+      button.dataset.action = action;
+      button.setAttribute('aria-label', label);
+      button.append(createIcon(icon));
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (action === 'display') this.toggleVisibility();
+        else if (action === 'rewind' || action === 'advance') this.seek((action === 'rewind' ? -1 : 1) * this.valueFor(action));
+        else this.adjustSpeed((action === 'slower' ? -1 : 1) * this.valueFor(action));
+      }, { signal });
+      return button;
+    });
     const controls = document.createElement('span');
     controls.className = 'hare-controls';
+    controls.append(...this.buttons);
 
-    const rewindBtn = this.createButton(ICONS.rewind, 'rewind', () => this.seek(-this.cachedRewindValue), 'Rewind');
-    const slowerBtn = this.createButton(ICONS.slower, 'slower', () => this.adjustSpeed(-this.cachedSlowerStep), 'Slower');
-    const fasterBtn = this.createButton(ICONS.faster, 'faster', () => this.adjustSpeed(this.cachedSpeedStep), 'Faster');
-    const advanceBtn = this.createButton(ICONS.advance, 'advance', () => this.seek(this.cachedSeekValue), 'Advance');
-
-    const hideBtn = this.createButton(ICONS.hide, 'display', () => this.toggleVisibility(), 'Hide controller');
-    hideBtn.classList.add('hare-btn-hide');
-    hideBtn.setAttribute('aria-pressed', String(this.isManuallyHidden));
-    this.hideBtn = hideBtn;
-
-    controls.append(rewindBtn, slowerBtn, fasterBtn, advanceBtn, hideBtn);
+    this.controllerEl.className = 'hare-controller';
+    this.controllerEl.addEventListener('mouseenter', () => this.clampPosition(), { signal });
+    this.controllerEl.addEventListener('focusin', () => this.clampPosition(), { signal });
     this.controllerEl.append(this.speedDisplay, controls);
+    this.applyAppearance();
+    this.renderVisibility();
 
-    this.osdEl = document.createElement('div');
     this.osdEl.className = 'hare-osd';
     this.osdEl.setAttribute('role', 'status');
-    this.osdEl.textContent = '';
+    shadow.append(this.controllerEl, this.osdEl);
 
-    this.shadow.appendChild(this.controllerEl);
-    this.shadow.appendChild(this.osdEl);
+    media.addEventListener('ratechange', this.handleRateChange, { capture: true, signal });
+    document.addEventListener('fullscreenchange', () => {
+      this.insertController();
+      this.clampPosition();
+    }, { signal });
+    window.addEventListener('blur', this.handleDragEnd, { signal });
 
     this.insertController();
-    this.wrapper!.style.transform = `translate(${this.positionX}px, ${this.positionY}px)`;
-  }
-
-  private createSVGFromString(svgString: string): SVGElement | null {
-    if (svgCache[svgString]) {
-      return svgCache[svgString].cloneNode(true) as SVGElement;
-    }
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`<body>${svgString}</body>`, 'text/html');
-    const svgElement = doc.body.querySelector('svg');
-
-    if (svgElement) {
-      const importedNode = document.importNode(svgElement, true) as SVGElement;
-      svgCache[svgString] = importedNode;
-      return importedNode.cloneNode(true) as SVGElement;
-    }
-    return null;
-  }
-
-  private createButton(
-    iconSvg: string,
-    action: string,
-    onClick: () => void,
-    ariaLabel: string
-  ): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'hare-btn';
-
-    const svgElement = this.createSVGFromString(iconSvg);
-    if (svgElement) {
-      btn.appendChild(svgElement);
-    }
-
-    btn.dataset.action = action;
-    btn.setAttribute('aria-label', ariaLabel);
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onClick();
-    });
-    return btn;
-  }
-
-  private ensurePositioningContext(parent: HTMLElement): void {
-    if (this.positionedParent !== parent) {
-      this.releasePositioningContext();
-      const existing = positionedParents.get(parent);
-      if (existing) {
-        existing.count++;
-        this.positionedParent = parent;
-      }
-    }
-    const style = getComputedStyle(parent);
-    if (style.position === 'static') {
-      if (!this.positionedParent) {
-        positionedParents.set(parent, { count: 1, value: parent.style.getPropertyValue('position'), priority: parent.style.getPropertyPriority('position') });
-        this.positionedParent = parent;
-      }
-      parent.style.position = 'relative';
-    }
-  }
-
-  private releasePositioningContext(): void {
-    const parent = this.positionedParent;
-    this.positionedParent = null;
-    if (!parent) return;
-    const lease = positionedParents.get(parent);
-    if (!lease || --lease.count > 0) return;
-    if (parent.style.position === 'relative' && parent.style.getPropertyPriority('position') === '') {
-      if (lease.value) parent.style.setProperty('position', lease.value, lease.priority);
-      else parent.style.removeProperty('position');
-    }
-    positionedParents.delete(parent);
-  }
-
-  private insertController(): void {
-    if (!this.wrapper) return;
-
-    let position = this.getControllerPosition();
-
-    if (position) {
-      const target = position.target as HTMLElement;
-
-      if (!target.isConnected) {
-        logger.debug('Site handler returned disconnected element, using fallback positioning');
-        position = null;
-      } else {
-        const parent = position.method === 'before' || position.method === 'after' ? target.parentElement : target;
-        if (parent) this.ensurePositioningContext(parent);
-
-        switch (position.method) {
-          case 'prepend': if (this.wrapper.parentNode !== target) target.prepend(this.wrapper); break;
-          case 'append': if (this.wrapper.parentNode !== target) target.append(this.wrapper); break;
-          case 'before': if (this.wrapper.nextSibling !== target) target.before(this.wrapper); break;
-          case 'after': if (this.wrapper.previousSibling !== target) target.after(this.wrapper); break;
-        }
-      }
-    }
-
-    if (!position) {
-      const parent = this.media.parentElement;
-      if (parent) {
-        this.ensurePositioningContext(parent);
-        if (this.wrapper.parentNode !== parent) parent.prepend(this.wrapper);
-      } else if (this.media.parentNode instanceof ShadowRoot) {
-        this.media.before(this.wrapper);
-      }
-    }
-
-    this.setupResizeObserver();
-  }
-
-  private getControllerPosition(): ControllerPosition | null {
-    const fullscreen = document.fullscreenElement;
-    if (fullscreen && fullscreen !== this.media && fullscreen.contains(this.media)) {
-      return { target: fullscreen, method: 'append' };
-    }
-    const position = this.media instanceof HTMLVideoElement
-      ? this.siteHandler?.getControllerPosition(this.media) : null;
-    // Video elements cannot display DOM children (e.g. a .vjs-tech selector).
-    return position?.target instanceof HTMLMediaElement ? null : position ?? null;
-  }
-
-  private handleFullscreenChange = (): void => {
-    this.insertController();
-    this.clampPosition();
-  };
-
-  private setupResizeObserver(): void {
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-    }
-
-    if (this.resizeDebounceTimeout) {
-      clearTimeout(this.resizeDebounceTimeout);
-      this.resizeDebounceTimeout = null;
-    }
-
-    const parent = this.wrapper?.parentElement;
-    if (!parent) return;
-
-    if (!BrowserFeatures.hasResizeObserver) {
-      logger.debug('ResizeObserver not available - controller position may not adjust on resize');
-      return;
-    }
-
-    try {
-      this.resizeObserver = new ResizeObserver(() => {
-        if (this.resizeDebounceTimeout) {
-          clearTimeout(this.resizeDebounceTimeout);
-        }
-        this.resizeDebounceTimeout = setTimeout(() => {
-          this.clampPosition();
-          this.resizeDebounceTimeout = null;
-        }, OBSERVER.DEBOUNCE_MS);
-      });
-      this.resizeObserver.observe(parent);
-    } catch (error) {
-      logger.warn('ResizeObserver failed:', error);
-    }
-  }
-
-  /** Convert viewport pixels into the containing block's CSS coordinates. */
-  private getPositionGeometry() {
-    const parent = this.wrapper?.offsetParent instanceof HTMLElement
-      ? this.wrapper.offsetParent : this.wrapper?.parentElement;
-    if (!parent) return null;
-    const rect = parent.getBoundingClientRect();
-    const scaleX = parent.offsetWidth && rect.width ? rect.width / parent.offsetWidth : 1;
-    const scaleY = parent.offsetHeight && rect.height ? rect.height / parent.offsetHeight : 1;
-    return {
-      parent, scaleX, scaleY,
-      left: rect.left + (parent.clientLeft - parent.scrollLeft) * scaleX,
-      top: rect.top + (parent.clientTop - parent.scrollTop) * scaleY,
-    };
-  }
-
-  /** Keep the expanded controls within the media box, in local CSS coordinates. */
-  private getClampedBounds(): { minX: number; maxX: number; minY: number; maxY: number } | null {
-    if (!this.wrapper || !this.controllerEl) return null;
-    const geometry = this.getPositionGeometry();
-    if (!geometry) return null;
-    const { parent, scaleX, scaleY, left, top } = geometry;
-    let minX = parent.scrollLeft;
-    let minY = parent.scrollTop;
-    let maxX = minX + (parent.clientWidth || parent.offsetWidth || window.innerWidth / scaleX);
-    let maxY = minY + (parent.clientHeight || parent.offsetHeight || window.innerHeight / scaleY);
-
-    // Site-specific containers often extend beyond the video; we clamp to the actual video element.
-    const videoRect = this.media.getBoundingClientRect();
-    if (videoRect.width > 0 && videoRect.height > 0) {
-      minX = Math.max(minX, (videoRect.left - left) / scaleX);
-      minY = Math.max(minY, (videoRect.top - top) / scaleY);
-      maxX = Math.min(maxX, (videoRect.right - left) / scaleX);
-      maxY = Math.min(maxY, (videoRect.bottom - top) / scaleY);
-    }
-
-    // Wrap controls before measuring them, including large buttons on narrow players.
-    this.controllerEl.style.setProperty('--hare-max-width', `${Math.max(0, maxX - minX - CONTROLLER.BOUNDARY_PADDING * 2)}px`);
-    const controllerRect = this.controllerEl.getBoundingClientRect();
-    const controllerWidth = controllerRect.width / scaleX;
-    const controllerHeight = controllerRect.height / scaleY;
-
-    const padding = CONTROLLER.BOUNDARY_PADDING;
-
-    return {
-      minX: minX + padding,
-      maxX: Math.max(minX + padding, maxX - controllerWidth - padding),
-      minY: minY + padding,
-      maxY: Math.max(minY + padding, maxY - controllerHeight - padding),
-    };
-  }
-
-  private clampValue(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(value, max));
-  }
-
-  private clampPosition(): void {
-    if (!this.wrapper || this.dragPointerId !== null) return;
-
-    const bounds = this.getClampedBounds();
-    if (!bounds) return;
-
-    const newX = this.clampValue(this.positionX, bounds.minX, bounds.maxX);
-    const newY = this.clampValue(this.positionY, bounds.minY, bounds.maxY);
-
-    if (newX !== this.positionX || newY !== this.positionY) {
-      this.positionX = newX;
-      this.positionY = newY;
-      this.wrapper.style.transform = `translate(${this.positionX}px, ${this.positionY}px)`;
-    }
-  }
-
-  private formatSpeed(speed: number): string {
-    return speed.toFixed(2) + 'x';
-  }
-
-  private handleRateChange = (e: Event): void => {
-    const shouldSkipEnforcement = this.suppressRateEnforcementCount > 0;
-    if (shouldSkipEnforcement) {
-      this.suppressRateEnforcementCount--;
-    }
-
-    if (this.isEnforcingSpeed || shouldSkipEnforcement) {
-      // Prevent player listeners from resetting the requested rate.
-      e.stopImmediatePropagation();
-    }
-    this.updateSpeedDisplay();
-    if (shouldSkipEnforcement) return;
-    if (!this.isEnforcingSpeed) this.targetSpeed = safeMedia.getPlaybackRate(this.media);
-    this.enforceSpeedIfNeeded();
-  };
-
-  private handlePlay = (): void => {
-    if (!this.isManuallyHidden && this.controllerEl?.classList.contains('hidden')) {
-      this.controllerEl.classList.remove('hidden');
-    }
-  };
-
-  private handleDragStart = (e: PointerEvent): void => {
-    if (e.button !== 0) return;
-    if (!this.wrapper) return;
-
-    if (!this.media.isConnected) {
-      this.destroy();
-      return;
-    }
-
-    if (this.dragPointerId !== null) return;
-    const geometry = this.getPositionGeometry();
-    if (!geometry) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    this.speedDisplay!.setPointerCapture(e.pointerId);
-    this.dragPointerId = e.pointerId;
-    this.controllerEl?.classList.add('dragging');
-    this.dragBounds = this.getClampedBounds();
-
-    this.dragOffsetX = (e.clientX - geometry.left) / geometry.scaleX - this.positionX;
-    this.dragOffsetY = (e.clientY - geometry.top) / geometry.scaleY - this.positionY;
-  };
-
-  private handleDragMove = (e: PointerEvent): void => {
-    if (e.pointerId !== this.dragPointerId || !this.wrapper) return;
-
-    if (!this.media.isConnected) {
-      this.handleDragEnd();
-      return;
-    }
-
-    e.preventDefault();
-
-    const geometry = this.getPositionGeometry();
-    const bounds = this.dragBounds;
-    if (!geometry || !bounds) return;
-
-    const newX = (e.clientX - geometry.left) / geometry.scaleX - this.dragOffsetX;
-    const newY = (e.clientY - geometry.top) / geometry.scaleY - this.dragOffsetY;
-
-    this.positionX = this.clampValue(newX, bounds.minX, bounds.maxX);
-    this.positionY = this.clampValue(newY, bounds.minY, bounds.maxY);
-    this.wrapper.style.transform = `translate(${this.positionX}px, ${this.positionY}px)`;
-  };
-
-  private handleDragEnd = (event?: Event): void => {
-    if (this.dragPointerId === null) return;
-    if (event instanceof PointerEvent && event.pointerId !== this.dragPointerId) return;
-
-    const pointerId = this.dragPointerId;
-    this.dragPointerId = null;
-    this.dragBounds = null;
-    this.controllerEl?.classList.remove('dragging');
-    if (this.speedDisplay?.hasPointerCapture(pointerId)) {
-      this.speedDisplay.releasePointerCapture(pointerId);
-    }
-  };
-
-  updateSpeedDisplay(): void {
-    if (this.speedDisplay) {
-      this.speedDisplay.textContent = this.formatSpeed(safeMedia.getPlaybackRate(this.media));
-    }
-  }
-
-  // Notify the user when the player rejects or limits the requested speed.
-  setSpeed(speed: number): boolean {
-    if (this.destroyed || !Number.isFinite(speed)) return false;
-    const clampedSpeed = Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed));
-    const roundedSpeed = Math.round(clampedSpeed * 100) / 100;
-
-    const previousSpeed = safeMedia.getPlaybackRate(this.media);
-    try {
-      safeMedia.setPlaybackRate(this.media, roundedSpeed);
-    } catch {
-      this.showOSD(MESSAGES.SPEED_CONTROL_BLOCKED);
-      return false;
-    }
-    this.targetSpeed = roundedSpeed;
-    this.isEnforcingSpeed = roundedSpeed !== SPEED.DEFAULT;
-    this.updateSpeedDisplay();
-    this.intendedSpeedListener?.(roundedSpeed);
-
-    const request = ++this.speedRequest;
-    requestAnimationFrame(() => {
-      if (this.destroyed || request !== this.speedRequest) return;
-      const actualSpeed = safeMedia.getPlaybackRate(this.media);
-      const tolerance = SPEED.TOLERANCE;
-
-      if (Math.abs(actualSpeed - roundedSpeed) > tolerance) {
-        if (Math.abs(actualSpeed - previousSpeed) < tolerance) {
-          this.showOSD(MESSAGES.SPEED_CONTROL_BLOCKED);
-        } else {
-          this.showOSD(MESSAGES.SPEED_LIMITED(this.formatSpeed(actualSpeed)));
-        }
-      }
-    });
-    return true;
-  }
-
-  adjustSpeed(delta: number): void {
-    this.setSpeed(safeMedia.getPlaybackRate(this.media) + delta);
-  }
-
-  resetSpeed(): void {
-    this.isEnforcingSpeed = false;
-    this.targetSpeed = SPEED.DEFAULT;
-    this.setSpeed(SPEED.DEFAULT);
-  }
-
-  // Correct drift without changing the user's intended speed.
-  applyTransientRate(speed: number): void {
-    if (this.destroyed || !Number.isFinite(speed)) return;
-    const clampedSpeed = Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed));
-    if (safeMedia.getPlaybackRate(this.media) !== clampedSpeed) {
-      this.suppressRateEnforcementCount++;
-      try { safeMedia.setPlaybackRate(this.media, clampedSpeed); }
-      catch (error) { this.suppressRateEnforcementCount--; throw error; }
-    }
-    this.updateSpeedDisplay();
-  }
-
-  // Throttle reactive rate writes to avoid fighting player scripts.
-  private enforceSpeedIfNeeded(): void {
-    if (!this.isEnforcingSpeed) return;
-
-    const now = Date.now();
-    if (now - this.lastEnforcementTime < VideoController.ENFORCEMENT_DEBOUNCE_MS) {
-      return; // Debounce to prevent loops
-    }
-
-    const tolerance = SPEED.TOLERANCE;
-    if (Math.abs(safeMedia.getPlaybackRate(this.media) - this.targetSpeed) > tolerance) {
-      try {
-        this.lastEnforcementTime = now;
-        safeMedia.setPlaybackRate(this.media, this.targetSpeed);
-      } catch (error) {
-        logger.debug('Speed enforcement failed (may be DRM-protected):', error);
-        // Don't disable enforcement - retry on next ratechange
-      }
-    }
-  }
-
-  seek(seconds: number): void {
-    if (!Number.isFinite(seconds) || this.destroyed) return;
-    if (this.media.readyState < HTMLMediaElement.HAVE_METADATA) return;
-
-    try {
-      const targetTime = safeMedia.getCurrentTime(this.media) + seconds;
-
-      safeMedia.setCurrentTime(this.media, targetTime);
-    } catch (error) {
-      logger.error('Seek failed:', error);
-    }
-  }
-
-  toggleVisibility(): void {
-    this.isManuallyHidden = !this.isManuallyHidden;
-    if (this.controllerEl) {
-      this.controllerEl.classList.toggle('hidden', this.isManuallyHidden);
-    }
-    this.hideBtn?.setAttribute('aria-pressed', String(this.isManuallyHidden));
-  }
-
-  // Viewport button bounds and actions for clicks forwarded by a host frame.
-  getButtonHitmap(): HitmapButton[] {
-    if (!this.wrapper || !this.shadow || !this.controllerEl) return [];
-    if (this.controllerEl.classList.contains('hidden')) return [];
-
-    const buttons: HitmapButton[] = [];
-    const btnEls = this.shadow.querySelectorAll<HTMLButtonElement>('button[data-action]');
-    for (const btn of btnEls) {
-      const r = btn.getBoundingClientRect();
-      if (r.width <= 0 || r.height <= 0) continue;
-      const action = btn.dataset.action as KeyAction | undefined;
-      if (!action) continue;
-      const value =
-        action === 'slower' ? this.cachedSlowerStep : action === 'faster' ? this.cachedSpeedStep
-          : action === 'rewind' ? this.cachedRewindValue : action === 'advance' ? this.cachedSeekValue : 0;
-      buttons.push({ controllerId: this.id, action, value, x: r.left, y: r.top, w: r.width, h: r.height });
-    }
-    return buttons;
-  }
-
-  updateSettings(settings: Settings): void {
-    this.settings = settings;
-    this.cacheKeybindingValues();
-
-    if (this.controllerEl) {
-      this.controllerEl.style.setProperty('--hare-opacity', String(settings.controllerOpacity));
-      this.controllerEl.style.setProperty('--hare-font-size', `${settings.controllerButtonSize}px`);
-    }
-    this.clampPosition();
+    this.applyPosition();
   }
 
   get speed(): number {
@@ -693,42 +156,331 @@ export class VideoController {
     this.intendedSpeedListener = listener;
   }
 
+  updateSettings(settings: Settings): void {
+    this.settings = settings;
+    this.applyAppearance();
+    this.clampPosition();
+  }
+
+  updateSpeedDisplay(): void {
+    this.speedDisplay.textContent = formatSpeed(this.speed);
+  }
+
+  /** Sets the user-intended speed and keeps enforcing it; warns when the player rejects or limits it. */
+  setSpeed(speed: number): boolean {
+    if (this.destroyed || !Number.isFinite(speed)) return false;
+    const roundedSpeed = Math.round(clamp(speed, SPEED.MIN, SPEED.MAX) * 100) / 100;
+    const previousSpeed = this.speed;
+    try {
+      safeMedia.setPlaybackRate(this.media, roundedSpeed);
+    } catch {
+      this.showOSD(SPEED_BLOCKED);
+      return false;
+    }
+    this.targetSpeed = roundedSpeed;
+    this.isEnforcingSpeed = roundedSpeed !== SPEED.DEFAULT;
+    this.updateSpeedDisplay();
+    this.intendedSpeedListener?.(roundedSpeed);
+
+    const request = ++this.speedRequest;
+    requestAnimationFrame(() => {
+      if (this.destroyed || request !== this.speedRequest) return;
+      const actualSpeed = this.speed;
+      if (Math.abs(actualSpeed - roundedSpeed) <= SPEED.TOLERANCE) return;
+      this.showOSD(Math.abs(actualSpeed - previousSpeed) < SPEED.TOLERANCE
+        ? SPEED_BLOCKED
+        : `Speed limited to ${formatSpeed(actualSpeed)}`);
+    });
+    return true;
+  }
+
+  adjustSpeed(delta: number): void {
+    this.setSpeed(this.speed + delta);
+  }
+
+  /** Corrects drift without changing the user's intended speed. */
+  applyTransientRate(speed: number): void {
+    if (this.destroyed) return;
+    const clampedSpeed = clamp(speed, SPEED.MIN, SPEED.MAX);
+    if (this.speed !== clampedSpeed) {
+      this.suppressRateEnforcementCount++;
+      try { safeMedia.setPlaybackRate(this.media, clampedSpeed); }
+      catch (error) { this.suppressRateEnforcementCount--; throw error; }
+    }
+    this.updateSpeedDisplay();
+  }
+
+  seek(seconds: number): void {
+    if (this.destroyed || !Number.isFinite(seconds) || this.media.readyState < HTMLMediaElement.HAVE_METADATA) return;
+    safeMedia.setCurrentTime(this.media, safeMedia.getCurrentTime(this.media) + seconds);
+  }
+
+  /** Runs a shortcut or forwarded button action, with on-screen feedback for speed changes. */
+  perform(action: KeyAction, value: number): void {
+    switch (action) {
+      case 'slower': this.adjustSpeed(-value); break;
+      case 'faster': this.adjustSpeed(value); break;
+      case 'reset': this.setSpeed(value); break;
+      case 'rewind': this.seek(-value); return;
+      case 'advance': this.seek(value); return;
+      case 'display': this.toggleVisibility(); return;
+    }
+    this.showOSD(formatSpeed(this.speed));
+  }
+
+  toggleVisibility(): void {
+    this.hidden = !this.hidden;
+    this.renderVisibility();
+  }
+
   showOSD(message: string): void {
-    if (!this.osdEl) return;
-
-    if (this.osdTimeout) clearTimeout(this.osdTimeout);
-
+    clearTimeout(this.osdTimeout);
     this.osdEl.textContent = message;
     this.osdEl.classList.add('show');
+    this.osdTimeout = setTimeout(() => this.osdEl.classList.remove('show'), UI.OSD_FADE_MS);
+  }
 
-    this.osdTimeout = setTimeout(() => {
-      this.osdEl?.classList.remove('show');
-      this.osdTimeout = null;
-    }, UI.OSD_FADE_MS);
+  /** Viewport button bounds and actions, for clicks forwarded by a host frame. */
+  getButtonHitmap(): HitmapButton[] {
+    if (this.destroyed || this.hidden) return [];
+    return this.buttons.flatMap(button => {
+      const rect = button.getBoundingClientRect();
+      const action = button.dataset.action as KeyAction;
+      return rect.width > 0 && rect.height > 0
+        ? [{ controllerId: this.id, action, value: this.valueFor(action), x: rect.left, y: rect.top, w: rect.width, h: rect.height }]
+        : [];
+    });
   }
 
   destroy(): void {
     if (this.destroyed) return;
+    this.handleDragEnd();
     this.destroyed = true;
     this.isEnforcingSpeed = false;
-
-    this.listeners.abort();
-    this.handleDragEnd();
     this.intendedSpeedListener = null;
-
-    if (this.osdTimeout) clearTimeout(this.osdTimeout);
-    if (this.resizeDebounceTimeout) clearTimeout(this.resizeDebounceTimeout);
-    if (this.positionCheckInterval) clearInterval(this.positionCheckInterval);
-
-    this.resizeObserver?.disconnect();
-    this.resizeObserver = null;
-
-    this.wrapper?.remove();
+    this.listeners.abort();
+    this.resizeObserver.disconnect();
+    clearTimeout(this.osdTimeout);
+    clearTimeout(this.resizeDebounceTimeout);
+    clearInterval(this.positionCheckInterval);
+    this.wrapper.remove();
     this.releasePositioningContext();
-    this.wrapper = null;
-    this.shadow = null;
-    this.speedDisplay = null;
-    this.controllerEl = null;
-    this.osdEl = null;
   }
+
+  /** Settings are normalized, so every action has a binding. */
+  private valueFor(action: KeyAction): number {
+    return this.settings.keyBindings.find(binding => binding.action === action)!.value;
+  }
+
+  private applyAppearance(): void {
+    this.controllerEl.style.setProperty('--hare-opacity', String(this.settings.controllerOpacity));
+    this.controllerEl.style.setProperty('--hare-font-size', `${this.settings.controllerButtonSize}px`);
+  }
+
+  private renderVisibility(): void {
+    this.controllerEl.classList.toggle('hidden', this.hidden);
+    this.buttons.at(-1)!.setAttribute('aria-pressed', String(this.hidden));
+  }
+
+  private applyPosition(): void {
+    this.wrapper.style.transform = `translate(${this.positionX}px, ${this.positionY}px)`;
+  }
+
+  // Throttle reactive rate writes to avoid fighting player scripts.
+  private enforceSpeedIfNeeded(): void {
+    if (!this.isEnforcingSpeed) return;
+    const now = Date.now();
+    if (now - this.lastEnforcementTime < ENFORCEMENT_DEBOUNCE_MS) return;
+    if (Math.abs(this.speed - this.targetSpeed) <= SPEED.TOLERANCE) return;
+    this.lastEnforcementTime = now;
+    try {
+      safeMedia.setPlaybackRate(this.media, this.targetSpeed);
+    } catch (error) {
+      logger.debug('Speed enforcement failed (may be DRM-protected):', error);
+    }
+  }
+
+  private handleRateChange = (event: Event): void => {
+    const isTransient = this.suppressRateEnforcementCount > 0;
+    if (isTransient) this.suppressRateEnforcementCount--;
+    // Prevent player listeners from resetting the requested rate.
+    if (this.isEnforcingSpeed || isTransient) event.stopImmediatePropagation();
+    this.updateSpeedDisplay();
+    if (isTransient) return;
+    if (!this.isEnforcingSpeed) this.targetSpeed = this.speed;
+    this.enforceSpeedIfNeeded();
+  };
+
+  // Repair positioning after dynamic player DOM changes.
+  private verifyAndRepairPosition(): void {
+    if (!this.media.isConnected) return;
+    const parent = this.wrapper.parentElement;
+    const expectedParent = this.getControllerPosition()?.target ?? this.media.parentElement;
+    if (!this.wrapper.isConnected || !parent || (expectedParent && parent !== expectedParent)) {
+      this.insertController();
+      return;
+    }
+    if (parent !== document.body && this.wrapper.offsetParent !== parent) {
+      const style = getComputedStyle(parent);
+      if (style.position === 'static' && style.transform === 'none') this.ensurePositioningContext(parent);
+      else this.insertController();
+    }
+  }
+
+  private getControllerPosition(): ControllerPosition | null {
+    const fullscreen = document.fullscreenElement;
+    if (fullscreen && fullscreen !== this.media && fullscreen.contains(this.media)) {
+      return { target: fullscreen, method: 'append' };
+    }
+    const target = this.media instanceof HTMLVideoElement ? this.siteHandler?.findContainer(this.media) : null;
+    // Video elements cannot display DOM children (e.g. a .vjs-tech selector).
+    return target && !(target instanceof HTMLMediaElement) ? { target, method: 'prepend' } : null;
+  }
+
+  private insertController(): void {
+    const position = this.getControllerPosition();
+    if (position?.target.isConnected) {
+      const target = position.target as HTMLElement;
+      this.ensurePositioningContext(target);
+      if (this.wrapper.parentNode !== target) target[position.method](this.wrapper);
+    } else if (this.media.parentElement) {
+      const parent = this.media.parentElement;
+      this.ensurePositioningContext(parent);
+      if (this.wrapper.parentNode !== parent) parent.prepend(this.wrapper);
+    } else if (this.media.parentNode instanceof ShadowRoot) {
+      this.media.before(this.wrapper);
+    }
+
+    this.resizeObserver.disconnect();
+    clearTimeout(this.resizeDebounceTimeout);
+    if (this.wrapper.parentElement) this.resizeObserver.observe(this.wrapper.parentElement);
+  }
+
+  /** Shared parents get `position: relative` while any controller needs it, then their own value back. */
+  private ensurePositioningContext(parent: HTMLElement): void {
+    if (this.positionedParent !== parent) {
+      this.releasePositioningContext();
+      const existing = positionedParents.get(parent);
+      if (existing) {
+        existing.count++;
+        this.positionedParent = parent;
+      }
+    }
+    if (getComputedStyle(parent).position !== 'static') return;
+    if (!this.positionedParent) {
+      positionedParents.set(parent, { count: 1, value: parent.style.getPropertyValue('position'), priority: parent.style.getPropertyPriority('position') });
+      this.positionedParent = parent;
+    }
+    parent.style.position = 'relative';
+  }
+
+  private releasePositioningContext(): void {
+    const parent = this.positionedParent;
+    this.positionedParent = null;
+    if (!parent) return;
+    const lease = positionedParents.get(parent);
+    if (!lease || --lease.count > 0) return;
+    if (parent.style.position === 'relative' && parent.style.getPropertyPriority('position') === '') {
+      if (lease.value) parent.style.setProperty('position', lease.value, lease.priority);
+      else parent.style.removeProperty('position');
+    }
+    positionedParents.delete(parent);
+  }
+
+  /** Converts viewport pixels into the containing block's CSS coordinates. */
+  private getPositionGeometry() {
+    const parent = this.wrapper.offsetParent instanceof HTMLElement ? this.wrapper.offsetParent : this.wrapper.parentElement;
+    if (!parent) return null;
+    const rect = parent.getBoundingClientRect();
+    const scaleX = parent.offsetWidth && rect.width ? rect.width / parent.offsetWidth : 1;
+    const scaleY = parent.offsetHeight && rect.height ? rect.height / parent.offsetHeight : 1;
+    return {
+      parent, scaleX, scaleY,
+      left: rect.left + (parent.clientLeft - parent.scrollLeft) * scaleX,
+      top: rect.top + (parent.clientTop - parent.scrollTop) * scaleY,
+    };
+  }
+
+  /** Keeps the expanded controls within the media box, in local CSS coordinates. */
+  private getClampedBounds(): Bounds | null {
+    const geometry = this.getPositionGeometry();
+    if (!geometry) return null;
+    const { parent, scaleX, scaleY, left, top } = geometry;
+    let minX = parent.scrollLeft;
+    let minY = parent.scrollTop;
+    let maxX = minX + (parent.clientWidth || parent.offsetWidth || window.innerWidth / scaleX);
+    let maxY = minY + (parent.clientHeight || parent.offsetHeight || window.innerHeight / scaleY);
+
+    // Site-specific containers often extend beyond the video, so clamp to the video itself.
+    const videoRect = this.media.getBoundingClientRect();
+    if (videoRect.width > 0 && videoRect.height > 0) {
+      minX = Math.max(minX, (videoRect.left - left) / scaleX);
+      minY = Math.max(minY, (videoRect.top - top) / scaleY);
+      maxX = Math.min(maxX, (videoRect.right - left) / scaleX);
+      maxY = Math.min(maxY, (videoRect.bottom - top) / scaleY);
+    }
+
+    const padding = CONTROLLER.BOUNDARY_PADDING;
+    // Wrap controls before measuring them, including large buttons on narrow players.
+    this.controllerEl.style.setProperty('--hare-max-width', `${Math.max(0, maxX - minX - padding * 2)}px`);
+    const controllerRect = this.controllerEl.getBoundingClientRect();
+    return {
+      minX: minX + padding,
+      maxX: Math.max(minX + padding, maxX - controllerRect.width / scaleX - padding),
+      minY: minY + padding,
+      maxY: Math.max(minY + padding, maxY - controllerRect.height / scaleY - padding),
+    };
+  }
+
+  private clampPosition(): void {
+    if (this.destroyed || this.drag) return;
+    const bounds = this.getClampedBounds();
+    if (!bounds) return;
+    const x = clamp(this.positionX, bounds.minX, bounds.maxX);
+    const y = clamp(this.positionY, bounds.minY, bounds.maxY);
+    if (x === this.positionX && y === this.positionY) return;
+    this.positionX = x;
+    this.positionY = y;
+    this.applyPosition();
+  }
+
+  private handleDragStart = (event: PointerEvent): void => {
+    if (event.button !== 0 || this.drag || !this.media.isConnected) return;
+    const geometry = this.getPositionGeometry();
+    if (!geometry) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.speedDisplay.setPointerCapture(event.pointerId);
+    this.controllerEl.classList.add('dragging');
+    this.drag = {
+      pointerId: event.pointerId,
+      offsetX: (event.clientX - geometry.left) / geometry.scaleX - this.positionX,
+      offsetY: (event.clientY - geometry.top) / geometry.scaleY - this.positionY,
+      bounds: this.getClampedBounds(),
+    };
+  };
+
+  private handleDragMove = (event: PointerEvent): void => {
+    const drag = this.drag;
+    if (event.pointerId !== drag?.pointerId) return;
+    if (!this.media.isConnected) {
+      this.handleDragEnd();
+      return;
+    }
+    event.preventDefault();
+    const geometry = this.getPositionGeometry();
+    if (!geometry || !drag.bounds) return;
+    this.positionX = clamp((event.clientX - geometry.left) / geometry.scaleX - drag.offsetX, drag.bounds.minX, drag.bounds.maxX);
+    this.positionY = clamp((event.clientY - geometry.top) / geometry.scaleY - drag.offsetY, drag.bounds.minY, drag.bounds.maxY);
+    this.applyPosition();
+  };
+
+  private handleDragEnd = (event?: Event): void => {
+    const pointerId = this.drag?.pointerId;
+    if (pointerId === undefined) return;
+    if (event instanceof PointerEvent && event.pointerId !== pointerId) return;
+    this.drag = null;
+    this.controllerEl.classList.remove('dragging');
+    if (this.speedDisplay.hasPointerCapture(pointerId)) this.speedDisplay.releasePointerCapture(pointerId);
+  };
 }

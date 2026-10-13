@@ -2,9 +2,9 @@ import { loadSettings, saveSettings } from '../lib/settings';
 import { logger } from '../lib/logger';
 import { SyncCoordinator } from '../lib/sync-coordinator';
 import { SyncStartup } from '../lib/sync-startup';
-import { getTabMedia, aggregateStatus } from '../lib/tab-media';
-import type { SyncEventPayload, SyncCandidate } from '../lib/sync-types';
-import type { HareMessage } from '../lib/types';
+import { getTabMedia } from '../lib/messaging';
+import type { SyncCandidate } from '../lib/sync-types';
+import type { HareMessage, Replies } from '../lib/types';
 
 export default defineBackground(() => {
   const coordinator = new SyncCoordinator();
@@ -22,32 +22,23 @@ export default defineBackground(() => {
   });
 
   browser.runtime.onMessage.addListener((message: HareMessage, sender, sendResponse) => {
-    if (!message || typeof message.type !== 'string') return;
-    const handle = async (): Promise<unknown> => {
+    const handle = async (): Promise<Replies[keyof Replies]> => {
       await coordinator.ready;
       switch (message.type) {
         case 'GET_PAGE_CONTEXT': return { hostname: sender.tab?.url ? new URL(sender.tab.url).hostname : '' };
-        case 'SYNC_PAUSE':
-        case 'SYNC_PLAY':
-        case 'SYNC_SEEK':
-        case 'SYNC_RATE':
-        case 'SYNC_BUFFERING':
-          if (sender.tab?.id != null) await coordinator.handleSyncEvent(sender.tab.id, message.payload as SyncEventPayload, sender.frameId);
+        case 'SYNC_EVENT':
+          if (sender.tab?.id != null) await coordinator.handleSyncEvent(sender.tab.id, message.payload, sender.frameId);
           return { success: true };
         case 'GET_SYNC_CANDIDATES': {
           const candidates = await Promise.all((await browser.tabs.query({})).map(async (tab): Promise<SyncCandidate | null> => {
             if (tab.id == null || !tab.url || !/^(https?|file):/.test(tab.url)) return null;
-            const status = aggregateStatus((await getTabMedia(tab.id)).map(entry => entry.status));
-            return status.hasVideos ? {
-              tabId: tab.id, title: tab.title || 'Untitled', domain: new URL(tab.url).hostname,
-              videoCount: status.videoCount,
-            } : null;
+            const videoCount = (await getTabMedia(tab.id)).reduce((count, frame) => count + frame.speeds.length, 0);
+            return videoCount ? { tabId: tab.id, title: tab.title || 'Untitled', domain: new URL(tab.url).hostname, videoCount } : null;
           }));
           return candidates.filter(candidate => candidate !== null);
         }
         case 'START_SYNC': {
-          const payload = message.payload as { tabIdA?: number; tabIdB?: number } | undefined;
-          await startup.start(payload?.tabIdA!, payload?.tabIdB!);
+          await startup.start(message.payload.tabIdA, message.payload.tabIdB);
           return { success: true };
         }
         case 'STOP_SYNC': {
@@ -58,11 +49,9 @@ export default defineBackground(() => {
           return { success: true };
         }
         case 'SET_NUDGE_STEP':
-          if (typeof message.payload !== 'number') throw new Error('Choose a valid nudge step.');
           await coordinator.setNudgeStep(message.payload);
           return { success: true };
         case 'NUDGE_OFFSET':
-          if (typeof message.payload !== 'number' || !Number.isFinite(message.payload)) throw new Error('Invalid offset.');
           if (!coordinator.getStatus().active) throw new Error('The sync session has ended.');
           coordinator.nudgeOffset(message.payload);
           return { success: true };

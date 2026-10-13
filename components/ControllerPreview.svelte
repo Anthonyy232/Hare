@@ -1,6 +1,6 @@
 <script lang="ts">
   import controllerCSS from '../assets/controller.css?raw';
-  import { ICONS } from '../lib/controller-icons';
+  import { ICONS, createIcon } from '../lib/controller-icons';
 
   let { opacity, size, startHidden }: { opacity: number; size: number; startHidden: boolean } = $props();
   let expanded = $state(false);
@@ -21,13 +21,10 @@
     speed.textContent = '1.00x';
     const controls = document.createElement('span');
     controls.className = 'hare-controls';
-    // Parse only bundled SVG icons. Settings never enter HTML or SVG markup.
-    const parser = new DOMParser();
-    for (const icon of Object.values(ICONS)) {
+    for (const icon of Object.keys(ICONS) as Array<keyof typeof ICONS>) {
       const button = document.createElement('span');
       button.className = 'hare-btn';
-      const svg = parser.parseFromString(icon, 'text/html').querySelector('svg');
-      if (svg) button.append(document.importNode(svg, true));
+      button.append(createIcon(icon));
       controls.append(button);
     }
     controller.append(speed, controls);
@@ -60,9 +57,9 @@
   .preview { margin-top: 16px; min-width: 0; }
   .preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 12px; color: #bbc5d3; }
   .preview-modes { display: flex; gap: 2px; padding: 3px; background: #ffffff08; border: 1px solid #ffffff12; border-radius: 6px; }
-  button { padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: #aaa; font-size: 11px; cursor: pointer; }
+  button { padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--color-text-muted); font-size: 11px; cursor: pointer; }
   button[aria-pressed="true"] { background: #93c5fd26; color: #c9e0fc; }
   .preview-frame { min-height: 100px; display: flex; align-items: center; padding: 16px; overflow-x: auto; border-radius: 8px; border: 1px solid #ffffff12; background: radial-gradient(ellipse at 85% 90%, #34505f, transparent 75%), linear-gradient(135deg, #222e3c, #1a2732); }
   .preview-overlay { min-width: 0; max-width: 100%; }
-  p { margin: 8px 0 0; font-size: 11px; line-height: 1.5; color: #aaa; }
+  p { margin: 8px 0 0; font-size: 11px; line-height: 1.5; color: var(--color-text-muted); }
 </style>
