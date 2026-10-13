@@ -63,7 +63,8 @@ describe('SyncAgent', () => {
   beforeEach(() => {
     video = createMockVideo(10);
     sendEvent = vi.fn();
-    agent = new SyncAgent(video, sendEvent);
+    const setRate = (rate: number) => { video.playbackRate = rate; };
+    agent = new SyncAgent(video, sendEvent, 1, setRate, setRate);
   });
 
   afterEach(() => {
@@ -292,7 +293,8 @@ describe('SyncAgent', () => {
         (rate: number) => {
           peer.notifyIntendedSpeedChange(rate);
           video.playbackRate = rate;
-        }
+        },
+        vi.fn(),
       );
       peer.executeRateChange(1.5);
       expect(sendEvent).not.toHaveBeenCalled();

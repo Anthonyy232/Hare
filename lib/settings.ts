@@ -1,5 +1,5 @@
 import { storage } from '#imports';
-import { DEFAULT_SETTINGS, type Settings, type KeyBinding, type KeyAction } from './types';
+import { DEFAULT_SETTINGS, isKeyAction, type Settings, type KeyBinding, type KeyAction } from './types';
 import { STORAGE_KEY, CONTROLLER, SPEED } from './constants';
 import { logger } from './logger';
 
@@ -7,14 +7,8 @@ const settingsStorage = storage.defineItem<Settings>(`sync:${STORAGE_KEY}`, {
   defaultValue: DEFAULT_SETTINGS,
 });
 
-const DEFAULT_KEY_ACTIONS = new Set(DEFAULT_SETTINGS.keyBindings.map((binding) => binding.action));
-
 function cloneBinding(binding: KeyBinding): KeyBinding {
   return { ...binding };
-}
-
-function isKnownKeyAction(value: unknown): value is KeyAction {
-  return typeof value === 'string' && DEFAULT_KEY_ACTIONS.has(value as KeyAction);
 }
 
 export function validateKeyBindings(value: unknown): KeyBinding[] {
@@ -30,7 +24,7 @@ export function validateKeyBindings(value: unknown): KeyBinding[] {
     if (
       binding &&
       typeof binding === 'object' &&
-      isKnownKeyAction(candidate.action) &&
+      isKeyAction(candidate.action) &&
       typeof candidate.key === 'string' &&
       typeof candidate.value === 'number' &&
       Number.isFinite(candidate.value) &&

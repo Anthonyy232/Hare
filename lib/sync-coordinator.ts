@@ -7,16 +7,16 @@ import type {
   SyncStatusResponse,
   SyncPositionResponse,
 } from './sync-types';
-import type { HareMessage, MessageType } from './types';
+import type { HareMessage } from './types';
 import { logger } from './logger';
 import { withTimeout } from './async-utils';
 
-const COMMAND_TYPE: Record<'pause' | 'play' | 'seek' | 'ratechange', MessageType> = {
+const COMMAND_TYPE = {
   pause: 'SYNC_PAUSE',
   play: 'SYNC_PLAY',
   seek: 'SYNC_SEEK',
   ratechange: 'SYNC_RATE',
-};
+} as const satisfies Record<SyncCommandPayload['action'], HareMessage['type']>;
 
 interface TabRef {
   tabId: number;
@@ -128,20 +128,12 @@ export class SyncCoordinator {
   async restoreSession(): Promise<void> {
     try {
       const stored = await browser.storage.session.get(SYNC.STORAGE_KEY);
+      // Session storage is cleared on extension reload/update, so it only holds this build's schema.
       const state = stored[SYNC.STORAGE_KEY] as PersistedSyncState | undefined;
-      if (!state || !state.session) return;
-      const session = state.session;
-      const validEndpoint = (endpoint: SyncSession['videoA'] | undefined) => endpoint && Number.isInteger(endpoint.tabId) && endpoint.tabId >= 0
-        && (endpoint.frameId == null || (Number.isInteger(endpoint.frameId) && endpoint.frameId >= 0));
-      if (!validEndpoint(session.videoA) || !validEndpoint(session.videoB) || session.videoA.tabId === session.videoB.tabId
-        || ![null, 'A', 'B', 'both'].includes(session.bufferingTab)
-        || !Number.isFinite(session.offset) || !Number.isInteger(session.generation) || !NUDGE_STEPS.includes(session.nudgeStep)) {
-        await this.clearPersistedSession();
-        return;
-      }
+      if (!state?.session) return;
 
       this.session = state.session;
-      this.tabMeta = new Map(Array.isArray(state.tabMeta) ? state.tabMeta.filter(entry => Array.isArray(entry) && typeof entry[1]?.title === 'string' && typeof entry[1]?.domain === 'string') : []);
+      this.tabMeta = new Map(state.tabMeta);
       this.sendFailures.clear();
       this.startDriftCorrection();
       logger.debug('Sync session restored after SW restart', {
@@ -303,7 +295,7 @@ export class SyncCoordinator {
         }
         this.session.generation++;
         void this.persistSession();
-        const targetPosition = this.toTargetPosition(sourceSide, event.position);
+        const targetPosition = Math.max(0, this.toTargetPosition(sourceSide, event.position));
         await this.sendToSyncedTab(targetTabId, {
           type: COMMAND_TYPE[event.action],
           payload: {
@@ -344,20 +336,10 @@ export class SyncCoordinator {
     }
   }
 
+  /** Maps a position to the other side; negative when the offset can't be maintained there. */
   private toTargetPosition(fromSide: 'A' | 'B', position: number): number {
-    if (!this.session) return Math.max(0, position);
-    const { offset } = this.session;
-    const delta = fromSide === 'A' ? offset : -offset;
-    return Math.max(0, position + delta);
-  }
-
-  /** Converts a position, returning -1 when the current offset can't be maintained. */
-  private toTargetPositionOrNoSeek(fromSide: 'A' | 'B', position: number): number {
-    if (!this.session) return Math.max(0, position);
-    const { offset } = this.session;
-    const delta = fromSide === 'A' ? offset : -offset;
-    const target = position + delta;
-    return target < 0 ? -1 : target;
+    const { offset } = this.session!;
+    return position + (fromSide === 'A' ? offset : -offset);
   }
 
   private syncedSide(tabId: number, frameId?: number): 'A' | 'B' | null {
@@ -391,6 +373,7 @@ export class SyncCoordinator {
     this.bufferStableTimers.delete(fromSide);
     if (this.isBuffering(fromSide)) return;
 
+    const target = this.toTargetPosition(fromSide, event.position);
     this.session.bufferingTab = this.session.bufferingTab === null ? fromSide : 'both';
     this.session.generation++;
     void this.persistSession();
@@ -399,7 +382,7 @@ export class SyncCoordinator {
       payload: {
         action: 'pause',
         buffering: true,
-        position: this.toTargetPositionOrNoSeek(fromSide, event.position),
+        position: target < 0 ? -1 : target, // -1 pauses without seeking
         timestamp: event.timestamp,
         generation: this.session.generation,
       } satisfies SyncCommandPayload,
@@ -485,7 +468,6 @@ export class SyncCoordinator {
         await this.sendToSyncedTab(behindTabId, {
           type: 'SYNC_DRIFT_CORRECT',
           payload: {
-            position: 0,
             method: 'rate',
             rateFactor: SYNC.RATE_ADJUST_FACTOR,
             durationMs: SYNC.RATE_ADJUST_DURATION_MS,

@@ -1,12 +1,10 @@
-import { SPEED, CONTROLLER, UI, OBSERVER, SEEK } from './constants';
-import type { Settings, SiteHandler, ControllerPosition, KeyAction } from './types';
+import { SPEED, CONTROLLER, UI, OBSERVER } from './constants';
+import type { Settings, SiteHandler, KeyAction } from './types';
 import type { HitmapButton } from './cross-frame-pointer';
 import controllerCSS from '../assets/controller.css?raw';
 import { logger } from './logger';
-import { MESSAGES } from './messages';
-import { BrowserFeatures } from './browser-detect';
 import { safeMedia } from './safe-media';
-import { ICONS } from './controller-icons';
+import { createIcon, type ICONS } from './controller-icons';
 
 let sharedStyleSheet: CSSStyleSheet | null = null;
 
@@ -20,8 +18,9 @@ function getStyleSheet(): CSSStyleSheet {
 
 let controllerIdCounter = 0;
 const positionedParents = new WeakMap<HTMLElement, { count: number; value: string; priority: string }>();
+const SPEED_BLOCKED = 'Speed control blocked';
 
-const svgCache: Record<string, SVGElement> = {};
+type ControllerPosition = { target: Element; method: 'prepend' | 'append' };
 
 export class VideoController {
   readonly id: string;
@@ -49,10 +48,6 @@ export class VideoController {
   private positionCheckInterval: NodeJS.Timeout | null = null;
   private static readonly POSITION_CHECK_INTERVAL_MS = 2000;
 
-  private cachedSpeedStep: number = SPEED.STEP;
-  private cachedSeekValue: number = SEEK.DEFAULT_SECONDS;
-  private cachedSlowerStep: number = SPEED.STEP;
-  private cachedRewindValue: number = SEEK.DEFAULT_SECONDS;
   private destroyed = false;
   private positionedParent: HTMLElement | null = null;
   private speedRequest = 0;
@@ -82,17 +77,12 @@ export class VideoController {
     this.positionX = CONTROLLER.DEFAULT_OFFSET_X;
     this.positionY = CONTROLLER.DEFAULT_OFFSET_Y;
 
-    this.cacheKeybindingValues();
     this.init();
   }
 
-  private cacheKeybindingValues(): void {
-    const fasterBinding = this.settings.keyBindings.find((b) => b.action === 'faster');
-    const advanceBinding = this.settings.keyBindings.find((b) => b.action === 'advance');
-    this.cachedSpeedStep = fasterBinding?.value ?? SPEED.STEP;
-    this.cachedSeekValue = advanceBinding?.value ?? SEEK.DEFAULT_SECONDS;
-    this.cachedSlowerStep = this.settings.keyBindings.find(b => b.action === 'slower')?.value ?? SPEED.STEP;
-    this.cachedRewindValue = this.settings.keyBindings.find(b => b.action === 'rewind')?.value ?? SEEK.DEFAULT_SECONDS;
+  /** Settings are normalized, so every action has a binding. */
+  private valueFor(action: KeyAction): number {
+    return this.settings.keyBindings.find(binding => binding.action === action)!.value;
   }
 
   private init(): void {
@@ -134,10 +124,7 @@ export class VideoController {
       return;
     }
 
-    const position = this.getControllerPosition();
-    const expectedParent = position
-      ? (position.method === 'before' || position.method === 'after' ? position.target.parentElement : position.target)
-      : this.media.parentElement;
+    const expectedParent = this.getControllerPosition()?.target ?? this.media.parentElement;
     if (parent !== expectedParent && expectedParent) {
       this.insertController();
       return;
@@ -201,12 +188,12 @@ export class VideoController {
     const controls = document.createElement('span');
     controls.className = 'hare-controls';
 
-    const rewindBtn = this.createButton(ICONS.rewind, 'rewind', () => this.seek(-this.cachedRewindValue), 'Rewind');
-    const slowerBtn = this.createButton(ICONS.slower, 'slower', () => this.adjustSpeed(-this.cachedSlowerStep), 'Slower');
-    const fasterBtn = this.createButton(ICONS.faster, 'faster', () => this.adjustSpeed(this.cachedSpeedStep), 'Faster');
-    const advanceBtn = this.createButton(ICONS.advance, 'advance', () => this.seek(this.cachedSeekValue), 'Advance');
+    const rewindBtn = this.createButton('rewind', 'rewind', () => this.seek(-this.valueFor('rewind')), 'Rewind');
+    const slowerBtn = this.createButton('slower', 'slower', () => this.adjustSpeed(-this.valueFor('slower')), 'Slower');
+    const fasterBtn = this.createButton('faster', 'faster', () => this.adjustSpeed(this.valueFor('faster')), 'Faster');
+    const advanceBtn = this.createButton('advance', 'advance', () => this.seek(this.valueFor('advance')), 'Advance');
 
-    const hideBtn = this.createButton(ICONS.hide, 'display', () => this.toggleVisibility(), 'Hide controller');
+    const hideBtn = this.createButton('hide', 'display', () => this.toggleVisibility(), 'Hide controller');
     hideBtn.classList.add('hare-btn-hide');
     hideBtn.setAttribute('aria-pressed', String(this.isManuallyHidden));
     this.hideBtn = hideBtn;
@@ -226,38 +213,16 @@ export class VideoController {
     this.wrapper!.style.transform = `translate(${this.positionX}px, ${this.positionY}px)`;
   }
 
-  private createSVGFromString(svgString: string): SVGElement | null {
-    if (svgCache[svgString]) {
-      return svgCache[svgString].cloneNode(true) as SVGElement;
-    }
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`<body>${svgString}</body>`, 'text/html');
-    const svgElement = doc.body.querySelector('svg');
-
-    if (svgElement) {
-      const importedNode = document.importNode(svgElement, true) as SVGElement;
-      svgCache[svgString] = importedNode;
-      return importedNode.cloneNode(true) as SVGElement;
-    }
-    return null;
-  }
-
   private createButton(
-    iconSvg: string,
-    action: string,
+    icon: keyof typeof ICONS,
+    action: KeyAction,
     onClick: () => void,
     ariaLabel: string
   ): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'hare-btn';
-
-    const svgElement = this.createSVGFromString(iconSvg);
-    if (svgElement) {
-      btn.appendChild(svgElement);
-    }
-
+    btn.appendChild(createIcon(icon));
     btn.dataset.action = action;
     btn.setAttribute('aria-label', ariaLabel);
     btn.addEventListener('click', (e) => {
@@ -303,28 +268,13 @@ export class VideoController {
   private insertController(): void {
     if (!this.wrapper) return;
 
-    let position = this.getControllerPosition();
+    const position = this.getControllerPosition();
 
-    if (position) {
+    if (position?.target.isConnected) {
       const target = position.target as HTMLElement;
-
-      if (!target.isConnected) {
-        logger.debug('Site handler returned disconnected element, using fallback positioning');
-        position = null;
-      } else {
-        const parent = position.method === 'before' || position.method === 'after' ? target.parentElement : target;
-        if (parent) this.ensurePositioningContext(parent);
-
-        switch (position.method) {
-          case 'prepend': if (this.wrapper.parentNode !== target) target.prepend(this.wrapper); break;
-          case 'append': if (this.wrapper.parentNode !== target) target.append(this.wrapper); break;
-          case 'before': if (this.wrapper.nextSibling !== target) target.before(this.wrapper); break;
-          case 'after': if (this.wrapper.previousSibling !== target) target.after(this.wrapper); break;
-        }
-      }
-    }
-
-    if (!position) {
+      this.ensurePositioningContext(target);
+      if (this.wrapper.parentNode !== target) target[position.method](this.wrapper);
+    } else {
       const parent = this.media.parentElement;
       if (parent) {
         this.ensurePositioningContext(parent);
@@ -342,10 +292,9 @@ export class VideoController {
     if (fullscreen && fullscreen !== this.media && fullscreen.contains(this.media)) {
       return { target: fullscreen, method: 'append' };
     }
-    const position = this.media instanceof HTMLVideoElement
-      ? this.siteHandler?.getControllerPosition(this.media) : null;
+    const target = this.media instanceof HTMLVideoElement ? this.siteHandler?.findContainer(this.media) : null;
     // Video elements cannot display DOM children (e.g. a .vjs-tech selector).
-    return position?.target instanceof HTMLMediaElement ? null : position ?? null;
+    return target && !(target instanceof HTMLMediaElement) ? { target, method: 'prepend' } : null;
   }
 
   private handleFullscreenChange = (): void => {
@@ -366,25 +315,16 @@ export class VideoController {
     const parent = this.wrapper?.parentElement;
     if (!parent) return;
 
-    if (!BrowserFeatures.hasResizeObserver) {
-      logger.debug('ResizeObserver not available - controller position may not adjust on resize');
-      return;
-    }
-
-    try {
-      this.resizeObserver = new ResizeObserver(() => {
-        if (this.resizeDebounceTimeout) {
-          clearTimeout(this.resizeDebounceTimeout);
-        }
-        this.resizeDebounceTimeout = setTimeout(() => {
-          this.clampPosition();
-          this.resizeDebounceTimeout = null;
-        }, OBSERVER.DEBOUNCE_MS);
-      });
-      this.resizeObserver.observe(parent);
-    } catch (error) {
-      logger.warn('ResizeObserver failed:', error);
-    }
+    this.resizeObserver = new ResizeObserver(() => {
+      if (this.resizeDebounceTimeout) {
+        clearTimeout(this.resizeDebounceTimeout);
+      }
+      this.resizeDebounceTimeout = setTimeout(() => {
+        this.clampPosition();
+        this.resizeDebounceTimeout = null;
+      }, OBSERVER.DEBOUNCE_MS);
+    });
+    this.resizeObserver.observe(parent);
   }
 
   /** Convert viewport pixels into the containing block's CSS coordinates. */
@@ -485,14 +425,7 @@ export class VideoController {
   };
 
   private handleDragStart = (e: PointerEvent): void => {
-    if (e.button !== 0) return;
-    if (!this.wrapper) return;
-
-    if (!this.media.isConnected) {
-      this.destroy();
-      return;
-    }
-
+    if (e.button !== 0 || !this.wrapper || !this.media.isConnected) return;
     if (this.dragPointerId !== null) return;
     const geometry = this.getPositionGeometry();
     if (!geometry) return;
@@ -560,7 +493,7 @@ export class VideoController {
     try {
       safeMedia.setPlaybackRate(this.media, roundedSpeed);
     } catch {
-      this.showOSD(MESSAGES.SPEED_CONTROL_BLOCKED);
+      this.showOSD(SPEED_BLOCKED);
       return false;
     }
     this.targetSpeed = roundedSpeed;
@@ -576,9 +509,9 @@ export class VideoController {
 
       if (Math.abs(actualSpeed - roundedSpeed) > tolerance) {
         if (Math.abs(actualSpeed - previousSpeed) < tolerance) {
-          this.showOSD(MESSAGES.SPEED_CONTROL_BLOCKED);
+          this.showOSD(SPEED_BLOCKED);
         } else {
-          this.showOSD(MESSAGES.SPEED_LIMITED(this.formatSpeed(actualSpeed)));
+          this.showOSD(`Speed limited to ${this.formatSpeed(actualSpeed)}`);
         }
       }
     });
@@ -659,19 +592,14 @@ export class VideoController {
     for (const btn of btnEls) {
       const r = btn.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) continue;
-      const action = btn.dataset.action as KeyAction | undefined;
-      if (!action) continue;
-      const value =
-        action === 'slower' ? this.cachedSlowerStep : action === 'faster' ? this.cachedSpeedStep
-          : action === 'rewind' ? this.cachedRewindValue : action === 'advance' ? this.cachedSeekValue : 0;
-      buttons.push({ controllerId: this.id, action, value, x: r.left, y: r.top, w: r.width, h: r.height });
+      const action = btn.dataset.action as KeyAction;
+      buttons.push({ controllerId: this.id, action, value: this.valueFor(action), x: r.left, y: r.top, w: r.width, h: r.height });
     }
     return buttons;
   }
 
   updateSettings(settings: Settings): void {
     this.settings = settings;
-    this.cacheKeybindingValues();
 
     if (this.controllerEl) {
       this.controllerEl.style.setProperty('--hare-opacity', String(settings.controllerOpacity));

@@ -1,10 +1,11 @@
-export type KeyAction =
-  | 'slower'
-  | 'faster'
-  | 'rewind'
-  | 'advance'
-  | 'reset'
-  | 'display';
+import type { DriftCorrectPayload, SyncCommandPayload, SyncEventPayload } from './sync-types';
+
+export const KEY_ACTIONS = ['slower', 'faster', 'rewind', 'advance', 'reset', 'display'] as const;
+export type KeyAction = typeof KEY_ACTIONS[number];
+
+export function isKeyAction(value: unknown): value is KeyAction {
+  return KEY_ACTIONS.includes(value as KeyAction);
+}
 
 export interface KeyBinding {
   action: KeyAction;
@@ -23,50 +24,32 @@ export interface Settings {
   blacklist: string; // newline-delimited hostnames or regexes
 }
 
-export interface ControllerPosition {
-  target: Element;
-  method: 'prepend' | 'append' | 'before' | 'after';
-}
-
 export interface SiteHandler {
-  matches(): boolean;
-
-  /** Resolves the ideal DOM mount point to avoid obstructing native controls. */
-  getControllerPosition(
-    video: HTMLVideoElement
-  ): ControllerPosition | null;
-
+  /** Resolves the ideal mount point to avoid obstructing native controls. */
+  findContainer(video: HTMLVideoElement): Element | null;
   shouldIgnoreVideo(video: HTMLVideoElement): boolean;
 }
 
-export type MessageType =
-  | 'GET_PAGE_CONTEXT'
-  | 'GET_STATUS'
-  | 'SET_SPEED'
-  | 'RESET_SPEED'
-  | 'TOGGLE_DISPLAY'
+export type HareMessage =
+  | { type: 'GET_PAGE_CONTEXT' }
+  | { type: 'GET_STATUS' }
+  | { type: 'SET_SPEED'; payload: number }
+  | { type: 'RESET_SPEED' }
+  | { type: 'TOGGLE_DISPLAY' }
   // Sync coordination (background <-> content)
-  | 'SYNC_ACTIVATE'
-  | 'SYNC_DEACTIVATE'
-  | 'SYNC_PAUSE'
-  | 'SYNC_PLAY'
-  | 'SYNC_SEEK'
-  | 'SYNC_RATE'
-  | 'SYNC_DRIFT_CORRECT'
-  | 'SYNC_GET_POSITION'
-  | 'SYNC_BUFFERING'
+  | { type: 'SYNC_ACTIVATE' }
+  | { type: 'SYNC_DEACTIVATE' }
+  | { type: 'SYNC_EVENT'; payload: SyncEventPayload }
+  | { type: 'SYNC_PAUSE' | 'SYNC_PLAY' | 'SYNC_SEEK' | 'SYNC_RATE'; payload: SyncCommandPayload }
+  | { type: 'SYNC_DRIFT_CORRECT'; payload: DriftCorrectPayload }
+  | { type: 'SYNC_GET_POSITION' }
   // Sync management (popup <-> background)
-  | 'GET_SYNC_CANDIDATES'
-  | 'START_SYNC'
-  | 'STOP_SYNC'
-  | 'NUDGE_OFFSET'
-  | 'SET_NUDGE_STEP'
-  | 'GET_SYNC_STATUS';
-
-export interface HareMessage {
-  type: MessageType;
-  payload?: unknown;
-}
+  | { type: 'GET_SYNC_CANDIDATES' }
+  | { type: 'START_SYNC'; payload: { tabIdA: number; tabIdB: number } }
+  | { type: 'STOP_SYNC' }
+  | { type: 'NUDGE_OFFSET'; payload: number }
+  | { type: 'SET_NUDGE_STEP'; payload: number }
+  | { type: 'GET_SYNC_STATUS' };
 
 export interface StatusResponse {
   hasVideos: boolean;

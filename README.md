@@ -116,7 +116,7 @@ Hare/
 │   ├── sync-startup.ts # Pair activation, cancellation, and rollback
 │   ├── sync-coordinator.ts # Session state and drift correction
 │   ├── sync-agent.ts   # Per-media command execution and echo suppression
-│   └── site-handlers/  # Site-specific handlers
+│   └── site-handlers.ts # Per-site player containers and ignore rules
 ├── assets/             # Icons and CSS
 └── public/             # Static assets
 ```

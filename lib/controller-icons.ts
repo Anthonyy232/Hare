@@ -6,3 +6,15 @@ export const ICONS = {
   advance: `<svg viewBox="0 0 24 24"><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>`,
   hide: `<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
 };
+
+const parsed = new Map<keyof typeof ICONS, SVGElement>();
+
+/** Parse each bundled icon once; settings never enter SVG markup. */
+export function createIcon(name: keyof typeof ICONS): SVGElement {
+  let svg = parsed.get(name);
+  if (!svg) {
+    svg = new DOMParser().parseFromString(ICONS[name], 'text/html').querySelector('svg')!;
+    parsed.set(name, svg);
+  }
+  return document.importNode(svg, true);
+}

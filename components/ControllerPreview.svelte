@@ -1,6 +1,6 @@
 <script lang="ts">
   import controllerCSS from '../assets/controller.css?raw';
-  import { ICONS } from '../lib/controller-icons';
+  import { ICONS, createIcon } from '../lib/controller-icons';
 
   let { opacity, size, startHidden }: { opacity: number; size: number; startHidden: boolean } = $props();
   let expanded = $state(false);
@@ -21,13 +21,10 @@
     speed.textContent = '1.00x';
     const controls = document.createElement('span');
     controls.className = 'hare-controls';
-    // Parse only bundled SVG icons. Settings never enter HTML or SVG markup.
-    const parser = new DOMParser();
-    for (const icon of Object.values(ICONS)) {
+    for (const icon of Object.keys(ICONS) as Array<keyof typeof ICONS>) {
       const button = document.createElement('span');
       button.className = 'hare-btn';
-      const svg = parser.parseFromString(icon, 'text/html').querySelector('svg');
-      if (svg) button.append(document.importNode(svg, true));
+      button.append(createIcon(icon));
       controls.append(button);
     }
     controller.append(speed, controls);
