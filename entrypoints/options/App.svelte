@@ -13,7 +13,6 @@
   } from "../../lib/settings";
   import { CONTROLLER, UI } from "../../lib/constants";
   import type { Settings } from "../../lib/types";
-  import { MESSAGES } from "../../lib/messages";
 
   let settings: Settings | null = $state(null);
   let loading = $state(true);
@@ -68,7 +67,7 @@
 
   async function reset() {
     if (saving) return;
-    if (confirm(MESSAGES.RESET_SETTINGS_CONFIRM)) {
+    if (confirm('Reset all settings to defaults?')) {
       saving = true;
       error = null;
       try {
@@ -277,7 +276,7 @@
         <div class="conflict-warning" role="alert">
           <div class="conflict-text">
             <strong>Warning:</strong>
-            {MESSAGES.SETTINGS_CONFLICT}
+            Settings were changed in another tab. Save to overwrite, or reload to discard your changes.
           </div>
           <button class="conflict-discard" onclick={load}>
             Discard local changes

@@ -42,12 +42,8 @@ export class SyncStartup {
           if (revision !== this.revision) throw new Error('Sync startup cancelled.');
           attempted.push({ tabId, frameId });
           try {
-            const result = await sendToFrame(tabId, frameId, { type: 'SYNC_ACTIVATE' }) as Partial<Activation> & { success?: boolean };
-            if (result?.success && Number.isFinite(result.currentTime) && Number.isFinite(result.playbackRate)
-              && result.playbackRate! > 0 && Number.isFinite(result.timestamp) && typeof result.paused === 'boolean'
-              && typeof result.buffering === 'boolean') {
-              return { ...result, frameId } as Activation;
-            }
+            const result = await sendToFrame(tabId, frameId, { type: 'SYNC_ACTIVATE' }) as SyncPositionResponse & { success: boolean };
+            if (result?.success) return { ...result, frameId };
           } catch { /* Try the next frame. All attempted frames are cleaned up on failure. */ }
         }
         throw new Error('A selected tab has no available media. Reload it and refresh the tab list.');

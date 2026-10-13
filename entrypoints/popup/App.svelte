@@ -4,7 +4,6 @@
   import SyncMode from "../../components/SyncMode.svelte";
   import type { StatusResponse, HareMessage } from "../../lib/types";
   import { SPEED, UI } from "../../lib/constants";
-  import { MESSAGES } from "../../lib/messages";
   import { loadSettings, saveSettings, isBlacklisted, removeExactSiteExclusions } from "../../lib/settings";
   import { getTabMedia, aggregateStatus, sendToFrame } from "../../lib/tab-media";
 
@@ -45,7 +44,7 @@
     let nextHint = '';
     let nextSiteAction: typeof siteAction = null;
     try {
-      if (tabId == null) throw new Error(MESSAGES.NO_ACTIVE_TAB);
+      if (tabId == null) throw new Error('No active tab');
       const tab = await browser.tabs.get(tabId);
       tabUrl = tab.url ?? '';
       // Without the tabs permission, protected pages can omit their URL entirely.

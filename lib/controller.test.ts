@@ -2,7 +2,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { VideoController } from './controller';
 import { DEFAULT_SETTINGS } from './types';
 import { safeMedia } from './safe-media';
-import { BaseSiteHandler } from './site-handlers/base';
+import { genericHandler } from './site-handlers';
 
 describe('controller', () => {
   let video: HTMLVideoElement;
@@ -11,7 +11,7 @@ describe('controller', () => {
     vi.useFakeTimers();
     document.body.innerHTML = '<div><video></video></div>';
     video = document.querySelector('video')!;
-    controller = new VideoController(video, structuredClone(DEFAULT_SETTINGS), new BaseSiteHandler());
+    controller = new VideoController(video, structuredClone(DEFAULT_SETTINGS), genericHandler);
   });
   afterEach(() => { controller.destroy(); vi.restoreAllMocks(); vi.useRealTimers(); });
   it('does not throw or notify sync when a player rejects a rate', () => {
@@ -40,7 +40,7 @@ describe('controller', () => {
   });
   it('does not mount inside a video matching a player selector', () => {
     controller.destroy(); video.className = 'vjs-tech';
-    controller = new VideoController(video, structuredClone(DEFAULT_SETTINGS), new BaseSiteHandler());
+    controller = new VideoController(video, structuredClone(DEFAULT_SETTINGS), genericHandler);
     expect(video.querySelector('hare-controller')).toBeNull();
     expect(video.parentElement!.querySelector('hare-controller')).not.toBeNull();
   });

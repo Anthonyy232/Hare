@@ -1,7 +1,6 @@
 import { OBSERVER } from './constants';
 import { scanMediaTree } from './media-detector';
 import { getShadowRoot } from './shadow-dom';
-import { BrowserFeatures } from './browser-detect';
 
 type MediaCallback = (media: HTMLMediaElement) => void;
 
@@ -9,7 +8,7 @@ type MediaCallback = (media: HTMLMediaElement) => void;
 export class ObserverPool {
   private observers = new Map<Document | ShadowRoot, MutationObserver>();
   private pendingMutations: MutationRecord[] = [];
-  private flushTimeoutId: ReturnType<typeof setTimeout> | number | null = null;
+  private flushId: number | null = null;
   private trackedMedia = new WeakSet<HTMLMediaElement>();
 
   constructor(
@@ -30,10 +29,8 @@ export class ObserverPool {
     if (this.observers.has(root)) return;
     const observer = new MutationObserver(mutations => {
       this.pendingMutations.push(...mutations);
-      if (this.flushTimeoutId !== null) return;
-      this.flushTimeoutId = BrowserFeatures.hasRequestIdleCallback
-        ? requestIdleCallback(() => this.flush(), { timeout: OBSERVER.IDLE_TIMEOUT_MS })
-        : setTimeout(() => this.flush(), OBSERVER.DEBOUNCE_MS);
+      if (this.flushId !== null) return;
+      this.flushId = requestIdleCallback(() => this.flush(), { timeout: OBSERVER.IDLE_TIMEOUT_MS });
     });
     observer.observe(root, { childList: true, subtree: true });
     this.observers.set(root, observer);
@@ -55,7 +52,7 @@ export class ObserverPool {
   }
 
   private flush(): void {
-    this.flushTimeoutId = null;
+    this.flushId = null;
     const mutations = this.pendingMutations;
     this.pendingMutations = [];
     const found = new Set<HTMLMediaElement>();
@@ -88,14 +85,11 @@ export class ObserverPool {
   }
 
   disconnect(): void {
-    if (this.flushTimeoutId !== null) {
-      if (BrowserFeatures.hasRequestIdleCallback) cancelIdleCallback(this.flushTimeoutId as number);
-      else clearTimeout(this.flushTimeoutId as ReturnType<typeof setTimeout>);
-    }
+    if (this.flushId !== null) cancelIdleCallback(this.flushId);
     for (const observer of this.observers.values()) observer.disconnect();
     this.observers.clear();
     this.trackedMedia = new WeakSet();
     this.pendingMutations = [];
-    this.flushTimeoutId = null;
+    this.flushId = null;
   }
 }

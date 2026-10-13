@@ -20,16 +20,16 @@ export class SyncAgent {
   private destroyed = false;
   private seekDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private rateCorrectionTimer: ReturnType<typeof setTimeout> | null = null;
-  private rateCorrectionBaseRate: number = 1.0;
+  private rateCorrectionBaseRate: number;
 
   private listeners = new AbortController();
 
   constructor(
     media: HTMLMediaElement,
     sendEvent: EventCallback,
-    baseRate: number = 1.0,
-    setIntendedSpeed: (rate: number) => void = (rate) => safeMedia.setPlaybackRate(media, rate),
-    setTransientRate: (rate: number) => void = (rate) => safeMedia.setPlaybackRate(media, rate),
+    baseRate: number,
+    setIntendedSpeed: (rate: number) => void,
+    setTransientRate: (rate: number) => void,
   ) {
     this.media = media;
     this.sendEvent = sendEvent;

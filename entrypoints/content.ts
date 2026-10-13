@@ -9,18 +9,8 @@ import { CLEANUP } from '../lib/constants';
 import type { Browser } from 'wxt/browser';
 import { logger } from '../lib/logger';
 import { SyncAgent } from '../lib/sync-agent';
-import { safeMedia } from '../lib/safe-media';
 import { withTimeout } from '../lib/async-utils';
-import { SYNC, type SyncEventPayload, type SyncCommandPayload, type DriftCorrectPayload } from '../lib/sync-types';
-
-const SYNC_EVENT_TYPE: Record<SyncEventPayload['action'], string> = {
-  pause: 'SYNC_PAUSE',
-  play: 'SYNC_PLAY',
-  seek: 'SYNC_SEEK',
-  ratechange: 'SYNC_RATE',
-  buffering_start: 'SYNC_BUFFERING',
-  buffering_end: 'SYNC_BUFFERING',
-};
+import { SYNC, type SyncEventPayload } from '../lib/sync-types';
 
 export default defineContentScript({
   matches: ['http://*/*', 'https://*/*', 'file:///*'],
@@ -314,12 +304,7 @@ export default defineContentScript({
           }
 
           case 'SET_SPEED': {
-            const speed = message.payload as number;
-            if (typeof speed !== 'number' || !Number.isFinite(speed)) {
-              sendResponse({ success: false, error: 'Invalid speed' });
-              break;
-            }
-            for (const controller of controllersArray) controller.setSpeed(speed);
+            for (const controller of controllersArray) controller.setSpeed(message.payload);
             sendResponse({ success: controllersArray.length > 0 });
             break;
           }
@@ -350,31 +335,21 @@ export default defineContentScript({
               sendResponse({ success: false, error: 'No video found' });
               break;
             }
-            const primaryController = controllers.get(primaryMedia);
-            const baseRate = primaryController?.intendedSpeed
-              ?? safeMedia.getPlaybackRate(primaryMedia);
+            const primaryController = controllers.get(primaryMedia)!;
+            const baseRate = primaryController.intendedSpeed;
             syncAgent = new SyncAgent(
               primaryMedia,
               (event: SyncEventPayload) => {
-                browser.runtime.sendMessage({
-                  type: SYNC_EVENT_TYPE[event.action],
-                  payload: event,
-                }).catch(() => {});
+                browser.runtime.sendMessage({ type: 'SYNC_EVENT', payload: event }).catch(() => {});
               },
               baseRate,
               // Keep controller enforcement consistent with remote rate changes.
-              primaryController
-                ? (rate: number) => primaryController.setSpeed(rate)
-                : (rate: number) => safeMedia.setPlaybackRate(primaryMedia, rate),
-              primaryController
-                ? (rate: number) => primaryController.applyTransientRate(rate)
-                : (rate: number) => safeMedia.setPlaybackRate(primaryMedia, rate),
+              rate => primaryController.setSpeed(rate),
+              rate => primaryController.applyTransientRate(rate),
             );
-            if (primaryController) {
-              primaryController.setIntendedSpeedListener((rate) => {
-                syncAgent?.notifyIntendedSpeedChange(rate);
-              });
-            }
+            primaryController.setIntendedSpeedListener((rate) => {
+              syncAgent?.notifyIntendedSpeedChange(rate);
+            });
             startSyncKeepAlive();
             sendResponse({
               success: true,
@@ -392,7 +367,7 @@ export default defineContentScript({
 
           case 'SYNC_PAUSE': {
             if (!syncAgent) { sendResponse({ success: false }); break; }
-            const pauseCmd = message.payload as SyncCommandPayload;
+            const pauseCmd = message.payload;
             // Do not extrapolate a paused source; skip tiny seeks to avoid visible jitter.
             const localPos = syncAgent.getPosition().currentTime;
             const driftSec = SYNC.DRIFT_IGNORE_THRESHOLD_MS / 1000;
@@ -406,7 +381,7 @@ export default defineContentScript({
 
           case 'SYNC_PLAY': {
             if (!syncAgent) { sendResponse({ success: false }); break; }
-            const playCmd = message.payload as SyncCommandPayload;
+            const playCmd = message.payload;
             if (playCmd.position >= 0) {
               const rate = playCmd.rate ?? syncAgent.getPosition().playbackRate;
               const compensatedPlayPos = playCmd.position + rate * (Date.now() - playCmd.timestamp) / 1000;
@@ -420,35 +395,25 @@ export default defineContentScript({
 
           case 'SYNC_SEEK': {
             if (!syncAgent) { sendResponse({ success: false }); break; }
-            const seekCmd = message.payload as SyncCommandPayload;
+            const seekCmd = message.payload;
             syncAgent.executeSeek(seekCmd.position);
             sendResponse({ success: true });
             break;
           }
 
           case 'SYNC_RATE': {
-            if (!syncAgent) { sendResponse({ success: false }); break; }
-            const rateCmd = message.payload as SyncCommandPayload;
-            if (typeof rateCmd.rate === 'number' && Number.isFinite(rateCmd.rate) && rateCmd.rate > 0) {
-              syncAgent.executeRateChange(rateCmd.rate);
-              sendResponse({ success: Math.abs(syncAgent.getPosition().playbackRate - rateCmd.rate) < 0.001 });
-            } else {
-              sendResponse({ success: false, error: 'Invalid speed' });
-            }
+            const { rate } = message.payload;
+            if (!syncAgent || rate == null) { sendResponse({ success: false }); break; }
+            syncAgent.executeRateChange(rate);
+            sendResponse({ success: Math.abs(syncAgent.getPosition().playbackRate - rate) < 0.001 });
             break;
           }
 
           case 'SYNC_DRIFT_CORRECT': {
             if (!syncAgent) { sendResponse({ success: false }); break; }
-            const drift = message.payload as DriftCorrectPayload;
-            if (drift.method === 'seek') {
-              syncAgent.executeSeek(drift.position);
-            } else if (drift.method === 'rate') {
-              syncAgent.applyRateCorrection(
-                drift.rateFactor ?? 0.02,
-                drift.durationMs ?? 3000,
-              );
-            }
+            const drift = message.payload;
+            if (drift.method === 'seek') syncAgent.executeSeek(drift.position);
+            else syncAgent.applyRateCorrection(drift.rateFactor, drift.durationMs);
             sendResponse({ success: true });
             break;
           }

@@ -13,19 +13,12 @@ export async function sendToFrame(tabId: number, frameId: number, message: HareM
   return withTimeout(browser.tabs.sendMessage(tabId, message, { frameId }));
 }
 
-export function isStatusResponse(value: unknown): value is StatusResponse {
-  if (!value || typeof value !== 'object') return false;
-  const status = value as StatusResponse;
-  return typeof status.hasVideos === 'boolean' && Number.isInteger(status.videoCount) && status.videoCount >= 0
-    && Number.isFinite(status.currentSpeed) && status.currentSpeed > 0;
-}
-
 export async function getTabMedia(tabId: number): Promise<Array<{ frameId: number; status: StatusResponse }>> {
   const frames = await getFrameIds(tabId);
   const statuses = await Promise.all(frames.map(async frameId => {
     try {
-      const status = await sendToFrame(tabId, frameId, { type: 'GET_STATUS' });
-      return isStatusResponse(status) ? { frameId, status } : null;
+      const status = await sendToFrame(tabId, frameId, { type: 'GET_STATUS' }) as StatusResponse | undefined;
+      return status ? { frameId, status } : null;
     } catch { return null; }
   }));
   return statuses.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
