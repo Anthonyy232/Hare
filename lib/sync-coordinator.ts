@@ -7,9 +7,9 @@ import type {
   SyncStatusResponse,
   SyncPositionResponse,
 } from './sync-types';
-import type { HareMessage } from './types';
+import type { HareMessage, Reply } from './types';
 import { logger } from './logger';
-import { withTimeout } from './async-utils';
+import { sendToTab } from './messaging';
 
 const COMMAND_TYPE = {
   pause: 'SYNC_PAUSE',
@@ -182,12 +182,12 @@ export class SyncCoordinator {
     const tabBId = this.session?.videoB.tabId;
     const frameAId = this.session?.videoA.frameId;
     const frameBId = this.session?.videoB.frameId;
-    this.session = null; // null first to prevent re-entry from sendToTab error handler
+    this.session = null; // null first to prevent re-entry from the send error handler
     this.sendFailures.clear();
 
     const pending: Promise<unknown>[] = [this.clearPersistedSession()];
-    if (tabAId != null) pending.push(this.sendToTab(tabAId, { type: 'SYNC_DEACTIVATE' }, frameAId));
-    if (tabBId != null) pending.push(this.sendToTab(tabBId, { type: 'SYNC_DEACTIVATE' }, frameBId));
+    if (tabAId != null) pending.push(this.send(tabAId, { type: 'SYNC_DEACTIVATE' }, frameAId));
+    if (tabBId != null) pending.push(this.send(tabBId, { type: 'SYNC_DEACTIVATE' }, frameBId));
 
     if (wasActive) {
       logger.debug(`Sync session stopped. Reason: ${reason ?? 'unknown'}`);
@@ -266,8 +266,8 @@ export class SyncCoordinator {
     return undefined;
   }
 
-  private async sendToSyncedTab(tabId: number, message: HareMessage): Promise<unknown> {
-    return this.sendToTab(tabId, message, this.getFrameId(tabId));
+  private sendToSyncedTab<M extends HareMessage>(tabId: number, message: M): Promise<Reply<M> | null> {
+    return this.send(tabId, message, this.getFrameId(tabId));
   }
 
   async handleSyncEvent(fromTabId: number, event: SyncEventPayload, fromFrameId?: number): Promise<void> {
@@ -494,22 +494,21 @@ export class SyncCoordinator {
     }
   }
 
-  private async requestPosition(tabId: number): Promise<SyncPositionResponse | null> {
-    return await this.sendToSyncedTab(tabId, { type: 'SYNC_GET_POSITION' }) as SyncPositionResponse | null;
+  private requestPosition(tabId: number): Promise<SyncPositionResponse | null> {
+    return this.sendToSyncedTab(tabId, { type: 'SYNC_GET_POSITION' });
   }
 
-  private async sendToTab(tabId: number, message: HareMessage, frameId?: number): Promise<unknown> {
+  private async send<M extends HareMessage>(tabId: number, message: M, frameId?: number): Promise<Reply<M> | null> {
     const sessionAtSend = this.session;
     try {
-      const result = await withTimeout(frameId != null
-        ? browser.tabs.sendMessage(tabId, message, { frameId })
-        : browser.tabs.sendMessage(tabId, message), message.type === 'SYNC_GET_POSITION' ? SYNC.POSITION_TIMEOUT_MS : undefined);
+      const timeout = message.type === 'SYNC_GET_POSITION' ? SYNC.POSITION_TIMEOUT_MS : undefined;
+      const result = await sendToTab(tabId, message, frameId, timeout);
       if (sessionAtSend !== this.session) return null;
       if (this.isFailedResponse(message, result)) {
         this.recordSendFailure(tabId, frameId, result);
         return null;
       }
-      this.clearSendFailure(tabId, frameId);
+      this.sendFailures.delete(this.endpointKey(tabId, frameId));
       return result;
     } catch (error) {
       if (sessionAtSend === this.session) this.recordSendFailure(tabId, frameId, error);
@@ -521,17 +520,9 @@ export class SyncCoordinator {
     return `${tabId}:${frameId ?? 'all'}`;
   }
 
-  private isSyncedEndpoint(tabId: number): boolean {
-    return !!this.session && (
-      tabId === this.session.videoA.tabId ||
-      tabId === this.session.videoB.tabId
-    );
+  private isSyncedTab(tabId: number): boolean {
+    return tabId === this.session?.videoA.tabId || tabId === this.session?.videoB.tabId;
   }
-
-  private clearSendFailure(tabId: number, frameId?: number): void {
-    this.sendFailures.delete(this.endpointKey(tabId, frameId));
-  }
-
   private isFailedResponse(message: HareMessage, result: unknown): boolean {
     if (message.type === 'SYNC_DEACTIVATE') return false;
     if (result == null || typeof result !== 'object') return true;
@@ -560,7 +551,7 @@ export class SyncCoordinator {
     frameId: number | undefined,
     reason: unknown
   ): void {
-    if (!this.isSyncedEndpoint(tabId)) return;
+    if (!this.isSyncedTab(tabId)) return;
 
     const key = this.endpointKey(tabId, frameId);
     const failures = (this.sendFailures.get(key) ?? 0) + 1;
@@ -572,10 +563,7 @@ export class SyncCoordinator {
   }
 
   handleTabRemoved(tabId: number): void {
-    if (!this.session) return;
-    if (tabId === this.session.videoA.tabId || tabId === this.session.videoB.tabId) {
-      this.stopSync(`tab ${tabId} was closed`);
-    }
+    if (this.isSyncedTab(tabId)) void this.stopSync(`tab ${tabId} was closed`);
   }
 
   destroy(): void {
