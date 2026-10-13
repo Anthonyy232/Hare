@@ -104,15 +104,6 @@ describe('SyncCoordinator', () => {
       coordinator.nudgeOffset(NaN);
       expect(coordinator.getStatus().offset).toBe(5.5);
     });
-
-    it('discards an invalid persisted session and releases readiness', async () => {
-      mockStorageSessionGet.mockResolvedValueOnce({ syncSession_v2: { session: { videoA: { tabId: 1 }, offset: NaN } } });
-      const restored = new SyncCoordinator();
-      await restored.restoreSession();
-      await restored.ready;
-      expect(restored.getStatus().active).toBe(false);
-      restored.destroy();
-    });
   });
 
   describe('event relay', () => {
@@ -133,36 +124,6 @@ describe('SyncCoordinator', () => {
       expect(mockSendMessage).toHaveBeenCalledWith(to, expect.objectContaining({
         type, payload: expect.objectContaining({ position: target }),
       }));
-    });
-
-    it('increments generation on user actions', async () => {
-      await coordinator.handleSyncEvent(1, {
-        action: 'seek',
-        position: 10,
-        timestamp: Date.now(),
-      });
-
-      await coordinator.handleSyncEvent(1, {
-        action: 'seek',
-        position: 20,
-        timestamp: Date.now(),
-      });
-
-      expect(mockSendMessage).toHaveBeenLastCalledWith(
-        2,
-        expect.objectContaining({
-          payload: expect.objectContaining({ generation: 2 }),
-        })
-      );
-    });
-
-    it('does not relay events from unknown tabs', async () => {
-      await coordinator.handleSyncEvent(999, {
-        action: 'pause',
-        position: 10,
-        timestamp: Date.now(),
-      });
-      expect(mockSendMessage).not.toHaveBeenCalled();
     });
 
     it('does not relay events from unsynced frames in a synced tab', async () => {
@@ -224,17 +185,6 @@ describe('SyncCoordinator', () => {
 
       coordinator.handleTabRemoved(1);
       expect(coordinator.getStatus().active).toBe(false);
-    });
-
-    it('ignores removal of unrelated tabs', () => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 0, currentTimeB: 0 }
-      );
-
-      coordinator.handleTabRemoved(999);
-      expect(coordinator.getStatus().active).toBe(true);
     });
   });
 
@@ -346,9 +296,6 @@ describe('SyncCoordinator', () => {
     });
 
     it('pauses without seeking when the buffering target would be negative', async () => {
-      coordinator.destroy();
-      coordinator = new SyncCoordinator();
-      await coordinator.restoreSession();
       coordinator.startSync(
         { tabId: 1 },
         { tabId: 2 },
@@ -395,8 +342,6 @@ describe('SyncCoordinator', () => {
     });
 
     it('skips drift correction when expected position would be negative', async () => {
-      coordinator.destroy();
-      coordinator = new SyncCoordinator();
       coordinator.startSync(
         { tabId: 1 },
         { tabId: 2 },

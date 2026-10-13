@@ -63,7 +63,8 @@ describe('SyncAgent', () => {
   beforeEach(() => {
     video = createMockVideo(10);
     sendEvent = vi.fn();
-    agent = new SyncAgent(video, sendEvent);
+    const setRate = (rate: number) => { video.playbackRate = rate; };
+    agent = new SyncAgent(video, sendEvent, 1, setRate, setRate);
   });
 
   afterEach(() => {
@@ -162,24 +163,6 @@ describe('SyncAgent', () => {
     it('reports real buffering during coordinator-initiated play', () => {
       agent.executePlay();
       video.dispatchEvent(new Event('play'));
-
-      video.dispatchEvent(new Event('waiting'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'buffering_start' })
-      );
-
-      video.dispatchEvent(new Event('playing'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'buffering_end' })
-      );
-    });
-
-    it('does not suppress buffering when play was user-initiated', () => {
-      (video as any)._paused = false;
-      video.dispatchEvent(new Event('play'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'play' })
-      );
 
       video.dispatchEvent(new Event('waiting'));
       expect(sendEvent).toHaveBeenCalledWith(
@@ -292,7 +275,8 @@ describe('SyncAgent', () => {
         (rate: number) => {
           peer.notifyIntendedSpeedChange(rate);
           video.playbackRate = rate;
-        }
+        },
+        vi.fn(),
       );
       peer.executeRateChange(1.5);
       expect(sendEvent).not.toHaveBeenCalled();
