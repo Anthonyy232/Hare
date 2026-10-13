@@ -124,11 +124,11 @@ export class SyncCoordinator {
     });
   }
 
-  // Session storage survives worker restarts and clears when the browser exits.
+  // Session storage survives worker restarts but is cleared on browser exit and extension reload/update,
+  // so it only ever holds this build's schema.
   async restoreSession(): Promise<void> {
     try {
       const stored = await browser.storage.session.get(SYNC.STORAGE_KEY);
-      // Session storage is cleared on extension reload/update, so it only holds this build's schema.
       const state = stored[SYNC.STORAGE_KEY] as PersistedSyncState | undefined;
       if (!state?.session) return;
 
@@ -452,8 +452,7 @@ export class SyncCoordinator {
       const expectedB = correctedA + this.session.offset;
       const expectedA = correctedB - this.session.offset;
 
-      // If either expected position is negative, the offset can't be maintained
-      // at this position (one video is near its start). Don't fight the user.
+      // One video is near its start, so the offset can't be maintained here. Don't fight the user.
       if (expectedB < 0 || expectedA < 0) return;
 
       const driftMs = (correctedB - expectedB) * 1000;

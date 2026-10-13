@@ -1,7 +1,6 @@
 import { getShadowRoot } from './shadow-dom';
 import { CONTROLLER } from './constants';
 
-/** Shared traversal for initial discovery, mutation batches, and on-demand rescans. */
 export function scanMediaTree(
   root: Node,
   includeAudio: boolean,
