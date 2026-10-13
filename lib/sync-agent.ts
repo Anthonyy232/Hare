@@ -217,8 +217,4 @@ export class SyncAgent {
     }
     this.listeners.abort();
   }
-
-  isForMedia(media: HTMLMediaElement): boolean {
-    return this.media === media;
-  }
 }

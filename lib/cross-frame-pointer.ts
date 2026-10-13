@@ -1,6 +1,5 @@
 import type { VideoController } from './controller';
 import { isKeyAction, type KeyAction } from './types';
-import { executeAction } from './keybinds';
 import { CROSS_FRAME } from './constants';
 
 // Host overlays can intercept clicks above cross-origin players. Child frames publish
@@ -68,128 +67,84 @@ export type CrossFramePointerBridge = {
 export function createCrossFramePointerBridge(
   getControllers: () => VideoController[]
 ): CrossFramePointerBridge {
-  let publishInterval: ReturnType<typeof setInterval> | null = null;
-  // Init to '[]' so a frame that never has visible buttons stays silent on destroy.
+  const isChildFrame = window.parent !== window;
+  // Start at '[]' so a frame that never shows buttons stays silent on destroy.
   let lastPublishedJson = '[]';
 
+  const publish = (buttons: HitmapButton[]): void => {
+    const message: HareHitmapMessage = { __hareHitmap: true, buttons };
+    window.parent.postMessage(message, '*');
+  };
+
   const publishHitmap = (): void => {
-    if (window.parent === window) return;
-
     const buttons = getControllers().flatMap(controller => controller.getButtonHitmap());
-
     const json = JSON.stringify(buttons);
     if (json === lastPublishedJson) return;
     lastPublishedJson = json;
-
-    const payload: HareHitmapMessage = { __hareHitmap: true, buttons };
-    try {
-      window.parent.postMessage(payload, '*');
-    } catch {}
+    publish(buttons);
   };
 
-  if (window.parent !== window) {
+  let publishInterval: ReturnType<typeof setInterval> | null = null;
+  if (isChildFrame) {
     publishHitmap();
     publishInterval = setInterval(publishHitmap, CROSS_FRAME.HITMAP_POLL_MS);
   }
 
-  type ChildEntry = {
-    iframe: HTMLIFrameElement;
-    buttons: HitmapButton[];
-  };
-  const childHitmaps = new Map<Window, ChildEntry>();
-  const iframeByWindow = new WeakMap<Window, HTMLIFrameElement>();
-
-  const resolveIframe = (win: Window): HTMLIFrameElement | null => {
-    const cached = iframeByWindow.get(win);
-    if (cached && cached.isConnected) return cached;
-    const iframes = document.querySelectorAll('iframe');
-    for (const frame of iframes) {
-      try {
-        if ((frame as HTMLIFrameElement).contentWindow === win) {
-          iframeByWindow.set(win, frame as HTMLIFrameElement);
-          return frame as HTMLIFrameElement;
-        }
-      } catch {}
-    }
-    return null;
-  };
+  const childHitmaps = new Map<Window, { iframe: HTMLIFrameElement; buttons: HitmapButton[] }>();
 
   const handleMessage = (event: MessageEvent): void => {
     if (isHareHitmapMessage(event.data)) {
-      if (!(event.source instanceof Window)) return;
-      if (event.data.buttons.length === 0) {
-        childHitmaps.delete(event.source);
-        return;
-      }
-      const iframe = resolveIframe(event.source);
-      if (!iframe) return;
-      childHitmaps.set(event.source, { iframe, buttons: event.data.buttons });
+      const source = event.source;
+      if (!(source instanceof Window)) return;
+      const iframe = [...document.querySelectorAll('iframe')].find(frame => frame.contentWindow === source);
+      if (event.data.buttons.length && iframe) childHitmaps.set(source, { iframe, buttons: event.data.buttons });
+      else childHitmaps.delete(source);
       return;
     }
 
     if (isHareActionMessage(event.data)) {
       // Hitmaps describe direct children, so only the direct parent may forward actions.
-      if (window.parent === window || event.source !== window.parent) return;
-      const controllers = getControllers().filter(controller => controller.id === event.data.controllerId);
-      if (controllers.length === 0) return;
-      executeAction(event.data.action, event.data.value, controllers);
+      if (!isChildFrame || event.source !== window.parent) return;
+      const { controllerId, action, value } = event.data;
+      getControllers().find(controller => controller.id === controllerId)?.perform(action, value);
     }
   };
 
-  const hitTestChildFrames = (
-    clientX: number,
-    clientY: number
-  ): { source: Window; action: KeyAction; value: number; controllerId: string } | null => {
-    for (const [source, entry] of childHitmaps) {
-      if (!entry.iframe.isConnected) {
+  const hitTestChildFrames = ({ clientX, clientY }: MouseEvent): { source: Window; button: HitmapButton } | null => {
+    for (const [source, { iframe, buttons }] of childHitmaps) {
+      if (!iframe.isConnected) {
         childHitmaps.delete(source);
         continue;
       }
-      const rect = entry.iframe.getBoundingClientRect();
+      const rect = iframe.getBoundingClientRect();
       if (!rect.width || !rect.height || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) continue;
-      const scaleX = rect.width / (entry.iframe.offsetWidth || rect.width);
-      const scaleY = rect.height / (entry.iframe.offsetHeight || rect.height);
-      for (const btn of entry.buttons) {
-        const left = rect.left + (entry.iframe.clientLeft + btn.x) * scaleX;
-        const top = rect.top + (entry.iframe.clientTop + btn.y) * scaleY;
-        if (
-          clientX >= left &&
-          clientX <= left + btn.w * scaleX &&
-          clientY >= top &&
-          clientY <= top + btn.h * scaleY
-        ) {
-          return { source, action: btn.action, value: btn.value, controllerId: btn.controllerId };
+      const scaleX = rect.width / (iframe.offsetWidth || rect.width);
+      const scaleY = rect.height / (iframe.offsetHeight || rect.height);
+      for (const button of buttons) {
+        const left = rect.left + (iframe.clientLeft + button.x) * scaleX;
+        const top = rect.top + (iframe.clientTop + button.y) * scaleY;
+        if (clientX >= left && clientX <= left + button.w * scaleX && clientY >= top && clientY <= top + button.h * scaleY) {
+          return { source, button };
         }
       }
     }
     return null;
   };
 
-  const forwardAction = (target: Window, action: KeyAction, value: number, controllerId: string): void => {
-    const msg: HareActionMessage = { __hareButtonAction: true, action, value, controllerId };
-    try {
-      target.postMessage(msg, '*');
-    } catch {}
+  // Stop host delegation (e.g. Drive's jsaction) on press, but don't preventDefault:
+  // that would cancel the synthesized click we depend on.
+  const handleEarlyPress = (event: MouseEvent): void => {
+    if (childHitmaps.size && hitTestChildFrames(event)) event.stopImmediatePropagation();
   };
 
-  // pointerdown/mousedown: stop host delegation (e.g. Drive's jsaction) from
-  // running, but do NOT preventDefault — that would cancel the synthesized
-  // click we depend on.
-  const handleEarlyPress = (event: Event): void => {
-    if (childHitmaps.size === 0) return;
-    const me = event as MouseEvent;
-    if (!hitTestChildFrames(me.clientX, me.clientY)) return;
-    event.stopImmediatePropagation();
-  };
-
-  const handleClick = (event: Event): void => {
-    if (childHitmaps.size === 0) return;
-    const me = event as MouseEvent;
-    const hit = hitTestChildFrames(me.clientX, me.clientY);
+  const handleClick = (event: MouseEvent): void => {
+    const hit = childHitmaps.size ? hitTestChildFrames(event) : null;
     if (!hit) return;
     event.stopImmediatePropagation();
     event.preventDefault();
-    forwardAction(hit.source, hit.action, hit.value, hit.controllerId);
+    const { controllerId, action, value } = hit.button;
+    const message: HareActionMessage = { __hareButtonAction: true, controllerId, action, value };
+    hit.source.postMessage(message, '*');
   };
 
   const listeners = new AbortController();
@@ -201,18 +156,11 @@ export function createCrossFramePointerBridge(
 
   return {
     destroy: () => {
-      if (publishInterval !== null) {
-        clearInterval(publishInterval);
-        publishInterval = null;
-      }
-      if (window.parent !== window && lastPublishedJson !== '[]') {
-        try {
-          window.parent.postMessage({ __hareHitmap: true, buttons: [] }, '*');
-        } catch {}
-      }
+      if (publishInterval !== null) clearInterval(publishInterval);
+      if (isChildFrame && lastPublishedJson !== '[]') publish([]);
+      lastPublishedJson = '[]';
       listeners.abort();
       childHitmaps.clear();
-      lastPublishedJson = '[]';
     },
   };
 }

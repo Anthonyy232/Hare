@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import type { KeyBinding, KeyAction } from "../lib/types";
+  import { clampBindingValue } from "../lib/settings";
 
   interface Props {
     bindings: KeyBinding[];
@@ -43,11 +44,8 @@
     editingIndex = index;
   }
 
-  function clearBinding(index: number) {
-    editingIndex = null;
-    const newBindings = [...bindings];
-    newBindings[index] = { ...newBindings[index], key: "" };
-    onBindingsChange(newBindings);
+  function patch(index: number, change: Partial<KeyBinding>) {
+    onBindingsChange(bindings.map((binding, i) => i === index ? { ...binding, ...change } : binding));
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -74,7 +72,8 @@
     }
 
     if (event.code === "Backspace" || event.code === "Delete") {
-      clearBinding(editingIndex);
+      patch(editingIndex, { key: "" });
+      editingIndex = null;
       return;
     }
 
@@ -94,49 +93,24 @@
       return;
     }
 
-    const newBindings = [...bindings];
-    newBindings[editingIndex] = {
-      ...newBindings[editingIndex],
-      key: event.code,
-    };
-
-    onBindingsChange(newBindings);
+    patch(editingIndex, { key: event.code });
     editingIndex = null;
-  }
-
-  function updateValue(index: number, value: number) {
-    if (!Number.isFinite(value)) return;
-    const action = bindings[index].action;
-    const max = action === 'rewind' || action === 'advance' ? 86400 : 16;
-    const validValue = Math.min(max, Math.max(action === 'reset' ? 0.07 : 0.01, value));
-    if (validValue === bindings[index].value) return;
-    const newBindings = [...bindings];
-    newBindings[index] = { ...newBindings[index], value: validValue };
-    onBindingsChange(newBindings);
   }
 
   function handleBlur(index: number, event: Event) {
     const target = event.target as HTMLInputElement;
-    updateValue(index, target.valueAsNumber);
-    target.value = bindings[index].value.toString();
+    const { action, value } = bindings[index];
+    const next = Number.isFinite(target.valueAsNumber) ? clampBindingValue(action, target.valueAsNumber) : value;
+    if (next !== value) patch(index, { value: next });
+    target.value = String(next);
     onDraftChange?.(false);
   }
 
   function toggleForce(index: number) {
-    const newBindings = [...bindings];
-    newBindings[index] = {
-      ...newBindings[index],
-      force: !newBindings[index].force,
-    };
-    onBindingsChange(newBindings);
+    patch(index, { force: !bindings[index].force });
   }
 
-  onDestroy(() => {
-    if (errorTimeout) {
-      clearTimeout(errorTimeout);
-      errorTimeout = null;
-    }
-  });
+  onDestroy(() => { if (errorTimeout) clearTimeout(errorTimeout); });
 </script>
 
 <svelte:window onkeydowncapture={handleKeyDown} />
@@ -168,7 +142,7 @@
             </button>
             <button type="button" class="key-clear" title="Clear shortcut"
               aria-label={`Clear shortcut for ${actionLabels[binding.action]}`}
-              disabled={!binding.key} onclick={() => clearBinding(index)}>×</button>
+              disabled={!binding.key} onclick={() => { editingIndex = null; patch(index, { key: '' }); }}>×</button>
           </div>
         </div>
         <div class="shortcut-field value-field">
@@ -177,8 +151,8 @@
             <div class="value-control">
               <input id={`binding-value-${index}`} type="number" class="value-input"
                 value={binding.value} step="0.01"
-                min={binding.action === 'reset' ? 0.07 : 0.01}
-                max={binding.action === 'rewind' || binding.action === 'advance' ? 86400 : 16}
+                min={clampBindingValue(binding.action, 0)}
+                max={clampBindingValue(binding.action, Infinity)}
                 aria-label={`${actionLabels[binding.action]} ${actionValueLabels[binding.action]}`}
                 onkeydown={(event) => {
                   if (event.key !== 'Enter' && event.key !== 'Escape') return;
@@ -204,7 +178,7 @@
 
 <style>
   .keybind-editor { width: 100%; }
-  .intro, .help-text { font-size: 12px; color: #aaa; line-height: 1.6; }
+  .intro, .help-text { font-size: 12px; color: var(--color-text-muted); line-height: 1.6; }
   .intro { margin: 0 0 8px; }
   .help-text { margin: 16px 0 0; padding: 12px; border-radius: 6px; background: #ffffff05; }
   .help-text strong { color: #d8e0eb; font-weight: 600; }
@@ -213,21 +187,21 @@
   .shortcut-row:last-child { border-bottom: 0; padding-bottom: 0; }
   h3 { margin: 0; font-size: 13px; font-weight: 600; color: #edf1f7; }
   .shortcut-field { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
-  .field-label { font-size: 11px; color: #aaa; }
+  .field-label { font-size: 11px; color: var(--color-text-muted); }
   .key-cell, .value-control { display: flex; align-items: center; gap: 6px; }
   .key-cell { width: 100%; max-width: 150px; }
   .key-btn, .key-clear, .value-input { border: 1px solid #ffffff30; border-radius: 6px; background: #ffffff05; color: #edf1f7; }
   .key-btn { flex: 1; min-width: 0; min-height: 36px; padding: 7px 10px; font: 600 12px ui-monospace, 'SF Mono', Monaco, monospace; cursor: pointer; overflow-wrap: anywhere; }
   .key-btn:hover { background: #ffffff0d; border-color: #93c5fd80; }
-  .key-btn.listening { color: #152236; border-color: #93c5fd; background: #93c5fd; }
-  .key-btn.unbound { color: #aaa; border-style: dashed; }
-  .key-clear { width: 30px; height: 36px; flex-shrink: 0; cursor: pointer; font-size: 18px; color: #aaa; }
-  .key-clear:hover:not(:disabled) { color: #fca5a5; border-color: #fca5a5; background: #ef444410; }
+  .key-btn.listening { color: #152236; border-color: var(--color-focus); background: var(--color-focus); }
+  .key-btn.unbound { color: var(--color-text-muted); border-style: dashed; }
+  .key-clear { width: 30px; height: 36px; flex-shrink: 0; cursor: pointer; font-size: 18px; color: var(--color-text-muted); }
+  .key-clear:hover:not(:disabled) { color: var(--color-danger-text); border-color: var(--color-danger-text); background: #ef444410; }
   .value-input { width: 82px; height: 36px; padding: 6px 8px; font: 600 13px ui-monospace, 'SF Mono', Monaco, monospace; font-variant-numeric: tabular-nums; }
-  .unit { font-size: 12px; color: #aaa; }
+  .unit { font-size: 12px; color: var(--color-text-muted); }
   .override-label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #b8c1cf; cursor: pointer; line-height: 1.4; }
-  input[type="checkbox"] { width: 18px; height: 18px; margin: 0; flex-shrink: 0; accent-color: #93c5fd; cursor: pointer; }
-  .binding-error { padding: 10px 12px; margin: 8px 0; background: #ef444410; border: 1px solid #fca5a54d; border-radius: 6px; color: #fca5a5; font-size: 12px; line-height: 1.5; }
+  input[type="checkbox"] { width: 18px; height: 18px; margin: 0; flex-shrink: 0; accent-color: var(--color-focus); cursor: pointer; }
+  .binding-error { padding: 10px 12px; margin: 8px 0; background: #ef444410; border: 1px solid #fca5a54d; border-radius: 6px; color: var(--color-danger-text); font-size: 12px; line-height: 1.5; }
   @media (max-width: 800px) {
     .shortcut-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 20px; padding: 18px 0; }
     h3, .override-label { grid-column: 1 / -1; }

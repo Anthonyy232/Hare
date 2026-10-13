@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { SyncCandidate, SyncStatusResponse } from "../lib/sync-types";
+  import type { HareMessage } from "../lib/types";
   import { SYNC, NUDGE_STEPS } from "../lib/sync-types";
+  import { sendToBackground } from "../lib/messaging";
 
   let { onExpandedChange }: { onExpandedChange?: (expanded: boolean) => void } = $props();
 
@@ -26,7 +28,7 @@
 
   async function refreshSyncStatus() {
     try {
-      syncStatus = await browser.runtime.sendMessage({ type: "GET_SYNC_STATUS" }) as SyncStatusResponse;
+      syncStatus = await sendToBackground({ type: "GET_SYNC_STATUS" });
     } catch {
       // A failed poll does not mean the session ended; keep Stop available.
     }
@@ -36,8 +38,7 @@
     loading = true;
     error = null;
     try {
-      candidates = await browser.runtime.sendMessage({ type: "GET_SYNC_CANDIDATES" }) as SyncCandidate[];
-      if (!Array.isArray(candidates)) throw new Error('Invalid tab list');
+      candidates = await sendToBackground({ type: "GET_SYNC_CANDIDATES" });
       selectedTabs = selectedTabs.filter(id => candidates.some(candidate => candidate.tabId === id));
       if (candidates.length < 2) {
         error = "Need at least 2 tabs with videos";
@@ -65,11 +66,11 @@
     error = null;
     try {
       await statusRequest;
-      const result = await browser.runtime.sendMessage({
+      const result = await sendToBackground({
         type: "START_SYNC",
         payload: { tabIdA: selectedTabs[0], tabIdB: selectedTabs[1] },
       });
-      if (!result?.success) throw new Error(result?.error || 'Failed to start sync');
+      if (!result.success) throw new Error(result.error || 'Failed to start sync');
       showSetup = false;
       selectedTabs = [];
       await loadSyncStatus();
@@ -81,15 +82,15 @@
     }
   }
 
-  async function changeSync(type: 'STOP_SYNC' | 'NUDGE_OFFSET' | 'SET_NUDGE_STEP', payload?: number) {
+  async function changeSync(message: Extract<HareMessage, { type: 'STOP_SYNC' | 'NUDGE_OFFSET' | 'SET_NUDGE_STEP' }>) {
     if (loading) return;
     loading = true;
     error = null;
     try {
       await statusRequest;
-      const result = await browser.runtime.sendMessage({ type, payload });
-      if (!result?.success) throw new Error(result?.error || 'Could not update sync. Try again.');
-      if (type === 'STOP_SYNC') syncStatus = null;
+      const result = await sendToBackground(message);
+      if (!result.success) throw new Error(result.error || 'Could not update sync. Try again.');
+      if (message.type === 'STOP_SYNC') syncStatus = null;
       await loadSyncStatus();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not update sync. Try again.';
@@ -98,7 +99,7 @@
 
   async function changeNudgeStep(event: Event) {
     const select = event.currentTarget as HTMLSelectElement;
-    await changeSync('SET_NUDGE_STEP', Number(select.value));
+    await changeSync({ type: 'SET_NUDGE_STEP', payload: Number(select.value) });
     select.value = String(nudgeStep);
   }
 
@@ -138,7 +139,7 @@
     <div class="sync-active">
       <div class="sync-header">
         <div class="sync-badge">SYNC</div>
-        <button class="stop-btn" onclick={() => changeSync('STOP_SYNC')} disabled={loading}>Stop</button>
+        <button class="stop-btn" onclick={() => changeSync({ type: 'STOP_SYNC' })} disabled={loading}>Stop</button>
       </div>
 
       <div class="sync-tabs">
@@ -168,7 +169,7 @@
           <button
             class="nudge-btn"
             disabled={loading}
-            onclick={() => changeSync('NUDGE_OFFSET', -nudgeStep)}
+            onclick={() => changeSync({ type: 'NUDGE_OFFSET', payload: -nudgeStep })}
             title="Shift B earlier by {formatStep(nudgeStep)}"
             aria-label="Shift B earlier"
           >◀</button>
@@ -186,7 +187,7 @@
           <button
             class="nudge-btn"
             disabled={loading}
-            onclick={() => changeSync('NUDGE_OFFSET', nudgeStep)}
+            onclick={() => changeSync({ type: 'NUDGE_OFFSET', payload: nudgeStep })}
             title="Shift B later by {formatStep(nudgeStep)}"
             aria-label="Shift B later"
           >▶</button>
@@ -264,8 +265,8 @@
   .swap-btn { background: #a78bfa14; border: 1px solid #a78bfa4d; color: #ddd6fe; padding: 6px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; }
   .selection-marker { display: grid; place-items: center; width: 24px; height: 24px; margin-right: 8px; border: 1px solid #ffffff30; border-radius: 5px; flex-shrink: 0; color: #bbb; font-weight: 700; }
   .selected .selection-marker { color: #1f1735; background: #c4b5fd; border-color: #c4b5fd; }
-  .sync-description { font-size: 11px; color: #aaa; text-align: center; margin: 7px 0 0; }
-  .setup-hint { font-size: 12px; color: #aaa; line-height: 1.5; margin: 0; }
+  .sync-description { font-size: 11px; color: var(--color-text-muted); text-align: center; margin: 7px 0 0; }
+  .setup-hint { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; margin: 0; }
   .sync-section {
     padding: 0 20px 18px;
     position: relative;
@@ -278,7 +279,7 @@
     border: 1px solid rgba(139, 92, 246, 0.3);
     border-radius: 6px;
     background: rgba(139, 92, 246, 0.1);
-    color: #f0f0f0;
+    color: var(--color-text);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
@@ -330,7 +331,7 @@
   .stop-btn {
     font-size: 11px;
     font-weight: 600;
-    color: #ef4444;
+    color: var(--color-danger);
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.3);
     border-radius: 3px;
@@ -362,7 +363,7 @@
   .tab-label {
     font-size: 10px;
     font-weight: 700;
-    color: #60a5fa;
+    color: var(--color-accent);
     background: rgba(96, 165, 250, 0.15);
     padding: 1px 5px;
     border-radius: 2px;
@@ -373,7 +374,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: #ccc;
+    color: var(--color-text-secondary);
   }
 
   .offset-control {
@@ -387,19 +388,19 @@
     display: flex;
     align-items: baseline;
     gap: 6px;
-    color: #ccc;
+    color: var(--color-text-secondary);
   }
 
   .offset-prefix,
   .offset-direction {
-    color: #999;
+    color: var(--color-text-muted);
     font-size: 11px;
   }
 
   .offset-magnitude {
     font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
     font-variant-numeric: tabular-nums;
-    color: #f0f0f0;
+    color: var(--color-text);
     font-weight: 600;
     font-size: 13px;
   }
@@ -416,7 +417,7 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 3px;
     background: rgba(255, 255, 255, 0.05);
-    color: #f0f0f0;
+    color: var(--color-text);
     font-size: 12px;
     cursor: pointer;
     display: flex;
@@ -441,7 +442,7 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 3px;
     background: rgba(255, 255, 255, 0.05);
-    color: #ccc;
+    color: var(--color-text-secondary);
     cursor: pointer;
     text-align: center;
     text-align-last: center;
@@ -459,12 +460,12 @@
     justify-content: space-between;
     font-size: 12px;
     font-weight: 600;
-    color: #ccc;
+    color: var(--color-text-secondary);
   }
 
   .cancel-btn {
     font-size: 11px;
-    color: #999;
+    color: var(--color-text-muted);
     background: none;
     border: none;
     cursor: pointer;
@@ -472,19 +473,19 @@
   }
 
   .cancel-btn:hover {
-    color: #f0f0f0;
+    color: var(--color-text);
   }
 
   .sync-loading,
   .sync-error {
     text-align: center;
     font-size: 12px;
-    color: #999;
+    color: var(--color-text-muted);
     padding: 12px 0;
   }
 
   .sync-error {
-    color: #ef4444;
+    color: var(--color-danger);
   }
 
   .candidate-list {
@@ -503,7 +504,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.03);
-    color: #ccc;
+    color: var(--color-text-secondary);
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
     text-align: left;
@@ -538,12 +539,12 @@
 
   .candidate-domain {
     font-size: 10px;
-    color: #aaa;
+    color: var(--color-text-muted);
   }
 
   .candidate-videos {
     font-size: 10px;
-    color: #999;
+    color: var(--color-text-muted);
     flex-shrink: 0;
     margin-left: 8px;
   }
@@ -554,7 +555,7 @@
     border: 1px solid rgba(139, 92, 246, 0.4);
     border-radius: 4px;
     background: rgba(139, 92, 246, 0.2);
-    color: #f0f0f0;
+    color: var(--color-text);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
