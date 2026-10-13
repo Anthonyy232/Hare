@@ -3,7 +3,6 @@ export const SPEED = {
   MAX: 16,
   DEFAULT: 1.0,
   STEP: 0.1,
-  /** Tolerance for speed comparison to handle floating-point precision issues */
   TOLERANCE: 0.01,
 } as const;
 

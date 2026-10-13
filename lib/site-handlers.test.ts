@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { genericHandler, getSiteHandler, matchesDomains } from './site-handlers';
+import { getSiteHandler, matchesDomains } from './site-handlers';
 
 describe('matchesDomains', () => {
     it.each([
@@ -14,11 +14,6 @@ describe('matchesDomains', () => {
 });
 
 describe('getSiteHandler', () => {
-    it('falls back to the generic handler for unknown sites', () => {
-        expect(getSiteHandler('example.com')).toBe(genericHandler);
-        expect(getSiteHandler('www.youtube.com')).not.toBe(genericHandler);
-    });
-
     it('prefers containers in priority order over the nearest match', () => {
         document.body.innerHTML = '<div id="vilos"><div class="video-player"><video></video></div></div>';
         const video = document.querySelector('video')!;

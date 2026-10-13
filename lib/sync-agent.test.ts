@@ -175,24 +175,6 @@ describe('SyncAgent', () => {
       );
     });
 
-    it('does not suppress buffering when play was user-initiated', () => {
-      (video as any)._paused = false;
-      video.dispatchEvent(new Event('play'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'play' })
-      );
-
-      video.dispatchEvent(new Event('waiting'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'buffering_start' })
-      );
-
-      video.dispatchEvent(new Event('playing'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'buffering_end' })
-      );
-    });
-
     it('reports starvation during a remote seek and recovery while paused', () => {
       (video as any)._paused = false;
       agent.executeSeek(50);

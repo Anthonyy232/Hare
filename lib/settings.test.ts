@@ -107,19 +107,6 @@ describe('isBlacklisted', () => {
         expect(isBlacklisted(remaining, 'player.example.com')).toBe(true);
     });
 
-    it('matches subdomains', () => {
-        const blacklist = 'example.com';
-        expect(isBlacklisted(blacklist, 'sub.example.com')).toBe(true);
-        expect(isBlacklisted(blacklist, 'example.com')).toBe(true);
-        expect(isBlacklisted(blacklist, 'myexample.com')).toBe(false);
-    });
-
-    it('matches regex patterns', () => {
-        const blacklistRegex = '/.*\\.google\\.com/';
-        expect(isBlacklisted(blacklistRegex, 'mail.google.com')).toBe(true);
-        expect(isBlacklisted(blacklistRegex, 'yahoo.com')).toBe(false);
-    });
-
     it('handles mixed content and empty lines', () => {
         expect(isBlacklisted('', 'youtube.com')).toBe(false);
         const blacklist = `

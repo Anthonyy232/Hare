@@ -118,7 +118,6 @@ export class VideoController {
 
     const parent = this.wrapper.parentElement;
 
-    // If wrapper has no parent but is connected, it's in a document fragment - reinsert
     if (!parent) {
       this.insertController();
       return;
@@ -146,9 +145,8 @@ export class VideoController {
 
     this.shadow = this.wrapper.attachShadow({ mode: 'open' });
 
-    // Firefox content scripts throw "Accessing from Xray wrapper" when setting adoptedStyleSheets
+    // Firefox content scripts throw "Accessing from Xray wrapper" on adoptedStyleSheets; fall back to <style>.
     // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1411641
-    // Workaround: Fall back to <style> tag injection
     try {
       this.shadow.adoptedStyleSheets = [getStyleSheet()];
     } catch (error) {
@@ -546,7 +544,7 @@ export class VideoController {
 
     const now = Date.now();
     if (now - this.lastEnforcementTime < VideoController.ENFORCEMENT_DEBOUNCE_MS) {
-      return; // Debounce to prevent loops
+      return;
     }
 
     const tolerance = SPEED.TOLERANCE;
@@ -556,7 +554,6 @@ export class VideoController {
         safeMedia.setPlaybackRate(this.media, this.targetSpeed);
       } catch (error) {
         logger.debug('Speed enforcement failed (may be DRM-protected):', error);
-        // Don't disable enforcement - retry on next ratechange
       }
     }
   }

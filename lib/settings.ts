@@ -148,10 +148,7 @@ export function removeExactSiteExclusions(blacklist: string, hostname: string): 
   }).join('\n');
 }
 
-/**
- * Compiles the blacklist string into an executable array of regex/domain patterns.
- * Results are cached to avoid expensive string parsing during frequent media detection checks.
- */
+/** Cached because media detection checks the blacklist frequently. */
 function compileBlacklistPatterns(blacklist: string): CompiledPattern[] {
   if (blacklist === cachedBlacklist) return cachedPatterns;
 
