@@ -1,5 +1,5 @@
 import type { VideoController } from './controller';
-import type { KeyAction, KeyBinding } from './types';
+import { isKeyAction, type KeyAction } from './types';
 import { executeAction } from './keybinds';
 import { CROSS_FRAME } from './constants';
 
@@ -28,10 +28,6 @@ type HareActionMessage = {
   value: number;
 };
 
-const VALID_ACTIONS: ReadonlySet<KeyAction> = new Set([
-  'slower', 'faster', 'rewind', 'advance', 'reset', 'display',
-]);
-
 function isHareHitmapMessage(data: unknown): data is HareHitmapMessage {
   if (typeof data !== 'object' || data === null) return false;
   const d = data as Record<string, unknown>;
@@ -41,8 +37,7 @@ function isHareHitmapMessage(data: unknown): data is HareHitmapMessage {
     const btn = b as Record<string, unknown>;
     if (
       typeof btn.controllerId !== 'string' ||
-      typeof btn.action !== 'string' ||
-      !VALID_ACTIONS.has(btn.action as KeyAction) ||
+      !isKeyAction(btn.action) ||
       typeof btn.value !== 'number' ||
       typeof btn.x !== 'number' ||
       typeof btn.y !== 'number' ||
@@ -61,8 +56,7 @@ function isHareActionMessage(data: unknown): data is HareActionMessage {
   return (
     d.__hareButtonAction === true &&
     typeof d.controllerId === 'string' &&
-    typeof d.action === 'string' &&
-    VALID_ACTIONS.has(d.action as KeyAction) &&
+    isKeyAction(d.action) &&
     typeof d.value === 'number' && Number.isFinite(d.value) && d.value >= 0
   );
 }
@@ -138,8 +132,7 @@ export function createCrossFramePointerBridge(
       if (window.parent === window || event.source !== window.parent) return;
       const controllers = getControllers().filter(controller => controller.id === event.data.controllerId);
       if (controllers.length === 0) return;
-      const synthetic: KeyBinding = { action: event.data.action, value: event.data.value, key: '', force: false };
-      executeAction(event.data.action, synthetic, controllers);
+      executeAction(event.data.action, event.data.value, controllers);
     }
   };
 

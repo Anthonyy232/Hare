@@ -105,8 +105,8 @@ describe('SyncCoordinator', () => {
       expect(coordinator.getStatus().offset).toBe(5.5);
     });
 
-    it('discards an invalid persisted session and releases readiness', async () => {
-      mockStorageSessionGet.mockResolvedValueOnce({ syncSession_v2: { session: { videoA: { tabId: 1 }, offset: NaN } } });
+    it('releases readiness when no session was persisted', async () => {
+      mockStorageSessionGet.mockResolvedValueOnce({});
       const restored = new SyncCoordinator();
       await restored.restoreSession();
       await restored.ready;

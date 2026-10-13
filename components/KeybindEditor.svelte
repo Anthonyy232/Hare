@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import type { KeyBinding, KeyAction } from "../lib/types";
-  import { MESSAGES } from "../lib/messages";
 
   interface Props {
     bindings: KeyBinding[];
@@ -85,7 +84,7 @@
     );
 
     if (isDuplicate) {
-      errorMessage = MESSAGES.DUPLICATE_KEYBIND;
+      errorMessage = 'This key is already assigned to another action.';
       if (errorTimeout) clearTimeout(errorTimeout);
       errorTimeout = setTimeout(() => {
         errorMessage = null;
