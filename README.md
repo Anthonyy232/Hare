@@ -112,9 +112,10 @@ Hare/
 │   ├── controller.ts   # Video controller class
 │   ├── settings.ts     # Settings management
 │   ├── keybinds.ts     # Keyboard event handling
-│   ├── tab-media.ts    # Shared frame discovery, messaging, and status aggregation
+│   ├── messaging.ts    # Typed messages, frame discovery, and status summaries
 │   ├── sync-startup.ts # Pair activation, cancellation, and rollback
 │   ├── sync-coordinator.ts # Session state and drift correction
+│   ├── sync-endpoint.ts # A frame's side of a sync pair, plus the worker keepalive
 │   ├── sync-agent.ts   # Per-media command execution and echo suppression
 │   └── site-handlers.ts # Per-site player containers and ignore rules
 ├── assets/             # Icons and CSS

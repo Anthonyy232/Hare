@@ -1,4 +1,4 @@
-import type { DriftCorrectPayload, SyncCommandPayload, SyncEventPayload } from './sync-types';
+import type { DriftCorrectPayload, SyncCandidate, SyncCommandPayload, SyncEventPayload, SyncPositionResponse, SyncStatusResponse } from './sync-types';
 
 export const KEY_ACTIONS = ['slower', 'faster', 'rewind', 'advance', 'reset', 'display'] as const;
 export type KeyAction = typeof KEY_ACTIONS[number];
@@ -51,14 +51,33 @@ export type HareMessage =
   | { type: 'SET_NUDGE_STEP'; payload: number }
   | { type: 'GET_SYNC_STATUS' };
 
-export interface StatusResponse {
-  hasVideos: boolean;
-  currentSpeed: number;
-  videoCount: number;
-  mixedSpeeds?: boolean;
-  enabled?: boolean;
-  excluded?: boolean;
+export type Ack = { success: boolean; error?: string };
+
+/** Reply for each message type. Any handler may also reply `{ success: false, error }` if it throws. */
+export interface Replies {
+  GET_PAGE_CONTEXT: { hostname: string };
+  GET_STATUS: { speeds: number[] };
+  SET_SPEED: Ack;
+  RESET_SPEED: Ack;
+  TOGGLE_DISPLAY: Ack;
+  SYNC_ACTIVATE: (SyncPositionResponse & { success: true }) | { success: false; error: string };
+  SYNC_DEACTIVATE: Ack;
+  SYNC_EVENT: Ack;
+  SYNC_PAUSE: Ack;
+  SYNC_PLAY: Ack;
+  SYNC_SEEK: Ack;
+  SYNC_RATE: Ack;
+  SYNC_DRIFT_CORRECT: Ack;
+  SYNC_GET_POSITION: SyncPositionResponse | null;
+  GET_SYNC_CANDIDATES: SyncCandidate[];
+  START_SYNC: Ack;
+  STOP_SYNC: Ack;
+  NUDGE_OFFSET: Ack;
+  SET_NUDGE_STEP: Ack;
+  GET_SYNC_STATUS: SyncStatusResponse;
 }
+
+export type Reply<M extends HareMessage> = Replies[M['type']];
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,

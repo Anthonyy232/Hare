@@ -7,59 +7,42 @@ const settingsStorage = storage.defineItem<Settings>(`sync:${STORAGE_KEY}`, {
   defaultValue: DEFAULT_SETTINGS,
 });
 
-function cloneBinding(binding: KeyBinding): KeyBinding {
-  return { ...binding };
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+/** Each action's valid value: a target speed, a speed step, or seek seconds. */
+export function clampBindingValue(action: KeyAction, value: number): number {
+  switch (action) {
+    case 'reset': return clamp(value, SPEED.MIN, SPEED.MAX);
+    case 'slower':
+    case 'faster': return clamp(value, 0.01, SPEED.MAX);
+    case 'rewind':
+    case 'advance': return clamp(value, 0.01, 86400);
+    case 'display': return value;
+  }
 }
 
 export function validateKeyBindings(value: unknown): KeyBinding[] {
-  if (!Array.isArray(value)) {
-    logger.warn('Invalid keyBindings - using defaults');
-    return DEFAULT_SETTINGS.keyBindings.map(cloneBinding);
-  }
-
-  const validBindings = new Map<KeyAction, KeyBinding>();
-
-  for (const binding of value) {
-    const candidate = binding as Partial<KeyBinding>;
-    if (
-      binding &&
-      typeof binding === 'object' &&
-      isKeyAction(candidate.action) &&
-      typeof candidate.key === 'string' &&
-      typeof candidate.value === 'number' &&
-      Number.isFinite(candidate.value) &&
-      candidate.value >= 0 &&
-      typeof candidate.force === 'boolean'
-    ) {
-      validBindings.set(candidate.action, {
-        action: candidate.action,
-        key: candidate.key,
-        value: candidate.value,
-        force: candidate.force,
-      });
+  const stored = new Map<KeyAction, KeyBinding>();
+  for (const candidate of Array.isArray(value) ? value as Array<Partial<KeyBinding> | null> : []) {
+    if (candidate && isKeyAction(candidate.action) && typeof candidate.key === 'string'
+      && Number.isFinite(candidate.value) && candidate.value! >= 0 && typeof candidate.force === 'boolean') {
+      stored.set(candidate.action, candidate as KeyBinding);
     }
   }
 
   const usedKeys = new Set<string>();
-  return DEFAULT_SETTINGS.keyBindings.map((defaultBinding) => {
-    const binding = cloneBinding(validBindings.get(defaultBinding.action) ?? defaultBinding);
+  return DEFAULT_SETTINGS.keyBindings.map(defaultBinding => {
+    const { action, key, value, force } = stored.get(defaultBinding.action) ?? defaultBinding;
     // A duplicate shortcut can only execute one action. Keep the first assignment.
-    if (usedKeys.has(binding.key)) binding.key = '';
-    if (binding.key) usedKeys.add(binding.key);
-    if (binding.action === 'reset') binding.value = clampNumber(binding.value, SPEED.MIN, SPEED.MAX, 1);
-    if (binding.action === 'faster' || binding.action === 'slower') {
-      binding.value = clampNumber(binding.value, 0.01, SPEED.MAX, defaultBinding.value);
-    }
-    if (binding.action === 'rewind' || binding.action === 'advance') {
-      binding.value = clampNumber(binding.value, 0.01, 86400, defaultBinding.value);
-    }
-    return binding;
+    const uniqueKey = usedKeys.has(key) ? '' : key;
+    if (uniqueKey) usedKeys.add(uniqueKey);
+    return { action, key: uniqueKey, value: clampBindingValue(action, value), force };
   });
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value)
-    ? Math.max(min, Math.min(max, value)) : fallback;
+    ? clamp(value, min, max) : fallback;
 }
 
 /** Use the same boundary for storage reads, writes, and live updates. Always returns a fresh object. */

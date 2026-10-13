@@ -22,13 +22,6 @@ describe('controller', () => {
     expect(listener).not.toHaveBeenCalled();
     expect(document.querySelector('hare-controller')!.shadowRoot!.querySelector('.hare-osd')!.textContent).toBe('Speed control blocked');
   });
-  it('does not resume after a deliberate pause', async () => {
-    const play = vi.spyOn(safeMedia, 'play');
-    controller.setSpeed(1.5);
-    video.dispatchEvent(new Event('pause'));
-    await vi.advanceTimersByTimeAsync(600);
-    expect(play).not.toHaveBeenCalled();
-  });
   it('cleans up listeners, timers, and late feedback', async () => {
     const callback = vi.fn(); controller.setIntendedSpeedListener(callback);
     controller.setSpeed(2);

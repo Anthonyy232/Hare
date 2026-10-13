@@ -1,9 +1,20 @@
-:root { color-scheme: dark; }
+:root {
+  color-scheme: dark;
+  --color-surface: #1a1a1a;
+  --color-text: #f0f0f0;
+  --color-text-secondary: #ccc;
+  --color-text-muted: #aaa;
+  --color-accent: #60a5fa;
+  --color-accent-strong: #3b82f6;
+  --color-focus: #93c5fd;
+  --color-danger: #ef4444;
+  --color-danger-text: #fca5a5;
+}
 *, *::before, *::after { box-sizing: border-box; }
 button, input, select, textarea { font: inherit; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-  outline: 2px solid #93c5fd !important;
+  outline: 2px solid var(--color-focus) !important;
   outline-offset: 3px;
 }
 @media (prefers-reduced-motion: reduce) {

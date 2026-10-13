@@ -7,38 +7,6 @@ function isInputElement(element: Element): boolean {
     || !!element.closest('[contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="searchbox"], [role="combobox"]');
 }
 
-export function executeAction(
-  action: KeyAction,
-  value: number,
-  controllers: VideoController[]
-): void {
-  for (const controller of controllers) {
-    switch (action) {
-      case 'slower':
-        controller.adjustSpeed(-value);
-        controller.showOSD(`${controller.speed.toFixed(2)}x`);
-        break;
-      case 'faster':
-        controller.adjustSpeed(value);
-        controller.showOSD(`${controller.speed.toFixed(2)}x`);
-        break;
-      case 'rewind':
-        controller.seek(-value);
-        break;
-      case 'advance':
-        controller.seek(value);
-        break;
-      case 'reset':
-        controller.setSpeed(value);
-        controller.showOSD(`${controller.speed.toFixed(2)}x`);
-        break;
-      case 'display':
-        controller.toggleVisibility();
-        break;
-    }
-  }
-}
-
 export type KeybindHandler = {
   destroy: () => void;
 };
@@ -86,7 +54,7 @@ export function createKeybindHandler(
 
     const controllers = getControllers();
     if (controllers.length > 0) {
-      executeAction(binding.action, binding.value, controllers);
+      for (const controller of controllers) controller.perform(binding.action, binding.value);
     } else if (window.frames.length > 0) {
       forwardToChildFrames(binding.action, binding.value);
     } else {
@@ -109,7 +77,7 @@ export function createKeybindHandler(
     const { action, value } = event.data;
     const controllers = getControllers();
     if (controllers.length > 0) {
-      executeAction(action, value, controllers);
+      for (const controller of controllers) controller.perform(action, value);
     } else if (window.frames.length > 0) {
       forwardToChildFrames(action, value);
     }

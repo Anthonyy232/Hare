@@ -2,12 +2,12 @@
   import { onMount, onDestroy } from "svelte";
   import SpeedControl from "../../components/SpeedControl.svelte";
   import SyncMode from "../../components/SyncMode.svelte";
-  import type { StatusResponse, HareMessage } from "../../lib/types";
+  import type { HareMessage } from "../../lib/types";
   import { SPEED, UI } from "../../lib/constants";
   import { loadSettings, saveSettings, isBlacklisted, removeExactSiteExclusions } from "../../lib/settings";
-  import { getTabMedia, aggregateStatus, sendToFrame } from "../../lib/tab-media";
+  import { getTabMedia, summarize, sendToTab, type MediaSummary } from "../../lib/messaging";
 
-  let status: StatusResponse | null = $state(null);
+  let status: MediaSummary | null = $state(null);
   let loading = $state(true);
   let busy = $state(false);
   let syncExpanded = $state(false);
@@ -70,8 +70,8 @@
       }
       if (url.hostname && /^https?:$/.test(url.protocol)) nextSiteAction = 'exclude';
       const frames = await getTabMedia(tabId);
-      const result = aggregateStatus(frames.map(frame => frame.status));
-      if (!result.hasVideos) {
+      const result = summarize(frames.flatMap(frame => frame.speeds));
+      if (!result.videoCount) {
         nextHint = frames.length ? 'Start a video, or enable audio control in Settings.' : 'Reload this tab to connect Hare. For local files, enable file access in extension details.';
         throw new Error('No media detected');
       }
@@ -87,14 +87,14 @@
     }
   }
 
-  async function command(message: HareMessage, requestedSpeed?: number) {
+  async function command(message: Extract<HareMessage, { type: "SET_SPEED" | "RESET_SPEED" | "TOGGLE_DISPLAY" }>, requestedSpeed?: number) {
     if (busy || tabId == null || !status) return;
     busy = true;
     try {
       await statusRequest;
-      const frames = (await getTabMedia(tabId)).filter(frame => frame.status.videoCount > 0);
-      const results = await Promise.allSettled(frames.map(frame => sendToFrame(tabId!, frame.frameId, message)));
-      if (!results.length || results.some(result => result.status === 'rejected' || !(result.value as { success?: boolean })?.success)) {
+      const frames = (await getTabMedia(tabId)).filter(frame => frame.speeds.length > 0);
+      const results = await Promise.allSettled(frames.map(frame => sendToTab(tabId!, message, frame.frameId)));
+      if (!results.length || results.some(result => result.status === "rejected" || !result.value.success)) {
         showToast('Some media could not be updated. Reload the tab and try again.');
       }
       await loadStatus();
@@ -261,7 +261,7 @@
   :global(body) {
     margin: 0;
     padding: 0;
-    background: #1a1a1a;
+    background: var(--color-surface);
     overflow: hidden;
   }
 
@@ -275,8 +275,8 @@
       BlinkMacSystemFont,
       "Segoe UI",
       sans-serif;
-    background: linear-gradient(165deg, #1e1e1e 0%, #1a1a1a 100%);
-    color: #f0f0f0;
+    background: linear-gradient(165deg, #1e1e1e 0%, var(--color-surface) 100%);
+    color: var(--color-text);
     position: relative;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
@@ -301,7 +301,7 @@
 
   .accent-line {
     height: 2px;
-    background: linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd);
+    background: linear-gradient(90deg, var(--color-accent-strong), var(--color-accent), var(--color-focus));
     position: relative;
     z-index: 1;
   }
@@ -332,7 +332,7 @@
     cursor: pointer;
   }
 
-  .settings-link:hover { color: #f0f0f0; background: #ffffff0d; }
+  .settings-link:hover { color: var(--color-text); background: #ffffff0d; }
   .tab-context { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
   .site-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b9c5d6; font-size: 12px; }
 
@@ -341,7 +341,7 @@
     font-size: 20px;
     font-weight: 700;
     letter-spacing: -0.02em;
-    background: linear-gradient(135deg, #60a5fa, #93c5fd);
+    background: linear-gradient(135deg, var(--color-accent), var(--color-focus));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -352,7 +352,7 @@
     align-items: center;
     gap: 6px;
     font-size: 11px;
-    color: #999;
+    color: var(--color-text-muted);
     flex-shrink: 0;
     font-weight: 600;
   }
@@ -374,7 +374,7 @@
 
   .loading {
     text-align: center;
-    color: #999;
+    color: var(--color-text-muted);
     padding: 32px 20px;
     font-size: 14px;
   }
@@ -386,13 +386,13 @@
 
   .no-videos p {
     margin: 0 0 8px;
-    color: #999;
+    color: var(--color-text-muted);
     font-size: 14px;
   }
 
   .hint {
     font-size: 12px;
-    color: #aaa;
+    color: var(--color-text-muted);
     line-height: 1.6;
     margin: 0;
   }
@@ -406,7 +406,7 @@
 
   .speed-label {
     font-size: 11px;
-    color: #999;
+    color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     font-weight: 600;
@@ -417,14 +417,14 @@
     font-weight: 700;
     font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
     font-variant-numeric: tabular-nums;
-    color: #f0f0f0;
+    color: var(--color-text);
     line-height: 1;
     letter-spacing: -0.02em;
   }
 
   .speed-unit {
     font-size: 32px;
-    color: #999;
+    color: var(--color-text-muted);
     margin-left: 4px;
   }
 
@@ -432,7 +432,7 @@
   .preset { min-height: 36px; padding: 6px 0; border: 1px solid #ffffff24; border-radius: 6px; background: #ffffff06; color: #c8d0dc; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
   .preset span { margin-left: 1px; font-size: 11px; }
   .preset:hover:not(:disabled) { background: #60a5fa1a; border-color: #60a5fa80; }
-  .preset[aria-pressed="true"] { background: #93c5fd; border-color: #93c5fd; color: #152236; }
+  .preset[aria-pressed="true"] { background: var(--color-focus); border-color: var(--color-focus); color: #152236; }
   .input-hint { color: #a2abba; font-size: 11px; margin: -4px 0 2px; }
 
   .settings-btn {
@@ -441,7 +441,7 @@
     border: 1px solid rgba(59, 130, 246, 0.3);
     border-radius: 4px;
     background: rgba(59, 130, 246, 0.1);
-    color: #f0f0f0;
+    color: var(--color-text);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;

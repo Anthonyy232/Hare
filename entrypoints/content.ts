@@ -4,13 +4,12 @@ import { ObserverPool } from '../lib/observer-pool';
 import { createKeybindHandler, type KeybindHandler } from '../lib/keybinds';
 import { createCrossFramePointerBridge, type CrossFramePointerBridge } from '../lib/cross-frame-pointer';
 import { getSiteHandler } from '../lib/site-handlers';
-import type { SiteHandler, HareMessage } from '../lib/types';
-import { CLEANUP } from '../lib/constants';
-import type { Browser } from 'wxt/browser';
+import type { SiteHandler, HareMessage, Replies } from '../lib/types';
+import { CLEANUP, SPEED } from '../lib/constants';
 import { logger } from '../lib/logger';
-import { SyncAgent } from '../lib/sync-agent';
+import { SyncEndpoint } from '../lib/sync-endpoint';
 import { withTimeout } from '../lib/async-utils';
-import { SYNC, type SyncEventPayload } from '../lib/sync-types';
+import { sendToBackground } from '../lib/messaging';
 
 export default defineContentScript({
   matches: ['http://*/*', 'https://*/*', 'file:///*'],
@@ -20,214 +19,89 @@ export default defineContentScript({
 
   async main(ctx) {
     const controllers = new Map<HTMLMediaElement, VideoController>();
-    const mediaLifecycleListeners = new Map<HTMLMediaElement, AbortController>();
-    const deferredVideoListeners = new Map<HTMLMediaElement, AbortController>();
+    // Per-media listeners: retry checks while a video is ignored, then source-change tracking once controlled.
+    const mediaListeners = new Map<HTMLMediaElement, AbortController>();
+    const sync = new SyncEndpoint();
 
     let settings = await loadSettings();
-    const pageHostname: string = await withTimeout(browser.runtime.sendMessage({ type: 'GET_PAGE_CONTEXT' }))
-      .then(response => typeof response?.hostname === 'string' ? response.hostname : location.hostname)
-      .catch(() => location.hostname);
+    // Embedded frames also honor the top page's exclusion.
+    const pageHostname = await withTimeout(sendToBackground({ type: 'GET_PAGE_CONTEXT' }))
+      .then(reply => reply.hostname ?? location.hostname, () => location.hostname);
     const isExcluded = () => isBlacklisted(settings.blacklist, location.hostname) || isBlacklisted(settings.blacklist, pageHostname);
-
-    logger.debug('Content script initialized', {
-      enabled: settings.enabled,
-      hostname: location.hostname,
-      isBlacklisted: isBlacklisted(settings.blacklist, location.hostname),
-      isTopFrame: window === window.top
-    });
 
     let siteHandler: SiteHandler | null = null;
     let observerPool: ObserverPool | null = null;
     let keybindHandler: KeybindHandler | null = null;
     let pointerBridge: CrossFramePointerBridge | null = null;
-    let cleanupInterval: NodeJS.Timeout | null = null;
+    let cleanupInterval: ReturnType<typeof setInterval> | null = null;
     let isActive = false;
     let suspended = false;
-    let syncAgent: SyncAgent | null = null;
-    let syncKeepAlivePort: ReturnType<typeof browser.runtime.connect> | null = null;
-    let syncKeepAliveReconnectTimer: NodeJS.Timeout | null = null;
-    let syncKeepAlivePingTimer: NodeJS.Timeout | null = null;
 
-    // Ping and periodically rotate the port while sync is active.
-    const openSyncKeepAlive = (): void => {
-      if (syncKeepAlivePort) {
-        try { syncKeepAlivePort.disconnect(); } catch { /* already gone */ }
-        syncKeepAlivePort = null;
-      }
-      try {
-        syncKeepAlivePort = browser.runtime.connect({ name: 'sync-keepalive' });
-      } catch (error) {
-        logger.warn('sync-keepalive connect failed:', error);
-        return;
-      }
-      syncKeepAlivePort.onDisconnect.addListener(() => {
-        // Let scheduled rotation reconnect; immediate retries can loop during unload.
-        syncKeepAlivePort = null;
-      });
+    const releaseListeners = (media: HTMLMediaElement): void => {
+      mediaListeners.get(media)?.abort();
+      mediaListeners.delete(media);
     };
 
-    const startSyncKeepAlive = (): void => {
-      stopSyncKeepAlive();
-      openSyncKeepAlive();
-      syncKeepAliveReconnectTimer = setInterval(() => {
-        openSyncKeepAlive();
-      }, SYNC.KEEPALIVE_RECONNECT_MS);
-      syncKeepAlivePingTimer = setInterval(() => {
-        if (!syncKeepAlivePort) return;
-        try {
-          syncKeepAlivePort.postMessage({ type: 'PING' });
-        } catch {
-          // Port died between ticks; the next reconnect tick will recover.
-          syncKeepAlivePort = null;
-        }
-      }, SYNC.KEEPALIVE_PING_MS);
-    };
-
-    const stopSyncKeepAlive = (): void => {
-      if (syncKeepAliveReconnectTimer) {
-        clearInterval(syncKeepAliveReconnectTimer);
-        syncKeepAliveReconnectTimer = null;
-      }
-      if (syncKeepAlivePingTimer) {
-        clearInterval(syncKeepAlivePingTimer);
-        syncKeepAlivePingTimer = null;
-      }
-      if (syncKeepAlivePort) {
-        try { syncKeepAlivePort.disconnect(); } catch { /* already gone */ }
-        syncKeepAlivePort = null;
-      }
-    };
-
-    const deactivateLocalSync = (notifyCoordinator: boolean): void => {
-      const hadSyncAgent = !!syncAgent;
-      if (syncAgent) {
-        syncAgent.destroy();
-        syncAgent = null;
-      }
-      for (const c of controllers.values()) c.setIntendedSpeedListener(null);
-      stopSyncKeepAlive();
-
-      if (notifyCoordinator && hadSyncAgent) {
-        browser.runtime.sendMessage({ type: 'STOP_SYNC' }).catch(() => {});
-      }
+    const listen = (media: HTMLMediaElement, types: string[], listener: () => void): void => {
+      releaseListeners(media);
+      const listeners = new AbortController();
+      for (const type of types) media.addEventListener(type, listener, { signal: listeners.signal });
+      mediaListeners.set(media, listeners);
     };
 
     const handleMediaFound = (media: HTMLMediaElement): void => {
-      if (!isActive || !media.isConnected) return;
-      if (controllers.has(media)) return;
-
+      if (!isActive || !media.isConnected || controllers.has(media)) return;
       if (media instanceof HTMLAudioElement && !settings.enableAudio) return;
 
       if (media instanceof HTMLVideoElement && siteHandler?.shouldIgnoreVideo(media)) {
-        if (!deferredVideoListeners.has(media)) {
-          const listeners = new AbortController();
-          const { signal } = listeners;
-          const retryCheck = () => {
+        // Late-loading players may qualify once they have dimensions or start playing.
+        if (!mediaListeners.has(media)) {
+          listen(media, ['loadedmetadata', 'resize', 'play', 'canplay'], () => {
             if (!siteHandler?.shouldIgnoreVideo(media)) {
-              cleanupDeferredListener(media);
+              releaseListeners(media);
               handleMediaFound(media);
             }
-          };
-
-          media.addEventListener('loadedmetadata', retryCheck, { signal });
-          media.addEventListener('resize', retryCheck, { signal });
-          media.addEventListener('play', retryCheck, { signal });
-          media.addEventListener('canplay', retryCheck, { signal });
-
-          // Keep retries for late-loading players. Removal and stop() explicitly release them.
-          deferredVideoListeners.set(media, listeners);
+          });
         }
         return;
       }
 
-      cleanupDeferredListener(media);
-
-      const controller = new VideoController(media, settings, siteHandler);
-      controllers.set(media, controller);
-      logger.debug('Controller created for media element', {
-        tagName: media.tagName,
-        src: media.src || media.currentSrc,
-        totalControllers: controllers.size
-      });
-
-      const sourceChanged = () => {
+      controllers.set(media, new VideoController(media, settings, siteHandler));
+      listen(media, ['loadstart', 'emptied', 'error'], () => {
         // A replaced, emptied, or failed source cannot keep its old sync pair.
-        if (syncAgent?.isForMedia(media)) deactivateLocalSync(true);
-        const controller = controllers.get(media);
-
-        if (!media.isConnected) {
-          handleMediaRemoved(media);
-        } else if (!controller) {
-          handleMediaFound(media);
-        } else {
-          controller.updateSpeedDisplay();
-        }
-      };
-      const listeners = new AbortController();
-      for (const type of ['loadstart', 'emptied', 'error']) {
-        media.addEventListener(type, sourceChanged, { signal: listeners.signal });
-      }
-      mediaLifecycleListeners.set(media, listeners);
-    };
-
-    const cleanupDeferredListener = (media: HTMLMediaElement): void => {
-      deferredVideoListeners.get(media)?.abort();
-      deferredVideoListeners.delete(media);
+        if (sync.isFor(media)) sync.deactivate(true);
+        if (!media.isConnected) handleMediaRemoved(media);
+        else controllers.get(media)?.updateSpeedDisplay();
+      });
     };
 
     const handleMediaRemoved = (media: HTMLMediaElement): void => {
-      if (syncAgent?.isForMedia(media)) {
-        deactivateLocalSync(true);
-      }
-
-      const controller = controllers.get(media);
-      if (controller) {
-        controller.destroy();
-        controllers.delete(media);
-      }
-
-      mediaLifecycleListeners.get(media)?.abort();
-      mediaLifecycleListeners.delete(media);
-
-      cleanupDeferredListener(media);
+      if (sync.isFor(media)) sync.deactivate(true);
+      controllers.get(media)?.destroy();
+      controllers.delete(media);
+      releaseListeners(media);
     };
+
+    const connectedControllers = (): VideoController[] =>
+      [...controllers.values()].filter(controller => controller.media.isConnected);
 
     // Recover late or shadow media on popup requests; existing controllers are skipped.
     const rescanMedia = (): void => {
-      if (!isActive) return;
-      for (const media of observerPool?.observe(document) ?? []) {
-        handleMediaFound(media);
-      }
+      for (const media of observerPool?.observe(document) ?? []) handleMediaFound(media);
     };
 
     // Each frame handles its own keys; parents forward when they have no local media.
     const start = (): void => {
-      if (isActive || suspended) return;
-      if (isExcluded()) return;
-
+      if (isActive || suspended || isExcluded()) return;
       isActive = true;
       siteHandler = getSiteHandler();
-
-      keybindHandler = createKeybindHandler(
-        () => [...controllers.values()],
-        () => settings
-      );
-
-      observerPool = new ObserverPool(handleMediaFound, handleMediaRemoved, settings.enableAudio);
-
+      keybindHandler = createKeybindHandler(() => [...controllers.values()], () => settings);
       pointerBridge = createCrossFramePointerBridge(() => [...controllers.values()]);
-
-      const existingMedia = observerPool.observe(document);
-      logger.debug('Initial media scan complete', {
-        foundCount: existingMedia.length,
-        siteHandler: siteHandler?.constructor.name || 'none'
-      });
+      observerPool = new ObserverPool(handleMediaFound, handleMediaRemoved, settings.enableAudio);
+      observerPool.observe(document);
       cleanupInterval = setInterval(() => {
-        for (const [media] of controllers.entries()) {
+        for (const media of mediaListeners.keys()) {
           if (!media.isConnected) handleMediaRemoved(media);
-        }
-        for (const media of deferredVideoListeners.keys()) {
-          if (!media.isConnected) cleanupDeferredListener(media);
         }
       }, CLEANUP.STALE_CHECK_INTERVAL_MS);
     };
@@ -235,25 +109,16 @@ export default defineContentScript({
     const stop = (): void => {
       if (!isActive) return;
       isActive = false;
-
-      if (cleanupInterval) {
-        clearInterval(cleanupInterval);
-        cleanupInterval = null;
-      }
-
+      if (cleanupInterval) clearInterval(cleanupInterval);
+      cleanupInterval = null;
       observerPool?.disconnect();
       observerPool = null;
-
       keybindHandler?.destroy();
       keybindHandler = null;
-
       pointerBridge?.destroy();
       pointerBridge = null;
-
-      deactivateLocalSync(true);
-
-      for (const media of controllers.keys()) handleMediaRemoved(media);
-      for (const media of deferredVideoListeners.keys()) cleanupDeferredListener(media);
+      sync.deactivate(true);
+      for (const media of mediaListeners.keys()) handleMediaRemoved(media);
     };
 
     const unwatchSettings = watchSettings((newSettings) => {
@@ -261,180 +126,61 @@ export default defineContentScript({
       settings = newSettings;
       const shouldBeActive = settings.enabled && !isExcluded();
 
-      if (shouldBeActive && !isActive) {
-        start();
-      } else if (!shouldBeActive && isActive) {
-        stop();
-      } else if (isActive) {
-        if (audioChanged) {
-          observerPool?.disconnect();
-          for (const media of controllers.keys()) {
-            if (media instanceof HTMLAudioElement && !settings.enableAudio) handleMediaRemoved(media);
-          }
-          observerPool = new ObserverPool(handleMediaFound, handleMediaRemoved, settings.enableAudio);
-          observerPool.observe(document);
-        }
-        for (const controller of controllers.values()) {
-          controller.updateSettings(settings);
-        }
+      if (shouldBeActive !== isActive) {
+        if (shouldBeActive) start();
+        else stop();
+        return;
       }
+      if (!isActive) return;
+      if (audioChanged) {
+        observerPool?.disconnect();
+        for (const media of controllers.keys()) {
+          if (media instanceof HTMLAudioElement && !settings.enableAudio) handleMediaRemoved(media);
+        }
+        observerPool = new ObserverPool(handleMediaFound, handleMediaRemoved, settings.enableAudio);
+        observerPool.observe(document);
+      }
+      for (const controller of controllers.values()) controller.updateSettings(settings);
     });
 
-    const messageHandler = (
-      message: HareMessage,
-      _sender: Browser.runtime.MessageSender,
-      sendResponse: (response?: unknown) => void
-    ): true => {
-      let controllersArray = [...controllers.values()].filter(c => c.media.isConnected);
-
-      try {
-        switch (message.type) {
-          case 'GET_STATUS': {
-            rescanMedia();
-            controllersArray = [...controllers.values()].filter(c => c.media.isConnected);
-            sendResponse({
-              hasVideos: controllersArray.length > 0,
-              currentSpeed: controllersArray[0]?.speed ?? 1.0,
-              videoCount: controllersArray.length,
-              mixedSpeeds: controllersArray.some(c => Math.abs(c.speed - controllersArray[0].speed) > 0.001),
-              enabled: settings.enabled,
-              excluded: isExcluded(),
-            });
-            break;
-          }
-
-          case 'SET_SPEED': {
-            for (const controller of controllersArray) controller.setSpeed(message.payload);
-            sendResponse({ success: controllersArray.length > 0 });
-            break;
-          }
-
-          case 'RESET_SPEED': {
-            for (const controller of controllersArray) controller.resetSpeed();
-            sendResponse({ success: controllersArray.length > 0 });
-            break;
-          }
-
-          case 'TOGGLE_DISPLAY': {
-            for (const controller of controllersArray) controller.toggleVisibility();
-            sendResponse({ success: controllersArray.length > 0 });
-            break;
-          }
-
-          case 'SYNC_ACTIVATE': {
-            deactivateLocalSync(false);
-            rescanMedia();
-            const candidates = [...controllers.keys()].filter(media => media.isConnected && media.readyState >= HTMLMediaElement.HAVE_METADATA);
-            candidates.sort((a, b) => {
-              if (a.paused !== b.paused) return a.paused ? 1 : -1;
-              const rectA = a.getBoundingClientRect(), rectB = b.getBoundingClientRect();
-              return rectB.width * rectB.height - rectA.width * rectA.height;
-            });
-            const primaryMedia = candidates[0];
-            if (!primaryMedia) {
-              sendResponse({ success: false, error: 'No video found' });
-              break;
-            }
-            const primaryController = controllers.get(primaryMedia)!;
-            const baseRate = primaryController.intendedSpeed;
-            syncAgent = new SyncAgent(
-              primaryMedia,
-              (event: SyncEventPayload) => {
-                browser.runtime.sendMessage({ type: 'SYNC_EVENT', payload: event }).catch(() => {});
-              },
-              baseRate,
-              // Keep controller enforcement consistent with remote rate changes.
-              rate => primaryController.setSpeed(rate),
-              rate => primaryController.applyTransientRate(rate),
-            );
-            primaryController.setIntendedSpeedListener((rate) => {
-              syncAgent?.notifyIntendedSpeedChange(rate);
-            });
-            startSyncKeepAlive();
-            sendResponse({
-              success: true,
-              ...syncAgent.getPosition(),
-              playbackRate: baseRate,
-            });
-            break;
-          }
-
-          case 'SYNC_DEACTIVATE': {
-            deactivateLocalSync(false);
-            sendResponse({ success: true });
-            break;
-          }
-
-          case 'SYNC_PAUSE': {
-            if (!syncAgent) { sendResponse({ success: false }); break; }
-            const pauseCmd = message.payload;
-            // Do not extrapolate a paused source; skip tiny seeks to avoid visible jitter.
-            const localPos = syncAgent.getPosition().currentTime;
-            const driftSec = SYNC.DRIFT_IGNORE_THRESHOLD_MS / 1000;
-            if (pauseCmd.position >= 0 && Math.abs(localPos - pauseCmd.position) > driftSec) {
-              syncAgent.executeSeek(pauseCmd.position);
-            }
-            syncAgent.executePause(pauseCmd.buffering === true);
-            sendResponse({ success: true });
-            break;
-          }
-
-          case 'SYNC_PLAY': {
-            if (!syncAgent) { sendResponse({ success: false }); break; }
-            const playCmd = message.payload;
-            if (playCmd.position >= 0) {
-              const rate = playCmd.rate ?? syncAgent.getPosition().playbackRate;
-              const compensatedPlayPos = playCmd.position + rate * (Date.now() - playCmd.timestamp) / 1000;
-              if (Math.abs(syncAgent.getPosition().currentTime - compensatedPlayPos) > SYNC.DRIFT_IGNORE_THRESHOLD_MS / 1000) {
-                syncAgent.executeSeek(compensatedPlayPos);
-              }
-            }
-            void syncAgent.executePlay().then(success => sendResponse({ success }));
-            break;
-          }
-
-          case 'SYNC_SEEK': {
-            if (!syncAgent) { sendResponse({ success: false }); break; }
-            const seekCmd = message.payload;
-            syncAgent.executeSeek(seekCmd.position);
-            sendResponse({ success: true });
-            break;
-          }
-
-          case 'SYNC_RATE': {
-            const { rate } = message.payload;
-            if (!syncAgent || rate == null) { sendResponse({ success: false }); break; }
-            syncAgent.executeRateChange(rate);
-            sendResponse({ success: Math.abs(syncAgent.getPosition().playbackRate - rate) < 0.001 });
-            break;
-          }
-
-          case 'SYNC_DRIFT_CORRECT': {
-            if (!syncAgent) { sendResponse({ success: false }); break; }
-            const drift = message.payload;
-            if (drift.method === 'seek') syncAgent.executeSeek(drift.position);
-            else syncAgent.applyRateCorrection(drift.rateFactor, drift.durationMs);
-            sendResponse({ success: true });
-            break;
-          }
-
-          case 'SYNC_GET_POSITION': {
-            sendResponse(syncAgent ? syncAgent.getPosition() : null);
-            break;
-          }
-
-          default:
-            sendResponse({ success: false, error: 'Unknown message type' });
-        }
-      } catch (error) {
-        logger.error('Message error:', error, message);
-        sendResponse({ success: false, error: String(error) });
+    const handleMessage = async (message: HareMessage): Promise<Replies[keyof Replies]> => {
+      const forEachController = (action: (controller: VideoController) => void) => {
+        const targets = connectedControllers();
+        targets.forEach(action);
+        return { success: targets.length > 0 };
+      };
+      switch (message.type) {
+        case 'GET_STATUS':
+          rescanMedia();
+          return { speeds: connectedControllers().map(controller => controller.speed) };
+        case 'SET_SPEED': return forEachController(controller => controller.setSpeed(message.payload));
+        case 'RESET_SPEED': return forEachController(controller => controller.setSpeed(SPEED.DEFAULT));
+        case 'TOGGLE_DISPLAY': return forEachController(controller => controller.toggleVisibility());
+        case 'SYNC_ACTIVATE':
+          rescanMedia();
+          return sync.activate(connectedControllers());
+        case 'SYNC_DEACTIVATE':
+          sync.deactivate(false);
+          return { success: true };
+        case 'SYNC_GET_POSITION': return sync.getPosition();
+        case 'SYNC_PAUSE':
+        case 'SYNC_PLAY':
+        case 'SYNC_SEEK':
+        case 'SYNC_RATE':
+        case 'SYNC_DRIFT_CORRECT':
+          return sync.execute(message);
+        default: return { success: false, error: 'Unknown message type' };
       }
-
-      return true;
     };
 
-    browser.runtime.onMessage.addListener(messageHandler);
+    const messageListener = (message: HareMessage, _sender: unknown, sendResponse: (reply: unknown) => void): true => {
+      handleMessage(message).then(sendResponse, error => {
+        logger.error('Message error:', error, message);
+        sendResponse({ success: false, error: String(error) });
+      });
+      return true;
+    };
+    browser.runtime.onMessage.addListener(messageListener);
 
     if (settings.enabled) start();
 
@@ -442,12 +188,11 @@ export default defineContentScript({
     const cleanup = () => {
       if (cleanedUp) return;
       cleanedUp = true;
-
       window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('pageshow', handlePageShow);
       stop();
       unwatchSettings();
-      browser.runtime.onMessage.removeListener(messageHandler);
+      browser.runtime.onMessage.removeListener(messageListener);
     };
 
     const handlePageHide = (event: PageTransitionEvent) => {

@@ -4,7 +4,7 @@ import type { SyncCoordinator } from './sync-coordinator';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), get: vi.fn() }));
 vi.mock('wxt/browser', () => ({ browser: { tabs: { get: mocks.get } } }));
-vi.mock('./tab-media', () => ({ getFrameIds: async () => [0], sendToFrame: mocks.send }));
+vi.mock('./messaging', () => ({ getFrameIds: async () => [0], sendToTab: mocks.send }));
 
 const activation = { success: true, currentTime: 10, playbackRate: 1, paused: true, buffering: false, timestamp: 1 };
 function setup() {
@@ -16,7 +16,7 @@ describe('sync startup transaction', () => {
   beforeEach(() => {
     mocks.send.mockReset(); mocks.get.mockReset();
     mocks.get.mockImplementation(async id => ({ id, title: `Tab ${id}`, url: 'https://example.com' }));
-    mocks.send.mockImplementation(async (_tab, _frame, message) => message.type === 'SYNC_ACTIVATE' ? activation : { success: true });
+    mocks.send.mockImplementation(async (_tab, message) => message.type === 'SYNC_ACTIVATE' ? activation : { success: true });
   });
   it('rejects invalid/same-tab pairs before changing the current session', async () => {
     const { coordinator, startup } = setup();
@@ -36,28 +36,28 @@ describe('sync startup transaction', () => {
   it('rolls back both frames after a partial failure, including a late activation', async () => {
     const { coordinator, startup } = setup();
     const late = Promise.withResolvers<typeof activation>();
-    mocks.send.mockImplementation(async (tab, _frame, message) => {
+    mocks.send.mockImplementation(async (tab, message) => {
       if (message.type !== 'SYNC_ACTIVATE') return { success: true };
       if (tab === 1) return { success: false };
       return late.promise;
     });
     const start = startup.start(1, 2);
     const rejection = expect(start).rejects.toThrow('no available media');
-    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledWith(2, 0, { type: 'SYNC_ACTIVATE' }));
-    expect(mocks.send).not.toHaveBeenCalledWith(2, 0, { type: 'SYNC_DEACTIVATE' });
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledWith(2, { type: 'SYNC_ACTIVATE' }, 0));
+    expect(mocks.send).not.toHaveBeenCalledWith(2, { type: 'SYNC_DEACTIVATE' }, 0);
     late.resolve(activation);
     await rejection;
     expect(coordinator.startSync).not.toHaveBeenCalled();
-    expect(mocks.send).toHaveBeenCalledWith(1, 0, { type: 'SYNC_DEACTIVATE' });
-    expect(mocks.send).toHaveBeenCalledWith(2, 0, { type: 'SYNC_DEACTIVATE' });
+    expect(mocks.send).toHaveBeenCalledWith(1, { type: 'SYNC_DEACTIVATE' }, 0);
+    expect(mocks.send).toHaveBeenCalledWith(2, { type: 'SYNC_DEACTIVATE' }, 0);
   });
   it('cancels startup and rolls back if stop arrives during activation', async () => {
     const { coordinator, startup } = setup();
     const late = Promise.withResolvers<typeof activation>();
-    mocks.send.mockImplementation(async (_tab, _frame, message) => message.type === 'SYNC_ACTIVATE' ? late.promise : { success: true });
+    mocks.send.mockImplementation(async (_tab, message) => message.type === 'SYNC_ACTIVATE' ? late.promise : { success: true });
     const start = startup.start(1, 2);
     const rejection = expect(start).rejects.toThrow('cancelled');
-    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledWith(2, 0, { type: 'SYNC_ACTIVATE' }));
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledWith(2, { type: 'SYNC_ACTIVATE' }, 0));
     const stopped = startup.stop();
     late.resolve(activation);
     await rejection; await stopped;
