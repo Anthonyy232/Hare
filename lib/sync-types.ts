@@ -11,6 +11,7 @@ export interface SyncCandidate {
   tabId: number;
   title: string;
   domain: string;
+  favIconUrl?: string;
   videoCount: number;
 }
 

@@ -33,7 +33,7 @@ export default defineBackground(() => {
           const candidates = await Promise.all((await browser.tabs.query({})).map(async (tab): Promise<SyncCandidate | null> => {
             if (tab.id == null || !tab.url || !/^(https?|file):/.test(tab.url)) return null;
             const videoCount = (await getTabMedia(tab.id)).reduce((count, frame) => count + frame.speeds.length, 0);
-            return videoCount ? { tabId: tab.id, title: tab.title || 'Untitled', domain: new URL(tab.url).hostname, videoCount } : null;
+            return videoCount ? { tabId: tab.id, title: tab.title || 'Untitled', domain: new URL(tab.url).hostname, favIconUrl: tab.favIconUrl, videoCount } : null;
           }));
           return candidates.filter(candidate => candidate !== null);
         }

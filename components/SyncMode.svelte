@@ -14,6 +14,7 @@
   let starting = $state(false);
   let showSetup = $state(false);
   let error: string | null = $state(null);
+  let brokenIcons: number[] = $state([]);
   const nudgeStep = $derived.by(() => syncStatus?.nudgeStep ?? SYNC.DEFAULT_NUDGE_STEP);
   const offsetDisplay = $derived.by(() => offsetLabel(syncStatus?.offset ?? 0));
   const expanded = $derived.by(() => showSetup || syncStatus?.active === true);
@@ -224,6 +225,13 @@
               onclick={() => toggleTab(candidate.tabId)}
             >
               <span class="selection-marker" aria-hidden="true">{selectedTabs.includes(candidate.tabId) ? (selectedTabs.indexOf(candidate.tabId) === 0 ? 'A' : 'B') : '+'}</span>
+              <span class="candidate-icon" aria-hidden="true">
+                {#if candidate.favIconUrl && !brokenIcons.includes(candidate.tabId)}
+                  <img src={candidate.favIconUrl} alt="" width="16" height="16" referrerpolicy="no-referrer" onerror={() => { brokenIcons = [...brokenIcons, candidate.tabId]; }} />
+                {:else}
+                  {candidate.domain.charAt(0).toUpperCase()}
+                {/if}
+              </span>
               <div class="candidate-info">
                 <span class="candidate-title" title={candidate.title}>
                   {candidate.title}
@@ -519,6 +527,21 @@
   .candidate.selected {
     border-color: rgba(139, 92, 246, 0.5);
     background: rgba(139, 92, 246, 0.1);
+  }
+
+  .candidate-icon {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--color-text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    overflow: hidden;
   }
 
   .candidate-info {
