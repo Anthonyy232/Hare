@@ -27,7 +27,7 @@ test.describe('mpv', () => {
   test.beforeEach(async () => {
     expect(await mpvState(), 'another mpv is already using the Hare port').toBeNull();
     player = spawn('mpv', [
-      '--no-config', '--script=public/hare.lua', '--vo=null', '--ao=null', '--pause',
+      '--no-config', '--script=public/hare.lua', '--vo=null', '--ao=null', '--pause', '--idle=yes',
       `--input-ipc-server=${pipe}`, 'av://lavfi:testsrc=duration=600:rate=30',
     ], { stdio: 'ignore' });
     await expect.poll(mpvState).not.toBeNull();
@@ -69,5 +69,23 @@ test.describe('mpv', () => {
 
     await mpvCommand('loadfile', 'av://lavfi:testsrc=duration=60:rate=30');
     await expect.poll(async () => (await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(false);
+  });
+
+  test('setup guide downloads the script and mpv appears without a refresh', async ({ extension }) => {
+    await openVideo(extension.context, '?a');
+    await mpvCommand('stop');
+    const popup = await openUI(extension, 'popup');
+    await extension.context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await popup.getByRole('button', { name: 'Sync Mode' }).click();
+    await popup.getByText('Sync with mpv').click();
+    const download = popup.waitForEvent('download');
+    await popup.getByRole('link', { name: 'Download hare.lua' }).click();
+    expect((await download).suggestedFilename()).toBe('hare.lua');
+    await popup.getByRole('button', { name: 'Copy' }).click();
+    expect(await popup.evaluate(() => navigator.clipboard.readText())).toMatch(/mpv[\\/]scripts$/);
+
+    await mpvCommand('loadfile', 'av://lavfi:testsrc=duration=60:rate=30');
+    await expect(popup.locator('.candidate', { hasText: 'mpv' })).toBeVisible();
+    await expect(popup.getByText('Sync with mpv')).toHaveCount(0);
   });
 });

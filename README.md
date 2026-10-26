@@ -64,7 +64,7 @@ To use Sync Mode, load media in two different tabs and cue each to the moment yo
 
 Use **Swap A / B** before starting to change their roles. Deselect a selected tab before choosing a different pair.
 
-Sync Mode can also pair a tab with a video playing in [mpv](https://mpv.io). Put [hare.lua](public/hare.lua) in mpv's scripts folder (`%APPDATA%\mpv\scripts` on Windows, `~/.config/mpv/scripts` on macOS and Linux), open your video in mpv, and it appears in the Sync Mode list. The script needs an mpv build that uses LuaJIT, which most do, and only one mpv window can be paired at a time. Opening another file in mpv ends the session. The script listens on `127.0.0.1:42730` and only answers requests from browser extensions.
+Sync Mode can also pair a tab with a video playing in [mpv](https://mpv.io). One-time setup: open **Sync with mpv** in the Sync Mode list, download [hare.lua](public/hare.lua), and move it to mpv's scripts folder (`%APPDATA%\mpv\scripts` on Windows, `~/.config/mpv/scripts` on macOS and Linux). After that, any video you open in mpv appears in the list on its own. The script needs an mpv build that uses LuaJIT, which most do, and only one mpv window can be paired at a time. Opening another file in mpv ends the session. The script listens on `127.0.0.1:42730` and only answers requests from browser extensions.
 
 ### Configuration
 
