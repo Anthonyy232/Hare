@@ -23,7 +23,7 @@
   $effect(() => { onExpandedChange?.(expanded); });
 
   const NEED_TWO = "Need at least 2 tabs with videos";
-  let scriptsFolder = $state("~/.config/mpv/scripts");
+  const scriptsFolder = navigator.userAgent.includes("Windows") ? "%APPDATA%\\mpv\\scripts" : "~/.config/mpv/scripts";
   let copied = $state(false);
   const mpvFound = $derived(candidates.some(candidate => candidate.tabId === MPV_TAB_ID));
 
@@ -32,7 +32,7 @@
     if (!showSetup || mpvFound) return;
     const timer = setInterval(async () => {
       const found = await mpv.candidate();
-      if (!found || loading || candidates.some(candidate => candidate.tabId === MPV_TAB_ID)) return;
+      if (!found || loading || mpvFound) return;
       candidates = [...candidates, found];
       if (error === NEED_TWO && candidates.length >= 2) error = null;
     }, 2000);
@@ -153,9 +153,6 @@
 
   onMount(() => {
     loadSyncStatus();
-    void browser.runtime.getPlatformInfo().then(({ os }) => {
-      if (os === "win") scriptsFolder = "%APPDATA%\\mpv\\scripts";
-    });
     const timer = setInterval(() => { if (!loading) void loadSyncStatus(); }, 1500);
     return () => clearInterval(timer);
   });
