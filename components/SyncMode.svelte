@@ -5,6 +5,7 @@
   import { SYNC, NUDGE_STEPS } from "../lib/sync-types";
   import { sendToBackground } from "../lib/messaging";
   import { browser } from "wxt/browser";
+  import { mpv, MPV_TAB_ID } from "../lib/mpv";
 
   let { onExpandedChange }: { onExpandedChange?: (expanded: boolean) => void } = $props();
 
@@ -20,6 +21,28 @@
   const offsetDisplay = $derived.by(() => offsetLabel(syncStatus?.offset ?? 0));
   const expanded = $derived.by(() => showSetup || syncStatus?.active === true);
   $effect(() => { onExpandedChange?.(expanded); });
+
+  const NEED_TWO = "Need at least 2 tabs with videos";
+  let scriptsFolder = $state("~/.config/mpv/scripts");
+  let copied = $state(false);
+  const mpvFound = $derived(candidates.some(candidate => candidate.tabId === MPV_TAB_ID));
+
+  // Add mpv as soon as it opens a video, so setup needs no refresh.
+  $effect(() => {
+    if (!showSetup || mpvFound) return;
+    const timer = setInterval(async () => {
+      const found = await mpv.candidate();
+      if (!found || loading || candidates.some(candidate => candidate.tabId === MPV_TAB_ID)) return;
+      candidates = [...candidates, found];
+      if (error === NEED_TWO && candidates.length >= 2) error = null;
+    }, 2000);
+    return () => clearInterval(timer);
+  });
+
+  async function copyScriptsFolder() {
+    await navigator.clipboard.writeText(scriptsFolder);
+    copied = true;
+  }
 
   let statusRequest: Promise<void> | null = null;
 
@@ -43,7 +66,7 @@
       candidates = await sendToBackground({ type: "GET_SYNC_CANDIDATES" });
       selectedTabs = selectedTabs.filter(id => candidates.some(candidate => candidate.tabId === id));
       if (candidates.length < 2) {
-        error = "Need at least 2 tabs with videos";
+        error = NEED_TWO;
       }
     } catch {
       error = "Failed to find video tabs";
@@ -130,6 +153,9 @@
 
   onMount(() => {
     loadSyncStatus();
+    void browser.runtime.getPlatformInfo().then(({ os }) => {
+      if (os === "win") scriptsFolder = "%APPDATA%\\mpv\\scripts";
+    });
     const timer = setInterval(() => { if (!loading) void loadSyncStatus(); }, 1500);
     return () => clearInterval(timer);
   });
@@ -203,7 +229,6 @@
         <button class="cancel-btn" onclick={cancelSetup} disabled={loading}>Cancel</button>
       </div>
       <p class="setup-hint">Cue each video to the moment you want to pair. A sets the playback speed; B keeps its starting offset.</p>
-      <p class="setup-hint">To sync with mpv, put <a href={browser.runtime.getURL('/hare.lua')} download="hare.lua">hare.lua</a> in mpv's scripts folder and open your video in mpv.</p>
 
       {#if loading}
         <div class="sync-loading" role="status">{starting ? 'Starting sync…' : 'Scanning tabs…'}</div>
@@ -256,6 +281,20 @@
         </button>
       {/if}
       <button class="sync-mode-btn" onclick={loadCandidates} disabled={loading}>Refresh tab list</button>
+      {#if !mpvFound}
+        <details class="mpv-setup">
+          <summary>Sync with mpv</summary>
+          <ol>
+            <li><a href={browser.runtime.getURL("/hare.lua")} download="hare.lua">Download hare.lua</a></li>
+            <li>
+              Move it to <code>{scriptsFolder}</code>
+              <button class="copy-btn" onclick={copyScriptsFolder}>{copied ? "Copied" : "Copy"}</button>
+              <br />Create the folder if it doesn't exist.
+            </li>
+            <li>Open a video in mpv. It appears in the list above.</li>
+          </ol>
+        </details>
+      {/if}
     </div>
   {:else}
     <button class="sync-mode-btn" onclick={openSetup}>
@@ -277,7 +316,12 @@
   .selected .selection-marker { color: #1f1735; background: #c4b5fd; border-color: #c4b5fd; }
   .sync-description { font-size: 11px; color: var(--color-text-muted); text-align: center; margin: 7px 0 0; }
   .setup-hint { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; margin: 0; }
-  .setup-hint a { color: #c4b5fd; }
+  .mpv-setup { margin-top: 10px; font-size: 12px; color: var(--color-text-muted); line-height: 1.5; }
+  .mpv-setup summary { cursor: pointer; color: var(--color-text-secondary); }
+  .mpv-setup ol { margin: 6px 0 0; padding-left: 18px; }
+  .mpv-setup a { color: #c4b5fd; }
+  .mpv-setup code { color: var(--color-text-secondary); overflow-wrap: anywhere; }
+  .copy-btn { background: #a78bfa14; border: 1px solid #a78bfa4d; color: #ddd6fe; padding: 1px 6px; border-radius: 4px; font-size: 11px; cursor: pointer; }
   .sync-section {
     padding: 0 20px 18px;
     position: relative;
