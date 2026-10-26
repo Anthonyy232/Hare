@@ -282,14 +282,12 @@ test('settings save failure keeps the draft editable and retry succeeds', async 
   await expect(page.getByText('Settings saved', { exact: true })).toBeVisible();
 });
 
-test('popup site controls exclude and restore embedded media while preserving other settings', async ({ extension }, testInfo) => {
+test('popup restores an excluded site and its embedded media while preserving other settings', async ({ extension }, testInfo) => {
   const video = await openVideo(extension.context, '?frame');
   const media = video.frameLocator('iframe').locator('hare-controller');
   await expect(media).toHaveCount(1);
   const popup = await openUI(extension, 'popup', video);
-  await expect(popup.getByRole('button', { name: 'Exclude this site', exact: true })).toBeVisible();
-  await setSettings(extension.worker, { controllerOpacity: 0.7, blacklist: 'example.com' });
-  await popup.getByRole('button', { name: 'Exclude this site', exact: true }).click();
+  await setSettings(extension.worker, { controllerOpacity: 0.7, blacklist: 'example.com\n127.0.0.1' });
   await expect(media).toHaveCount(0);
   await expect(popup.getByText('This site is excluded', { exact: true })).toBeVisible();
   await popup.locator('.popup').screenshot({ path: testInfo.outputPath('site-excluded.png') });
@@ -308,17 +306,15 @@ test('popup preserves regex exclusions, recovers failed site saves, and can enab
   await setSettings(extension.worker, { blacklist: '/^127\\./\n127.0.0.1' });
   await expect(popup.getByRole('button', { name: 'Edit site exclusions', exact: true })).toBeVisible();
   await expect(popup.getByRole('button', { name: 'Use Hare on this site', exact: true })).toHaveCount(0);
-  await setSettings(extension.worker, { blacklist: '' });
-  await expect(popup.getByRole('button', { name: 'Exclude this site', exact: true })).toBeVisible();
+  await setSettings(extension.worker, { blacklist: '127.0.0.1' });
+  await expect(video.locator('hare-controller')).toHaveCount(0);
   await popup.evaluate(() => {
     const api = (globalThis as any).chrome.storage.sync;
     const original = api.set.bind(api);
     api.set = () => { api.set = original; return Promise.reject(new Error('Storage temporarily unavailable')); };
   });
-  await popup.getByRole('button', { name: 'Exclude this site', exact: true }).click();
+  await popup.getByRole('button', { name: 'Use Hare on this site', exact: true }).click();
   await expect(popup.getByRole('alert')).toContainText('Storage temporarily unavailable');
-  await expect(video.locator('hare-controller')).toHaveCount(1);
-  await popup.getByRole('button', { name: 'Exclude this site', exact: true }).click();
   await expect(video.locator('hare-controller')).toHaveCount(0);
   await popup.getByRole('button', { name: 'Use Hare on this site', exact: true }).click();
   await expect(video.locator('hare-controller')).toHaveCount(1);
@@ -328,17 +324,17 @@ test('popup preserves regex exclusions, recovers failed site saves, and can enab
   await expect(video.locator('hare-controller')).toHaveCount(1);
 });
 
-test('popup follows navigation in its target tab before applying site exclusions', async ({ extension }) => {
+test('popup follows navigation in its target tab before restoring a site', async ({ extension }) => {
   const video = await openVideo(extension.context);
   const popup = await openUI(extension, 'popup', video);
+  await setSettings(extension.worker, { blacklist: '127.0.0.1\nlocalhost' });
   await expect(popup.getByText('127.0.0.1', { exact: true })).toBeVisible();
   await video.goto(fixture.replace('127.0.0.1', 'localhost'));
   await expect(popup.getByText('localhost', { exact: true })).toBeVisible();
-  await popup.getByRole('button', { name: 'Exclude this site', exact: true }).click();
-  await expect(video.locator('hare-controller')).toHaveCount(0);
-  const stored = await extension.worker.evaluate(async () => (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings']);
-  expect(stored.blacklist.split('\n')).toContain('localhost');
-  expect(stored.blacklist.split('\n')).not.toContain('127.0.0.1');
+  await popup.getByRole('button', { name: 'Use Hare on this site', exact: true }).click();
+  const blacklist = () => extension.worker.evaluate(async () => (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings'].blacklist.split('\n'));
+  await expect.poll(blacklist).not.toContain('localhost');
+  expect(await blacklist()).toContain('127.0.0.1');
 });
 
 test('shortcut value drafts can be committed with Enter and cancelled with Escape', async ({ extension }) => {
