@@ -72,7 +72,6 @@ test.describe('mpv', () => {
   });
 
   test('setup guide downloads the script and mpv appears without a refresh', async ({ extension }) => {
-    await openVideo(extension.context, '?a');
     await mpvCommand('stop');
     const popup = await openUI(extension, 'popup');
     await extension.context.grantPermissions(['clipboard-read', 'clipboard-write']);
