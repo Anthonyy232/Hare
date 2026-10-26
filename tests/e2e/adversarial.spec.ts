@@ -215,12 +215,12 @@ test('sync candidates recover from missing tabs and setup can be cancelled', asy
   await popup.getByRole('button', { name: 'Sync Mode', exact: true }).click();
   await expect(popup.getByRole('alert')).toContainText('at least 2');
   const b = await openVideo(extension.context, '?candidate-b');
-  await popup.getByRole('button', { name: 'Refresh tab list' }).click();
+  await popup.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(popup.locator('.candidate')).toHaveCount(2);
   await popup.locator('.candidate').nth(0).click();
   await popup.locator('.candidate').nth(1).click();
   await b.close();
-  await popup.getByRole('button', { name: 'Refresh tab list' }).click();
+  await popup.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(popup.locator('.candidate')).toHaveCount(1);
   await expect(popup.getByRole('button', { name: 'Start Sync', exact: true })).toBeDisabled();
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click();

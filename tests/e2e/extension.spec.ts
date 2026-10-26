@@ -502,7 +502,7 @@ test('failed sync startup stays in setup with an actionable error', async ({ ext
   await b.close();
   await popup.getByRole('button', { name: 'Start Sync', exact: true }).click();
   await expect(popup.getByRole('alert')).toBeVisible();
-  await expect(popup.getByRole('button', { name: 'Refresh tab list' })).toBeEnabled();
+  await expect(popup.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
   expect((await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(false);
 });
 

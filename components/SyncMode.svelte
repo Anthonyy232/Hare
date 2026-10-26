@@ -223,7 +223,10 @@
     <div class="sync-setup">
       <div class="setup-header">
         <span>Select 2 tabs to sync</span>
-        <button class="cancel-btn" onclick={cancelSetup} disabled={loading}>Cancel</button>
+        <span>
+          <button class="header-btn" onclick={loadCandidates} disabled={loading}>Refresh</button>
+          <button class="header-btn" onclick={cancelSetup} disabled={loading}>Cancel</button>
+        </span>
       </div>
       <p class="setup-hint">Cue each video to the moment you want to pair. A sets the playback speed; B keeps its starting offset.</p>
 
@@ -277,7 +280,6 @@
           Start Sync
         </button>
       {/if}
-      <button class="sync-mode-btn" onclick={loadCandidates} disabled={loading}>Refresh tab list</button>
       {#if !mpvFound}
         <details class="mpv-setup">
           <summary>Sync with mpv</summary>
@@ -515,7 +517,7 @@
     color: var(--color-text-secondary);
   }
 
-  .cancel-btn {
+  .header-btn {
     font-size: 11px;
     color: var(--color-text-muted);
     background: none;
@@ -524,7 +526,7 @@
     padding: 2px 6px;
   }
 
-  .cancel-btn:hover {
+  .header-btn:hover {
     color: var(--color-text);
   }
 
