@@ -3,6 +3,7 @@ import { logger } from '../lib/logger';
 import { SyncCoordinator } from '../lib/sync-coordinator';
 import { SyncStartup } from '../lib/sync-startup';
 import { getTabMedia } from '../lib/messaging';
+import { mpv, MPV_TAB_ID } from '../lib/mpv';
 import type { SyncCandidate } from '../lib/sync-types';
 import type { HareMessage, Replies } from '../lib/types';
 
@@ -10,6 +11,8 @@ export default defineBackground(() => {
   const coordinator = new SyncCoordinator();
   const startup = new SyncStartup(coordinator);
   void coordinator.restoreSession();
+  mpv.onEvent = event => { void coordinator.handleSyncEvent(MPV_TAB_ID, event); };
+  mpv.onFileChanged = () => { void coordinator.stopSync('mpv opened another file'); };
 
   browser.runtime.onConnect.addListener(port => {
     if (port.name !== 'sync-keepalive') return;
@@ -30,11 +33,12 @@ export default defineBackground(() => {
           if (sender.tab?.id != null) await coordinator.handleSyncEvent(sender.tab.id, message.payload, sender.frameId);
           return { success: true };
         case 'GET_SYNC_CANDIDATES': {
-          const candidates = await Promise.all((await browser.tabs.query({})).map(async (tab): Promise<SyncCandidate | null> => {
+          const tabs = (await browser.tabs.query({})).map(async (tab): Promise<SyncCandidate | null> => {
             if (tab.id == null || !tab.url || !/^(https?|file):/.test(tab.url)) return null;
             const videoCount = (await getTabMedia(tab.id)).reduce((count, frame) => count + frame.speeds.length, 0);
             return videoCount ? { tabId: tab.id, title: tab.title || 'Untitled', domain: new URL(tab.url).hostname, favIconUrl: tab.favIconUrl, videoCount } : null;
-          }));
+          });
+          const candidates = await Promise.all([...tabs, mpv.candidate()]);
           return candidates.filter(candidate => candidate !== null);
         }
         case 'START_SYNC': {
