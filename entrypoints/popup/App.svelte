@@ -18,7 +18,7 @@
   let tabId: number | null = null;
   let tabUrl = '';
   let siteLabel = $state('Current tab');
-  let siteAction: 'enable' | 'include' | 'exclude' | 'settings' | null = $state(null);
+  let siteAction: 'enable' | 'include' | 'settings' | null = $state(null);
   const speedPresets = [0.75, 1, 1.25, 1.5, 2];
   let disposed = false;
   let toastTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -68,7 +68,6 @@
           : 'A broader domain or regular expression excludes this site. Edit Excluded sites in Settings to use Hare here.';
         throw new Error('This site is excluded');
       }
-      if (url.hostname && /^https?:$/.test(url.protocol)) nextSiteAction = 'exclude';
       const frames = await getTabMedia(tabId);
       const result = summarize(frames.flatMap(frame => frame.speeds));
       if (!result.videoCount) {
@@ -128,17 +127,11 @@
       if (action === 'enable') settings.enabled = true;
       else {
         const tab = await browser.tabs.get(tabId!);
-        const url = new URL(tab.url ?? '');
-        if (url.href !== actionUrl) throw new Error('The tab navigated. Try again on the new page.');
-        const host = url.hostname.toLowerCase().replace(/\.$/, '');
-        if (!host || !/^https?:$/.test(url.protocol)) throw new Error('This page cannot be excluded by domain.');
-        if (action === 'include') {
-          const remaining = removeExactSiteExclusions(settings.blacklist, host);
-          if (isBlacklisted(remaining, host)) throw new Error('A broader rule excludes this site. Edit Excluded sites in Settings.');
-          settings.blacklist = remaining;
-        } else if (!isBlacklisted(settings.blacklist, host)) {
-          settings.blacklist += `${settings.blacklist && !settings.blacklist.endsWith('\n') ? '\n' : ''}${host}`;
-        }
+        if (tab.url !== actionUrl) throw new Error('The tab navigated. Try again on the new page.');
+        const host = new URL(actionUrl).hostname;
+        const remaining = removeExactSiteExclusions(settings.blacklist, host);
+        if (isBlacklisted(remaining, host)) throw new Error('A broader rule excludes this site. Edit Excluded sites in Settings.');
+        settings.blacklist = remaining;
       }
       await saveSettings(settings);
     } catch (e) {
@@ -195,7 +188,7 @@
       <div class="no-videos">
         <p>{error}</p>
         <p class="hint">{hint}</p>
-        {#if !siteAction || siteAction === 'exclude'}
+        {#if !siteAction}
           <button class="settings-btn" disabled={busy} onclick={loadStatus}>Try again</button>
         {/if}
       </div>
@@ -240,11 +233,10 @@
         {/if}
       </div>
     {/if}
-    {#if siteAction && (!syncExpanded || siteAction !== 'exclude')}
+    {#if siteAction}
       <div class="site-controls">
-        <button class="settings-btn" disabled={busy} onclick={changeSiteAccess}
-          title={siteAction === 'exclude' ? `Exclude ${siteLabel} and its subdomains, including embedded players` : undefined}>
-          {siteAction === 'enable' ? 'Enable Hare' : siteAction === 'include' ? 'Use Hare on this site' : siteAction === 'exclude' ? 'Exclude this site' : 'Edit site exclusions'}
+        <button class="settings-btn" disabled={busy} onclick={changeSiteAccess}>
+          {siteAction === 'enable' ? 'Enable Hare' : siteAction === 'include' ? 'Use Hare on this site' : 'Edit site exclusions'}
         </button>
       </div>
     {/if}

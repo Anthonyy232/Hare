@@ -58,7 +58,7 @@ Type a complete speed in the popup and press Enter or leave the field to apply i
 
 Presets highlight the actual playback speed. No preset is selected for a custom rate or when players have different speeds. Choosing a speed button replaces an unfinished custom value. The popup identifies the current site and provides Settings in its header.
 
-Use **Exclude this site** in the popup to turn off Hare for the current hostname and its subdomains, including embedded players. **Use Hare on this site** removes that hostname's exclusion and restores controls immediately. Broader domain or regular expression rules stay intact and can be edited in Settings. If Hare is turned off globally, the popup offers **Enable Hare**.
+On an excluded site, **Use Hare on this site** in the popup removes that hostname's exclusion and restores controls immediately. Broader domain or regular expression rules stay intact and can be edited in Settings. If Hare is turned off globally, the popup offers **Enable Hare**.
 
 To use Sync Mode, load media in two different tabs and cue each to the moment you want to pair. Select tab A, then tab B. A supplies the playback speed and play/pause state; B retains its starting offset. Use the offset buttons to fine-tune B. Closing a paired tab, replacing its media source, or disabling Hare ends the session. Sync is for one primary loaded media element per tab, preferring playing media and then the larger player.
 

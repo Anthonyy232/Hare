@@ -268,7 +268,6 @@ test('popup rejects invalid speed drafts and can recover on a restricted browser
   await expect(speed).toBeEnabled();
   await video.goto('chrome://version');
   await expect(popup.getByText('Hare cannot run on this browser page', { exact: true })).toBeVisible();
-  await expect(popup.getByRole('button', { name: 'Exclude this site', exact: true })).toHaveCount(0);
 });
 
 test('forced shortcuts override page listeners but never intercept typing or composition', async ({ extension }) => {
