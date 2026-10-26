@@ -9,7 +9,7 @@ import type {
 } from './sync-types';
 import type { HareMessage, Reply } from './types';
 import { logger } from './logger';
-import { sendToTab } from './messaging';
+import { isEndpointId, sendToEndpoint } from './mpv';
 
 const COMMAND_TYPE = {
   pause: 'SYNC_PAUSE',
@@ -65,7 +65,7 @@ export class SyncCoordinator {
       bufferingB?: boolean;
     }
   ): void {
-    if (videoA.tabId === videoB.tabId || ![videoA.tabId, videoB.tabId].every(id => Number.isInteger(id) && id >= 0)
+    if (videoA.tabId === videoB.tabId || ![videoA.tabId, videoB.tabId].every(isEndpointId)
       || !Number.isFinite(initialPositions.currentTimeA) || !Number.isFinite(initialPositions.currentTimeB)) {
       throw new Error('Select two different tabs with valid media positions.');
     }
@@ -502,7 +502,7 @@ export class SyncCoordinator {
     const sessionAtSend = this.session;
     try {
       const timeout = message.type === 'SYNC_GET_POSITION' ? SYNC.POSITION_TIMEOUT_MS : undefined;
-      const result = await sendToTab(tabId, message, frameId, timeout);
+      const result = await sendToEndpoint(tabId, message, frameId, timeout);
       if (sessionAtSend !== this.session) return null;
       if (this.isFailedResponse(message, result)) {
         this.recordSendFailure(tabId, frameId, result);

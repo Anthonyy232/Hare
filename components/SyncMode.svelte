@@ -4,6 +4,7 @@
   import type { HareMessage } from "../lib/types";
   import { SYNC, NUDGE_STEPS } from "../lib/sync-types";
   import { sendToBackground } from "../lib/messaging";
+  import { browser } from "wxt/browser";
 
   let { onExpandedChange }: { onExpandedChange?: (expanded: boolean) => void } = $props();
 
@@ -202,6 +203,7 @@
         <button class="cancel-btn" onclick={cancelSetup} disabled={loading}>Cancel</button>
       </div>
       <p class="setup-hint">Cue each video to the moment you want to pair. A sets the playback speed; B keeps its starting offset.</p>
+      <p class="setup-hint">To sync with mpv, put <a href={browser.runtime.getURL('/hare.lua')} download="hare.lua">hare.lua</a> in mpv's scripts folder and open your video in mpv.</p>
 
       {#if loading}
         <div class="sync-loading" role="status">{starting ? 'Starting sync…' : 'Scanning tabs…'}</div>
@@ -275,6 +277,7 @@
   .selected .selection-marker { color: #1f1735; background: #c4b5fd; border-color: #c4b5fd; }
   .sync-description { font-size: 11px; color: var(--color-text-muted); text-align: center; margin: 7px 0 0; }
   .setup-hint { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; margin: 0; }
+  .setup-hint a { color: #c4b5fd; }
   .sync-section {
     padding: 0 20px 18px;
     position: relative;
