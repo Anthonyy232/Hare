@@ -78,6 +78,8 @@ export class SyncAgent {
   }
 
   private handleSeeked(): void {
+    // A seek within buffered data never drops readyState, so 'canplay' won't follow.
+    if (this.media.paused && this.media.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) this.handleReady();
     const remoteSeek = this.pendingSeekPosition !== null
       && Math.abs(safeMedia.getCurrentTime(this.media) - this.pendingSeekPosition) < SYNC.DRIFT_IGNORE_THRESHOLD_MS / 1000;
     this.pendingSeekPosition = null;
@@ -112,6 +114,11 @@ export class SyncAgent {
       this.pendingPause++;
     }
     safeMedia.pause(this.media);
+    // Paused media never fires 'waiting', so report the peer-requested seek as buffering until it lands.
+    if (buffering && this.media.seeking && !this.buffering) {
+      this.buffering = true;
+      this.emit('buffering_start');
+    }
   }
 
   async executePlay(): Promise<boolean> {
