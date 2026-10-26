@@ -81,9 +81,12 @@ export class SyncEndpoint {
         }
         return { success: await agent.executePlay() };
       }
-      case 'SYNC_SEEK':
-        agent.executeSeek(message.payload.position);
+      case 'SYNC_SEEK': {
+        // A peer's buffering pause has usually already moved this player there.
+        const { position } = message.payload;
+        if (Math.abs(agent.getPosition().currentTime - position) > DRIFT_IGNORE_S) agent.executeSeek(position);
         return { success: true };
+      }
       case 'SYNC_RATE': {
         const { rate } = message.payload;
         if (rate == null) return { success: false };

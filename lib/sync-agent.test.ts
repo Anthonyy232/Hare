@@ -175,13 +175,14 @@ describe('SyncAgent', () => {
       );
     });
 
-    it('reports starvation during a remote seek and recovery while paused', () => {
+    it('reports a peer-requested seek as buffering until it lands', () => {
       (video as any)._paused = false;
+      Object.defineProperty(video, 'seeking', { value: true, configurable: true });
       agent.executeSeek(50);
-      video.dispatchEvent(new Event('seeking'));
-      video.dispatchEvent(new Event('waiting'));
       agent.executePause(true);
       video.dispatchEvent(new Event('pause'));
+      video.dispatchEvent(new Event('waiting'));
+      Object.defineProperty(video, 'seeking', { value: false, configurable: true });
       video.dispatchEvent(new Event('seeked'));
       video.dispatchEvent(new Event('canplay'));
       vi.advanceTimersByTime(60);
