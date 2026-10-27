@@ -114,11 +114,19 @@ export class SyncAgent {
       this.pendingPause++;
     }
     safeMedia.pause(this.media);
-    // Paused media never fires 'waiting', so report the peer-requested seek as buffering until it lands.
-    if (buffering && this.media.seeking && !this.buffering) {
+    // Paused media never fires 'waiting', so report a peer-requested seek into unloaded media as buffering until it lands.
+    if (buffering && this.media.seeking && !this.buffering && !this.isBuffered(this.media.currentTime)) {
       this.buffering = true;
       this.emit('buffering_start');
     }
+  }
+
+  private isBuffered(time: number): boolean {
+    const { buffered } = this.media;
+    for (let i = 0; i < buffered.length; i++) {
+      if (time >= buffered.start(i) && time < buffered.end(i)) return true;
+    }
+    return false;
   }
 
   async executePlay(): Promise<boolean> {
