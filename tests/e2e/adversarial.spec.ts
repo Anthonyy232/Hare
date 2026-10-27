@@ -352,6 +352,11 @@ test('buffering signals pause the partner and recovery never overrides a deliber
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   await a.locator('video').evaluate(v => v.dispatchEvent(new Event('playing')));
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
+  // Run B ahead unnoticed, as a slow machine does, so the next buffering pause must seek it.
+  await popup.evaluate(async tabId => {
+    await (globalThis as any).chrome.tabs.sendMessage(tabId, { type: 'SYNC_DRIFT_CORRECT', payload: { method: 'rate', rateFactor: 1, durationMs: 200 } }, { frameId: 0 });
+  }, await tabId(popup, b));
+  await a.waitForTimeout(300);
   await a.locator('video').evaluate(v => v.dispatchEvent(new Event('waiting')));
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   await a.locator('video').evaluate((v: HTMLVideoElement) => v.pause());
