@@ -155,7 +155,7 @@ Build outputs:
 
 ### Firefox source review
 
-Version 1.8.0 was verified on Windows 11 x64 and Ubuntu with Node.js 24.16.0 and npm 11.13.0. Release packages are built by GitHub Actions on Ubuntu with Node.js 24. Install Node.js from [nodejs.org](https://nodejs.org/en/download). Dependencies and build tools are pinned by `package-lock.json`.
+Version 1.9.0 was verified on Windows 11 x64 and Ubuntu with Node.js 24.16.0 and npm 11.13.0. Release packages are built by GitHub Actions on Ubuntu with Node.js 24. Install Node.js from [nodejs.org](https://nodejs.org/en/download). Dependencies and build tools are pinned by `package-lock.json`.
 
 Extract the matching source ZIP into a fresh directory, open a terminal in that directory, and run:
 
@@ -166,7 +166,7 @@ npm run build:firefox
 
 Compare all files under `.output/firefox-mv3/` with the contents of the submitted Firefox extension ZIP. Run `npm run zip:firefox` to package that output. ZIP container timestamps can differ; the extension files must match. Dependency installation requires access to the public npm registry. The build runs locally and needs no credentials or private dependencies.
 
-Submit `.output/hare-1.8.0-firefox.zip` as the add-on and `.output/hare-1.8.0-sources.zip` as its matching source archive. See Mozilla's [source submission instructions](https://extensionworkshop.com/documentation/publish/source-code-submission/).
+Submit `.output/hare-1.9.0-firefox.zip` as the add-on and `.output/hare-1.9.0-sources.zip` as its matching source archive. See Mozilla's [source submission instructions](https://extensionworkshop.com/documentation/publish/source-code-submission/).
 
 ### Verification
 
