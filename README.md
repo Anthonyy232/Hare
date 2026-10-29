@@ -19,6 +19,7 @@ Control HTML5 video/audio playback speed with keyboard shortcuts
 - **Excluded sites**: Exclude domains (including subdomains), pasted URLs, or regular expressions
 - **Persistent Settings**: Synced across devices
 - **Sync Mode**: Pair media in two tabs, preserving their starting offset while coordinating playback, seeking, and speed
+- **Open in video player**: Hand the current video to your desktop player
 
 ## Browser Compatibility
 
@@ -66,6 +67,8 @@ Use **Swap A / B** before starting to change their roles. Deselect a selected ta
 
 Sync Mode can also pair a tab with a video playing in [mpv](https://mpv.io). One-time setup: open **Sync with mpv** in the Sync Mode list, download [hare.lua](public/hare.lua), and move it to mpv's scripts folder (`%APPDATA%\mpv\scripts` on Windows, `~/.config/mpv/scripts` on macOS and Linux). After that, any video you open in mpv appears in the list on its own. The script needs an mpv build that uses LuaJIT, which most do, and only one mpv window can be paired at a time. Opening another file in mpv ends the session. The script listens on `127.0.0.1:42730` and only answers requests from browser extensions.
 
+**Open in video player** at the bottom of the popup saves a one-item playlist, `hare.m3u`, to your Downloads folder and opens it with your default player for `.m3u` files. The playlist points to the video file, or to the HLS/DASH playlist the page streams from, such as on Twitch, Kick, Patreon, and PeerTube. For sites that stream protected or site-specific formats, such as YouTube and Vimeo, it points to the page itself; players that resolve sites, such as mpv with yt-dlp, can play those. VLC also starts at the current position. Video calls and screen shares can't be opened. The first use asks for permission to manage downloads. If the browser can't open the file, it stays in Downloads.
+
 ### Configuration
 
 - **Keyboard Shortcuts**: Customize in Settings
@@ -75,7 +78,7 @@ Sync Mode can also pair a tab with a video playing in [mpv](https://mpv.io). One
 - **Audio Control**: Enable/disable audio speed control
 - **Hidden Mode**: Start with controller hidden
 
-Save settings to apply changes to existing pages. Failed saves preserve the draft and provide a retry. The popup's **Show / hide controller** button restores a hidden controller even when its keyboard shortcut is unbound. Browser settings pages and some protected pages cannot run extensions; reload existing webpages after installing or updating Hare. Local files also require enabling file access in the browser's extension details.
+Save settings to apply changes to existing pages. Failed saves preserve the draft and provide a retry. Browser settings pages and some protected pages cannot run extensions; reload existing webpages after installing or updating Hare. Local files also require enabling file access in the browser's extension details.
 
 ## Development
 
@@ -120,6 +123,7 @@ Hare/
 │   ├── sync-endpoint.ts # A frame's side of a sync pair, plus the worker keepalive
 │   ├── sync-agent.ts   # Per-media command execution and echo suppression
 │   ├── mpv.ts          # mpv's side of a sync pair, talking to public/hare.lua
+│   ├── stream.ts       # Stream links and the playlist for Open in video player
 │   └── site-handlers.ts # Per-site player containers and ignore rules
 ├── assets/             # Icons and CSS
 └── public/             # Static assets
@@ -173,7 +177,7 @@ npm run test:e2e          # Builds Chrome, then tests a separate temporary Chrom
 npm audit
 ```
 
-Browser tests use a local HTTP fixture with generated silent PCM media and a synthetic VP8 video, require no website accounts or external media downloads, and close their browser profiles after each test. They cover media events, seeking, editing, shadow DOMs, iframes, settings persistence/failure, fullscreen, picture-in-picture, sync, and browser/service-worker restart. Popup/options accessibility checks use axe. Reports and screenshots are written to `playwright-report/` and `test-results/`. Native Firefox testing has [separate instructions](tests/native/README.md).
+Browser tests use a local HTTP fixture with generated silent PCM media and a synthetic VP8 video, require no website accounts or external media downloads, and close their browser profiles after each test. They cover media events, seeking, editing, shadow DOMs, iframes, settings persistence/failure, fullscreen, picture-in-picture, sync, opening a stream in a video player, and browser/service-worker restart. Popup/options accessibility checks use axe. Reports and screenshots are written to `playwright-report/` and `test-results/`. Native Firefox testing has [separate instructions](tests/native/README.md).
 
 Site-specific selectors and DRM restrictions still require checks against the actual services. Browser-native video fullscreen and picture-in-picture may not display a custom DOM overlay; keyboard or popup control and player-container fullscreen are covered.
 

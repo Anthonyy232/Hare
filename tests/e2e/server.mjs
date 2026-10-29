@@ -31,6 +31,11 @@ http.createServer((req, res) => {
     res.end(wav.subarray(start, end + 1));
     return;
   }
+  if (url.pathname.endsWith('.m3u8')) {
+    res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+    res.end(url.pathname === '/master.m3u8' ? '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nvariant.m3u8\n' : '#EXTM3U\n#EXT-X-ENDLIST\n');
+    return;
+  }
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(fixture);
 }).listen(41739, '0.0.0.0');

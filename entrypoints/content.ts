@@ -10,6 +10,7 @@ import { logger } from '../lib/logger';
 import { SyncEndpoint } from '../lib/sync-endpoint';
 import { withTimeout } from '../lib/async-utils';
 import { sendToBackground } from '../lib/messaging';
+import { primaryMedia } from '../lib/media-detector';
 
 export default defineContentScript({
   matches: ['http://*/*', 'https://*/*', 'file:///*'],
@@ -155,7 +156,17 @@ export default defineContentScript({
           return { speeds: connectedControllers().map(controller => controller.speed) };
         case 'SET_SPEED': return forEachController(controller => controller.setSpeed(message.payload));
         case 'RESET_SPEED': return forEachController(controller => controller.setSpeed(SPEED.DEFAULT));
-        case 'TOGGLE_DISPLAY': return forEachController(controller => controller.toggleVisibility());
+        case 'GET_STREAM': {
+          const media = primaryMedia(connectedControllers())?.media;
+          // Calls and screen shares have no link to hand over.
+          if (!media || media.srcObject instanceof MediaStream) return null;
+          return {
+            src: /^(https?|file):/.test(media.currentSrc) ? media.currentSrc : null,
+            page: location.href,
+            encrypted: media.mediaKeys !== null,
+            time: Number.isFinite(media.duration) ? media.currentTime : 0,
+          };
+        }
         case 'SYNC_ACTIVATE':
           rescanMedia();
           return sync.activate(connectedControllers());

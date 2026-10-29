@@ -50,7 +50,7 @@
   <div class="preview-frame" role="img" aria-label={`Controller preview: ${expanded ? 'expanded at full opacity' : `at rest at ${Math.round(opacity * 100)}% opacity`}, ${size} pixel button size`}>
     <div class="preview-overlay" aria-hidden="true" inert use:preview={{ opacity, size, expanded }}></div>
   </div>
-  <p>{startHidden ? 'Starts hidden. Use Show / hide controller in the popup to reveal it.' : 'Hover or focus the controller to reveal its buttons at full opacity.'}</p>
+  <p>{startHidden ? 'Starts hidden. Use the Show/Hide Controller shortcut to reveal it.' : 'Hover or focus the controller to reveal its buttons at full opacity.'}</p>
 </div>
 
 <style>

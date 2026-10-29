@@ -110,9 +110,28 @@ test('controller buttons expand on keyboard focus and hidden display can be rest
   await expect(page.getByRole('button', { name: 'Faster', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Hide controller', exact: true }).click();
   await expect(page.locator('.hare-speed')).toBeHidden();
-  const popup = await openUI(extension, 'popup', page);
-  await popup.getByRole('button', { name: 'Show / hide controller' }).click();
+  await page.keyboard.press('v');
   await expect(page.locator('.hare-speed')).toBeVisible();
+});
+
+test('popup opens the master playlist loaded by a player worker in the default player', async ({ extension }) => {
+  const page = await extension.context.newPage();
+  await page.goto(fixture + '?hls');
+  await expect(page.locator('hare-controller')).toHaveCount(1);
+  const popup = await openUI(extension, 'popup', page);
+  // The downloads permission prompt can't be accepted in automation.
+  await popup.evaluate(() => {
+    const api = (globalThis as any).browser;
+    api.permissions.request = async () => true;
+    api.downloads = {
+      download: async ({ url }: { url: string }) => { (globalThis as any).playlist = await (await fetch(url)).text(); return 7; },
+      search: async () => [{ state: 'complete' }],
+      open: async (id: number) => { (globalThis as any).opened = id; },
+    };
+  });
+  await popup.getByRole('button', { name: 'Open in video player' }).click();
+  await expect.poll(() => popup.evaluate(() => (globalThis as any).opened)).toBe(7);
+  expect(await popup.evaluate(() => (globalThis as any).playlist)).toBe('#EXTM3U\n#EXTINF:-1,Video Test\nhttp://127.0.0.1:41739/master.m3u8\n');
 });
 
 test('popup commits complete decimal input and reflects actual media speed', async ({ extension }, testInfo) => {

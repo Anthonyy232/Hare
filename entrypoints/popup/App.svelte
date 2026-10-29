@@ -5,7 +5,8 @@
   import type { HareMessage } from "../../lib/types";
   import { SPEED, UI } from "../../lib/constants";
   import { loadSettings, saveSettings, isBlacklisted, removeExactSiteExclusions } from "../../lib/settings";
-  import { getTabMedia, summarize, sendToTab, type MediaSummary } from "../../lib/messaging";
+  import { getFrameIds, getTabMedia, summarize, sendToTab, type MediaSummary } from "../../lib/messaging";
+  import { findManifest, playlist } from "../../lib/stream";
 
   let status: MediaSummary | null = $state(null);
   let loading = $state(true);
@@ -86,7 +87,7 @@
     }
   }
 
-  async function command(message: Extract<HareMessage, { type: "SET_SPEED" | "RESET_SPEED" | "TOGGLE_DISPLAY" }>, requestedSpeed?: number) {
+  async function command(message: Extract<HareMessage, { type: "SET_SPEED" | "RESET_SPEED" }>, requestedSpeed?: number) {
     if (busy || tabId == null || !status) return;
     busy = true;
     try {
@@ -112,6 +113,31 @@
   }
 
   function resetSpeed() { void command({ type: 'RESET_SPEED' }, SPEED.DEFAULT); }
+
+  async function openInPlayer() {
+    if (busy || tabId == null) return;
+    // Requested on first use, while the click still counts as a user gesture.
+    if (!await browser.permissions.request({ permissions: ['downloads', 'downloads.open'] })) return;
+    busy = true;
+    try {
+      const replies = await Promise.all((await getFrameIds(tabId)).map(frameId =>
+        sendToTab(tabId!, { type: 'GET_STREAM' }, frameId).catch(() => null)));
+      const media = replies.find(reply => reply);
+      if (!media) throw new Error('This tab has no video that can play outside the browser.');
+      // Players can't decrypt protected streams, but some (mpv with yt-dlp) can resolve the page.
+      const url = media.src ?? (media.encrypted ? undefined : await findManifest(tabId)) ?? media.page;
+      const { title = '' } = await browser.tabs.get(tabId);
+      const file = URL.createObjectURL(new Blob([playlist(url, title, media.time)], { type: 'audio/x-mpegurl' }));
+      const id = await browser.downloads.download({ url: file, filename: 'hare.m3u', conflictAction: 'overwrite', saveAs: false });
+      let state;
+      while ((state = (await browser.downloads.search({ id }))[0]?.state) === 'in_progress') await new Promise(resolve => setTimeout(resolve, 50));
+      URL.revokeObjectURL(file);
+      if (state !== 'complete') throw new Error('Could not save the playlist.');
+      await browser.downloads.open(id).catch(() => showToast('Saved hare.m3u to Downloads. Open it to play.'));
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not open the video.');
+    } finally { busy = false; }
+  }
   function openOptions() { void browser.runtime.openOptionsPage(); }
 
   async function changeSiteAccess() {
@@ -228,9 +254,6 @@
         {:else if status.videoCount > 1}
           <p class="hint">Changes apply to all {status.videoCount} players in this tab.</p>
         {/if}
-        {#if !syncExpanded}
-          <button class="settings-btn controller-toggle" disabled={busy} onclick={() => command({ type: 'TOGGLE_DISPLAY' })}>Show / hide controller</button>
-        {/if}
       </div>
     {/if}
     {#if siteAction}
@@ -243,6 +266,15 @@
   </main>
 
   <SyncMode onExpandedChange={(expanded) => { syncExpanded = expanded; }} />
+
+  {#if status && !syncExpanded}
+    <button class="open-player" disabled={busy} onclick={openInPlayer}>
+      <svg viewBox="0 0 24 24" class="settings-icon" aria-hidden="true">
+        <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path>
+      </svg>
+      Open in video player
+    </button>
+  {/if}
 
   {#if toast}
     <div class="toast" role="alert">{toast}</div>
@@ -469,7 +501,8 @@
   main.compact { padding-top: 12px; padding-bottom: 20px; }
   .compact .speed-section { gap: 8px; }
 
-  .controller-toggle { background: #ffffff06; border-color: #ffffff24; border-radius: 6px; color: #b9c5d6; font-size: 12px; }
+  .open-player { display: flex; align-items: center; justify-content: center; gap: 6px; width: calc(100% - 40px); margin: -6px 20px 14px; padding: 7px; border: 0; border-radius: 6px; background: transparent; color: #b9c5d6; font-size: 12px; cursor: pointer; position: relative; z-index: 1; }
+  .open-player:hover:not(:disabled) { color: var(--color-text); background: #ffffff0d; }
   .site-controls { margin-top: 14px; }
   .site-controls .settings-btn { font-size: 12px; }
 
