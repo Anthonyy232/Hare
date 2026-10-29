@@ -27,3 +27,12 @@ export function scanMediaTree(
   }
   return media;
 }
+
+/** The most prominent player: playing before paused, then largest. */
+export function primaryMedia<T extends { media: HTMLMediaElement }>(items: T[]): T | undefined {
+  const area = (media: HTMLMediaElement) => {
+    const rect = media.getBoundingClientRect();
+    return rect.width * rect.height;
+  };
+  return items.toSorted((a, b) => Number(a.media.paused) - Number(b.media.paused) || area(b.media) - area(a.media))[0];
+}

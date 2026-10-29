@@ -35,7 +35,7 @@ export type HareMessage =
   | { type: 'GET_STATUS' }
   | { type: 'SET_SPEED'; payload: number }
   | { type: 'RESET_SPEED' }
-  | { type: 'TOGGLE_DISPLAY' }
+  | { type: 'GET_STREAM' }
   // Sync coordination (background <-> content)
   | { type: 'SYNC_ACTIVATE' }
   | { type: 'SYNC_DEACTIVATE' }
@@ -59,7 +59,7 @@ export interface Replies {
   GET_STATUS: { speeds: number[] };
   SET_SPEED: Ack;
   RESET_SPEED: Ack;
-  TOGGLE_DISPLAY: Ack;
+  GET_STREAM: { src: string | null; page: string; encrypted: boolean; time: number } | null;
   SYNC_ACTIVATE: (SyncPositionResponse & { success: true }) | { success: false; error: string };
   SYNC_DEACTIVATE: Ack;
   SYNC_EVENT: Ack;

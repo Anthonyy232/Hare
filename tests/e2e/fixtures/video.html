@@ -20,6 +20,11 @@
     <script>
         const params = new URLSearchParams(location.search);
         if (params.has('visual')) document.getElementById('test-video').src = '/motion.webm';
+        if (params.has('hls')) {
+          // Like Twitch's player: a worker loads the master playlist, then a variant, and the page plays through MediaSource.
+          new Worker(URL.createObjectURL(new Blob([`fetch('${location.origin}/master.m3u8').then(() => fetch('${location.origin}/variant.m3u8'))`])));
+          document.getElementById('test-video').src = URL.createObjectURL(new MediaSource());
+        }
         if (params.has('empty') || params.has('frame')) document.getElementById('player').remove();
         if (params.has('frame')) {
           const frame = document.createElement('iframe');

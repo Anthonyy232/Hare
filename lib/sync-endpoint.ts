@@ -4,6 +4,7 @@ import type { HareMessage, Reply } from './types';
 import { SyncAgent } from './sync-agent';
 import { SYNC } from './sync-types';
 import { sendToBackground } from './messaging';
+import { primaryMedia } from './media-detector';
 
 type SyncCommand = Extract<HareMessage, { type: 'SYNC_PAUSE' | 'SYNC_PLAY' | 'SYNC_SEEK' | 'SYNC_RATE' | 'SYNC_DRIFT_CORRECT' }>;
 
@@ -20,16 +21,9 @@ export class SyncEndpoint {
     return this.controller?.media === media;
   }
 
-  /** Pairs the most prominent ready player: playing before paused, then largest. */
   activate(controllers: VideoController[]): Reply<{ type: 'SYNC_ACTIVATE' }> {
     this.deactivate(false);
-    const area = (media: HTMLMediaElement) => {
-      const rect = media.getBoundingClientRect();
-      return rect.width * rect.height;
-    };
-    const [controller] = controllers
-      .filter(({ media }) => media.isConnected && media.readyState >= HTMLMediaElement.HAVE_METADATA)
-      .sort((a, b) => Number(a.media.paused) - Number(b.media.paused) || area(b.media) - area(a.media));
+    const controller = primaryMedia(controllers.filter(({ media }) => media.isConnected && media.readyState >= HTMLMediaElement.HAVE_METADATA));
     if (!controller) return { success: false, error: 'No video found' };
 
     const baseRate = controller.intendedSpeed;
