@@ -59,7 +59,7 @@ export interface Replies {
   GET_STATUS: { speeds: number[] };
   SET_SPEED: Ack;
   RESET_SPEED: Ack;
-  GET_STREAM: { src: string | null; page: string; encrypted: boolean; time: number } | null;
+  GET_STREAM: { src: string | null; page: string; encrypted: boolean; time: number; manifests: string[] } | null;
   SYNC_ACTIVATE: (SyncPositionResponse & { success: true }) | { success: false; error: string };
   SYNC_DEACTIVATE: Ack;
   SYNC_EVENT: Ack;

@@ -165,6 +165,8 @@ export default defineContentScript({
             page: location.href,
             encrypted: media.mediaKeys !== null,
             time: Number.isFinite(media.duration) ? media.currentTime : 0,
+            // Covers players that started before Hare's background could see their requests.
+            manifests: performance.getEntriesByType('resource').map(entry => entry.name).filter(name => /\.(m3u8|mpd)(\?|$)/.test(name)),
           };
         }
         case 'SYNC_ACTIVATE':

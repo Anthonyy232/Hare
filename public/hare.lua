@@ -2,9 +2,24 @@
 -- Install: put this file in mpv's scripts folder
 --   Windows: %APPDATA%\mpv\scripts\    macOS and Linux: ~/.config/mpv/scripts/
 -- Then open a video in mpv and choose it in Hare's Sync Mode list.
+-- It also plays Hare's Open in video player links from sites that check where requests come from.
 
 local msg = require 'mp.msg'
 local utils = require 'mp.utils'
+
+-- hare.m3u carries options that VLC reads but mpv's playlist reader skips: the referrer some hosts
+-- (Patreon's) require, and where to start.
+mp.add_hook('on_load', 50, function()
+  local playlist = mp.get_property('playlist/' .. mp.get_property('playlist-pos') .. '/playlist-path')
+  local f = playlist and playlist:match('hare[^/\\]*%.m3u$') and io.open(playlist)
+  if not f then return end
+  local text = f:read('*a')
+  f:close()
+  local referrer = text:match('#EXTVLCOPT:http%-referrer=([^\r\n]+)')
+  local start = text:match('#EXTVLCOPT:start%-time=([%d.]+)')
+  if referrer then mp.set_property('file-local-options/referrer', referrer) end
+  if start then mp.set_property('file-local-options/start', start) end
+end)
 
 local PORT = 42730
 
