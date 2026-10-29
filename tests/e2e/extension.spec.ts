@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
+import type { Page } from '@playwright/test';
 import { test, expect, fixture, openVideo, openUI, rate, setSettings, rpc, tabId } from './fixtures/extension';
 test('keyboard speed, seeking boundaries, reset, and deliberate pause', async ({ extension }) => {
   const page = await openVideo(extension.context);
@@ -114,11 +115,10 @@ test('controller buttons expand on keyboard focus and hidden display can be rest
   await expect(page.locator('.hare-speed')).toBeVisible();
 });
 
-test('popup opens the master playlist loaded by a player worker in the default player', async ({ extension }) => {
-  const page = await extension.context.newPage();
-  await page.goto(fixture + '?hls');
-  await expect(page.locator('hare-controller')).toHaveCount(1);
-  const popup = await openUI(extension, 'popup', page);
+const masterPlaylist = '#EXTM3U\n#EXTINF:-1,Video Test\n#EXTVLCOPT:http-referrer=http://127.0.0.1:41739/\nhttp://127.0.0.1:41739/master.m3u8\n';
+
+/** Clicks Open in video player and returns the playlist it opened. */
+async function openInPlayer(popup: Page): Promise<string> {
   // The downloads permission prompt can't be accepted in automation.
   await popup.evaluate(() => {
     const api = (globalThis as any).browser;
@@ -131,7 +131,26 @@ test('popup opens the master playlist loaded by a player worker in the default p
   });
   await popup.getByRole('button', { name: 'Open in video player' }).click();
   await expect.poll(() => popup.evaluate(() => (globalThis as any).opened)).toBe(7);
-  expect(await popup.evaluate(() => (globalThis as any).playlist)).toBe('#EXTM3U\n#EXTINF:-1,Video Test\nhttp://127.0.0.1:41739/master.m3u8\n');
+  return popup.evaluate(() => (globalThis as any).playlist);
+}
+
+test('popup opens the master playlist loaded by a player worker in the default player', async ({ extension }) => {
+  const page = await extension.context.newPage();
+  await page.goto(fixture + '?hls=worker');
+  await expect(page.locator('hare-controller')).toHaveCount(1);
+  expect(await openInPlayer(await openUI(extension, 'popup', page))).toBe(masterPlaylist);
+});
+
+test('popup finds a playlist the page loaded before Hare started watching', async ({ extension }) => {
+  const page = await extension.context.newPage();
+  await page.goto(fixture + '?hls');
+  await expect(page.locator('hare-controller')).toHaveCount(1);
+  const popup = await openUI(extension, 'popup', page);
+  // Forget what the background saw, as when Hare is installed after the page loads.
+  const key = `manifests-${await tabId(popup, page)}`;
+  await expect.poll(() => popup.evaluate(async key => (await (globalThis as any).chrome.storage.session.get(key))[key]?.length, key)).toBe(2);
+  await popup.evaluate(key => (globalThis as any).chrome.storage.session.remove(key), key);
+  expect(await openInPlayer(popup)).toBe(masterPlaylist);
 });
 
 test('popup commits complete decimal input and reflects actual media speed', async ({ extension }, testInfo) => {

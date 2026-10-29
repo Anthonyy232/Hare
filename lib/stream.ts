@@ -27,14 +27,17 @@ export function forgetManifests(tabId: number): void {
 }
 
 /** The newest manifest that lists every quality. HLS players load single-quality playlists after their master. */
-export async function findManifest(tabId: number): Promise<string | undefined> {
-  const urls = await manifests(tabId);
+export async function findManifest(tabId: number, pageManifests: string[]): Promise<string | undefined> {
+  const urls = [...new Set([...pageManifests, ...await manifests(tabId)])].slice(-20);
   const texts = await Promise.all(urls.map(url => fetch(url).then(response => response.text(), () => '')));
   return urls.findLast((_, i) => texts[i].includes('#EXT-X-STREAM-INF') || texts[i].includes('<MPD')) ?? urls.at(-1);
 }
 
-/** A one-item playlist, so the OS opens the link with its default media player. */
-export function playlist(url: string, title: string, time: number): string {
+/**
+ * A one-item playlist, so the OS opens the link with its default media player. VLC reads the options;
+ * hare.lua applies them in mpv. Some hosts, such as Patreon's, only serve requests from their site.
+ */
+export function playlist(url: string, title: string, time: number, page: string): string {
   const start = time > 0 ? `#EXTVLCOPT:start-time=${time}\n` : '';
-  return `#EXTM3U\n#EXTINF:-1,${title.replace(/\s+/g, ' ')}\n${start}${url}\n`;
+  return `#EXTM3U\n#EXTINF:-1,${title.replace(/\s+/g, ' ')}\n#EXTVLCOPT:http-referrer=${new URL(page).origin}/\n${start}${url}\n`;
 }

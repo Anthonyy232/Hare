@@ -21,8 +21,10 @@
         const params = new URLSearchParams(location.search);
         if (params.has('visual')) document.getElementById('test-video').src = '/motion.webm';
         if (params.has('hls')) {
-          // Like Twitch's player: a worker loads the master playlist, then a variant, and the page plays through MediaSource.
-          new Worker(URL.createObjectURL(new Blob([`fetch('${location.origin}/master.m3u8').then(() => fetch('${location.origin}/variant.m3u8'))`])));
+          // Players load the master playlist, then a variant, and play through MediaSource. Twitch's loads them in a worker.
+          const load = `fetch('${location.origin}/master.m3u8').then(() => fetch('${location.origin}/variant.m3u8'))`;
+          if (params.get('hls') === 'worker') new Worker(URL.createObjectURL(new Blob([load])));
+          else new Function(load)();
           document.getElementById('test-video').src = URL.createObjectURL(new MediaSource());
         }
         if (params.has('empty') || params.has('frame')) document.getElementById('player').remove();

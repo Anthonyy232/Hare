@@ -125,9 +125,9 @@
       const media = replies.find(reply => reply);
       if (!media) throw new Error('This tab has no video that can play outside the browser.');
       // Players can't decrypt protected streams, but some (mpv with yt-dlp) can resolve the page.
-      const url = media.src ?? (media.encrypted ? undefined : await findManifest(tabId)) ?? media.page;
+      const url = media.src ?? (media.encrypted ? undefined : await findManifest(tabId, media.manifests)) ?? media.page;
       const { title = '' } = await browser.tabs.get(tabId);
-      const file = URL.createObjectURL(new Blob([playlist(url, title, media.time)], { type: 'audio/x-mpegurl' }));
+      const file = URL.createObjectURL(new Blob([playlist(url, title, media.time, media.page)], { type: 'audio/x-mpegurl' }));
       const id = await browser.downloads.download({ url: file, filename: 'hare.m3u', conflictAction: 'overwrite', saveAs: false });
       let state;
       while ((state = (await browser.downloads.search({ id }))[0]?.state) === 'in_progress') await new Promise(resolve => setTimeout(resolve, 50));
