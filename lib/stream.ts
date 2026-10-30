@@ -6,8 +6,10 @@ export const MANIFEST_URLS = ['*://*/*.m3u8*', '*://*/*.mpd*'];
 const key = (tabId: number) => `manifests-${tabId}`;
 let writes = Promise.resolve();
 
+// Local rather than session storage, which updates clear. Firefox runs Hare in tabs opened before an
+// update, and a page stops listing its requests after the first 250, so these may be all there is.
 async function manifests(tabId: number): Promise<string[]> {
-  const stored = await browser.storage.session.get(key(tabId)) as Record<string, string[] | undefined>;
+  const stored = await browser.storage.local.get(key(tabId)) as Record<string, string[] | undefined>;
   return stored[key(tabId)] ?? [];
 }
 
@@ -18,12 +20,20 @@ export function recordManifest(tabId: number, url: string): void {
   // Serialized, so concurrent responses don't overwrite each other's additions.
   writes = writes.then(async () => {
     const urls = await manifests(tabId);
-    if (!urls.includes(url)) await browser.storage.session.set({ [key(tabId)]: [...urls, url].slice(-20) });
+    if (!urls.includes(url)) await browser.storage.local.set({ [key(tabId)]: [...urls, url].slice(-20) });
   }).catch(() => {});
 }
 
 export function forgetManifests(tabId: number): void {
-  writes = writes.then(() => browser.storage.session.remove(key(tabId))).catch(() => {});
+  writes = writes.then(() => browser.storage.local.remove(key(tabId))).catch(() => {});
+}
+
+/** Tab ids start over when the browser restarts. */
+export function forgetAllManifests(): void {
+  writes = writes.then(async () => {
+    const stored = await browser.storage.local.get(null);
+    await browser.storage.local.remove(Object.keys(stored).filter(name => name.startsWith('manifests-')));
+  }).catch(() => {});
 }
 
 /** The newest manifest that lists every quality. HLS players load single-quality playlists after their master. */

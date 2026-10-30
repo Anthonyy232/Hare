@@ -148,8 +148,8 @@ test('popup finds a playlist the page loaded before Hare started watching', asyn
   const popup = await openUI(extension, 'popup', page);
   // Forget what the background saw, as when Hare is installed after the page loads.
   const key = `manifests-${await tabId(popup, page)}`;
-  await expect.poll(() => popup.evaluate(async key => (await (globalThis as any).chrome.storage.session.get(key))[key]?.length, key)).toBe(2);
-  await popup.evaluate(key => (globalThis as any).chrome.storage.session.remove(key), key);
+  await expect.poll(() => popup.evaluate(async key => (await (globalThis as any).chrome.storage.local.get(key))[key]?.length, key)).toBe(2);
+  await popup.evaluate(key => (globalThis as any).chrome.storage.local.remove(key), key);
   expect(await openInPlayer(popup)).toBe(masterPlaylist);
 });
 
