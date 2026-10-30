@@ -4,7 +4,7 @@ import { SyncCoordinator } from '../lib/sync-coordinator';
 import { SyncStartup } from '../lib/sync-startup';
 import { getTabMedia } from '../lib/messaging';
 import { mpv, MPV_TAB_ID } from '../lib/mpv';
-import { MANIFEST_URLS, forgetManifests, recordManifest } from '../lib/stream';
+import { MANIFEST_URLS, forgetAllManifests, forgetManifests, recordManifest } from '../lib/stream';
 import type { SyncCandidate } from '../lib/sync-types';
 import type { HareMessage, Replies } from '../lib/types';
 
@@ -28,6 +28,7 @@ export default defineBackground(() => {
 
   browser.webRequest.onCompleted.addListener(({ tabId, url }) => recordManifest(tabId, url), { urls: MANIFEST_URLS });
   browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => { if (frameId === 0) forgetManifests(tabId); });
+  browser.runtime.onStartup.addListener(forgetAllManifests);
 
   browser.runtime.onMessage.addListener((message: HareMessage, sender, sendResponse) => {
     const handle = async (): Promise<Replies[keyof Replies]> => {
