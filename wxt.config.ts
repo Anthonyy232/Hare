@@ -1,4 +1,5 @@
 import { defineConfig } from 'wxt';
+import { HARE_MATCHES } from './lib/hostname';
 
 export default defineConfig({
   manifestVersion: 3,
@@ -22,7 +23,7 @@ export default defineConfig({
     description: 'Control HTML5 video/audio playback speed with keyboard shortcuts',
     permissions: ['storage', 'webNavigation', 'webRequest'],
     optional_permissions: ['downloads', 'downloads.open'],
-    host_permissions: ['http://*/*', 'https://*/*', 'file:///*'],
+    host_permissions: HARE_MATCHES,
     icons: {
       16: 'icons/icon16.png',
       48: 'icons/icon48.png',

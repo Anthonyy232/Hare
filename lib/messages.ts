@@ -1,16 +1,19 @@
-import type { DriftCorrectPayload, SyncCandidate, SyncCommandPayload, SyncEventPayload, SyncPositionResponse, SyncStatusResponse } from './sync-types';
+import type { DriftCorrectPayload, SyncCandidate, SyncEventPayload, SyncPausePayload, SyncPlayPayload, SyncPositionResponse, SyncRatePayload, SyncSeekPayload, SyncStatusResponse } from './sync/types';
+import type { StreamInfo } from './export/stream';
 
 export type HareMessage =
   | { type: 'GET_PAGE_CONTEXT' }
   | { type: 'GET_STATUS' }
   | { type: 'SET_SPEED'; payload: number }
-  | { type: 'RESET_SPEED' }
   | { type: 'GET_STREAM' }
   | { type: 'FIND_MANIFEST'; payload: { tabId: number; manifests: string[] } }
   | { type: 'SYNC_ACTIVATE' }
   | { type: 'SYNC_DEACTIVATE' }
   | { type: 'SYNC_EVENT'; payload: SyncEventPayload }
-  | { type: 'SYNC_PAUSE' | 'SYNC_PLAY' | 'SYNC_SEEK' | 'SYNC_RATE'; payload: SyncCommandPayload }
+  | { type: 'SYNC_PAUSE'; payload: SyncPausePayload }
+  | { type: 'SYNC_PLAY'; payload: SyncPlayPayload }
+  | { type: 'SYNC_SEEK'; payload: SyncSeekPayload }
+  | { type: 'SYNC_RATE'; payload: SyncRatePayload }
   | { type: 'SYNC_DRIFT_CORRECT'; payload: DriftCorrectPayload }
   | { type: 'SYNC_GET_POSITION' }
   | { type: 'GET_SYNC_CANDIDATES' }
@@ -21,16 +24,15 @@ export type HareMessage =
   | { type: 'SET_NUDGE_STEP'; payload: number }
   | { type: 'GET_SYNC_STATUS' };
 
-export type Ack = { success: boolean; error?: string };
+type Ack = { success: boolean; error?: string };
 
 /** Reply for each message type. Any handler may also reply `{ success: false, error }` if it throws. */
 export interface Replies {
   GET_PAGE_CONTEXT: { hostname: string };
   GET_STATUS: { speeds: number[] };
   SET_SPEED: Ack;
-  RESET_SPEED: Ack;
   FIND_MANIFEST: { url: string | null };
-  GET_STREAM: { src: string | null; page: string; encrypted: boolean; time: number; manifests: string[] } | null;
+  GET_STREAM: StreamInfo | null;
   SYNC_ACTIVATE: (SyncPositionResponse & { success: true }) | { success: false; error: string };
   SYNC_DEACTIVATE: Ack;
   SYNC_EVENT: Ack;

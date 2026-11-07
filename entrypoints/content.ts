@@ -1,114 +1,92 @@
-import { loadSettings, watchSettings, isBlacklisted } from '../lib/settings';
-import type { VideoController } from '../lib/controller';
-import { MediaRegistry } from '../lib/media-registry';
-import { createKeybindHandler, type KeybindHandler } from '../lib/keybinds';
-import { createCrossFramePointerBridge, type CrossFramePointerBridge } from '../lib/cross-frame-pointer';
-import { getSiteHandler } from '../lib/site-handlers';
+import { loadSettings, watchSettings, isBlacklisted } from '../lib/settings/settings';
+import { DEFAULT_SETTINGS, type Settings } from '../lib/settings/schema';
+import type { VideoController } from '../lib/media/controller';
+import { MediaRegistry } from '../lib/media/registry';
+import { listenForShortcuts } from '../lib/media/keybinds';
+import { bridgeCrossFramePointers } from '../lib/media/cross-frame-pointer';
+import { listenForParentActions } from '../lib/media/frame-actions';
+import { getSiteHandler } from '../lib/media/site-handlers';
+import { primaryMedia } from '../lib/media/detector';
+import { describeStream } from '../lib/export/stream';
+import { SyncEndpoint } from '../lib/sync/endpoint';
 import type { HareMessage, Replies } from '../lib/messages';
-import { SPEED } from '../lib/constants';
 import { logger } from '../lib/logger';
-import { SyncEndpoint } from '../lib/sync-endpoint';
-import { withTimeout } from '../lib/async-utils';
-import { sendToBackground } from '../lib/messaging';
-import { primaryMedia } from '../lib/media-detector';
+import { HARE_MATCHES } from '../lib/hostname';
+import { sendToBackground, withTimeout } from '../lib/messaging';
 
 export default defineContentScript({
-  matches: ['http://*/*', 'https://*/*', 'file:///*'],
+  matches: HARE_MATCHES,
   allFrames: true,
   matchAboutBlank: true,
   runAt: 'document_idle',
 
   async main(ctx) {
     const sync = new SyncEndpoint();
+    const readSettings = (): Promise<Settings> => loadSettings().catch(error => {
+      logger.warn('Failed to load settings:', error);
+      return structuredClone(DEFAULT_SETTINGS);
+    });
 
-    let settings = await loadSettings();
+    let settings = await readSettings();
     // Embedded frames also honor the top page's exclusion.
     const pageHostname = await withTimeout(sendToBackground({ type: 'GET_PAGE_CONTEXT' }))
       .then(reply => reply.hostname ?? location.hostname, () => location.hostname);
-    const isExcluded = () => isBlacklisted(settings.blacklist, location.hostname) || isBlacklisted(settings.blacklist, pageHostname);
 
-    let mediaRegistry: MediaRegistry | null = null;
-    let keybindHandler: KeybindHandler | null = null;
-    let pointerBridge: CrossFramePointerBridge | null = null;
-    let isActive = false;
-    let suspended = false;
+    let inBackForwardCache = false;
+    let cleanedUp = false;
+    let running: { registry: MediaRegistry; stopInput: () => void } | null = null;
 
-    const connectedControllers = (): VideoController[] => mediaRegistry?.connectedControllers() ?? [];
+    const connectedControllers = (): VideoController[] => running?.registry.connectedControllers() ?? [];
 
-    const start = (): void => {
-      if (isActive || suspended || isExcluded()) return;
-      isActive = true;
-      mediaRegistry = new MediaRegistry(settings, getSiteHandler(), media => {
-        if (sync.isFor(media)) sync.deactivate(true);
-      });
-      keybindHandler = createKeybindHandler(connectedControllers, () => settings);
-      pointerBridge = createCrossFramePointerBridge(connectedControllers);
-    };
-
-    const stop = (): void => {
-      if (!isActive) return;
-      isActive = false;
-      keybindHandler?.destroy();
-      keybindHandler = null;
-      pointerBridge?.destroy();
-      pointerBridge = null;
-      sync.deactivate(true);
-      mediaRegistry?.destroy();
-      mediaRegistry = null;
-    };
-
-    const unwatchSettings = watchSettings((newSettings) => {
-      settings = newSettings;
-      const shouldBeActive = settings.enabled && !isExcluded();
-
-      if (shouldBeActive !== isActive) {
-        if (shouldBeActive) start();
-        else stop();
-        return;
+    const reconcile = (): void => {
+      const shouldRun = settings.enabled && !inBackForwardCache && !cleanedUp
+        && !isBlacklisted(settings.blacklist, location.hostname) && !isBlacklisted(settings.blacklist, pageHostname);
+      if (running && !shouldRun) {
+        running.stopInput();
+        sync.deactivate(true);
+        running.registry.destroy();
+        running = null;
+      } else if (!running && shouldRun) {
+        const registry = new MediaRegistry(settings, getSiteHandler(), media => {
+          if (sync.isFor(media)) sync.deactivate(true);
+        });
+        const stops = [
+          listenForShortcuts(connectedControllers, () => settings.keyBindings),
+          bridgeCrossFramePointers(connectedControllers),
+          listenForParentActions(connectedControllers),
+        ];
+        running = { registry, stopInput: () => stops.forEach(stop => stop()) };
+      } else {
+        running?.registry.updateSettings(settings);
       }
-      if (!isActive) return;
-      mediaRegistry?.updateSettings(settings);
+    };
+
+    const unwatchSettings = watchSettings(newSettings => {
+      settings = newSettings;
+      reconcile();
     });
 
     const handleMessage = async (message: HareMessage): Promise<Replies[keyof Replies]> => {
-      const forEachController = (action: (controller: VideoController) => void) => {
-        const targets = connectedControllers();
-        targets.forEach(action);
-        return { success: targets.length > 0 };
-      };
       switch (message.type) {
         case 'GET_STATUS':
-          mediaRegistry?.rescan();
+          running?.registry.rescan();
           return { speeds: connectedControllers().map(controller => controller.speed) };
-        case 'SET_SPEED': return forEachController(controller => controller.setSpeed(message.payload));
-        case 'RESET_SPEED': return forEachController(controller => controller.setSpeed(SPEED.DEFAULT));
+        case 'SET_SPEED': {
+          const targets = connectedControllers();
+          for (const controller of targets) controller.setSpeed(message.payload);
+          return { success: targets.length > 0 };
+        }
         case 'GET_STREAM': {
           const media = primaryMedia(connectedControllers())?.media;
-          // Calls and screen shares have no link to hand over.
-          if (!media || media.srcObject instanceof MediaStream) return null;
-          return {
-            src: /^(https?|file):/.test(media.currentSrc) ? media.currentSrc : null,
-            page: location.href,
-            encrypted: media.mediaKeys !== null,
-            time: Number.isFinite(media.duration) ? media.currentTime : 0,
-            // Covers players that started before Hare's background could see their requests.
-            manifests: performance.getEntriesByType('resource').map(entry => entry.name).filter(name => /\.(m3u8|mpd)(\?|$)/.test(name)),
-          };
+          return media ? describeStream(media) : null;
         }
-        case 'SYNC_ACTIVATE':
-          mediaRegistry?.rescan();
-          return sync.activate(connectedControllers());
-        case 'SYNC_DEACTIVATE':
-          sync.deactivate(false);
-          return { success: true };
-        case 'SYNC_GET_POSITION': return sync.getPosition();
-        case 'SYNC_PAUSE':
-        case 'SYNC_PLAY':
-        case 'SYNC_SEEK':
-        case 'SYNC_RATE':
-        case 'SYNC_DRIFT_CORRECT':
-          return sync.execute(message);
-        default: return { success: false, error: 'Unknown message type' };
+        default: {
+          const findControllers = () => {
+            running?.registry.rescan();
+            return connectedControllers();
+          };
+          return sync.handle(message, findControllers) ?? { success: false, error: 'Unknown message type' };
+        }
       }
     };
 
@@ -121,28 +99,29 @@ export default defineContentScript({
     };
     browser.runtime.onMessage.addListener(messageListener);
 
-    if (settings.enabled) start();
+    reconcile();
 
-    let cleanedUp = false;
     const cleanup = () => {
       if (cleanedUp) return;
       cleanedUp = true;
       window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('pageshow', handlePageShow);
-      stop();
+      reconcile();
       unwatchSettings();
       browser.runtime.onMessage.removeListener(messageListener);
     };
 
     const handlePageHide = (event: PageTransitionEvent) => {
-      if (event.persisted) { suspended = true; stop(); }
-      else cleanup();
+      if (!event.persisted) return cleanup();
+      inBackForwardCache = true;
+      reconcile();
     };
     const handlePageShow = async (event: PageTransitionEvent) => {
       if (!event.persisted || cleanedUp) return;
-      settings = await loadSettings();
-      suspended = false;
-      if (!cleanedUp && settings.enabled) start();
+      // Cleared first so a pagehide during the read puts the page back in the cache.
+      inBackForwardCache = false;
+      settings = await readSettings();
+      reconcile();
     };
     ctx.onInvalidated(cleanup);
     window.addEventListener('pagehide', handlePageHide);

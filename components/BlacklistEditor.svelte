@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { validateBlacklist } from '../lib/settings';
   interface Props {
     blacklist: string;
+    errors: string[];
     onBlacklistChange: (blacklist: string) => void;
   }
 
-  let { blacklist, onBlacklistChange }: Props = $props();
-  const errors = $derived(validateBlacklist(blacklist));
+  let { blacklist, errors, onBlacklistChange }: Props = $props();
 
   function handleInput(event: Event) {
     const target = event.target as HTMLTextAreaElement;

@@ -1,11 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { SyncCandidate, SyncStatusResponse } from "../lib/sync-types";
+  import { MPV_TAB_ID, NUDGE_STEPS, type SyncCandidate, type SyncStatusResponse } from "../lib/sync/types";
   import type { HareMessage } from "../lib/messages";
-  import { SYNC, NUDGE_STEPS } from "../lib/sync-types";
   import { sendToBackground } from "../lib/messaging";
   import { browser } from "wxt/browser";
-  import { MPV_TAB_ID } from "../lib/sync-types";
 
   let { onExpandedChange }: { onExpandedChange?: (expanded: boolean) => void } = $props();
 
@@ -17,12 +15,12 @@
   let showSetup = $state(false);
   let error: string | null = $state(null);
   let brokenIcons: number[] = $state([]);
-  const nudgeStep = $derived.by(() => syncStatus?.nudgeStep ?? SYNC.DEFAULT_NUDGE_STEP);
-  const offsetDisplay = $derived.by(() => offsetLabel(syncStatus?.offset ?? 0));
-  const expanded = $derived.by(() => showSetup || syncStatus?.active === true);
+  const active = $derived.by(() => syncStatus?.active ? syncStatus : null);
+  const offsetDisplay = $derived(offsetLabel(active?.offset ?? 0));
+  const expanded = $derived(showSetup || active !== null);
+  const message = $derived(error ?? (showSetup && !loading && candidates.length < 2 ? "Need at least 2 tabs with videos" : null));
   $effect(() => { onExpandedChange?.(expanded); });
 
-  const NEED_TWO = "Need at least 2 tabs with videos";
   const scriptsFolder = navigator.userAgent.includes("Windows") ? "%APPDATA%\\mpv\\scripts" : "~/.config/mpv/scripts";
   let copied = $state(false);
   const mpvFound = $derived(candidates.some(candidate => candidate.tabId === MPV_TAB_ID));
@@ -34,7 +32,6 @@
       const found = await sendToBackground({ type: "GET_MPV_CANDIDATE" }).catch(() => null);
       if (!found || loading || mpvFound) return;
       candidates = [...candidates, found];
-      if (error === NEED_TWO && candidates.length >= 2) error = null;
     }, 2000);
     return () => clearInterval(timer);
   });
@@ -65,9 +62,6 @@
     try {
       candidates = await sendToBackground({ type: "GET_SYNC_CANDIDATES" });
       selectedTabs = selectedTabs.filter(id => candidates.some(candidate => candidate.tabId === id));
-      if (candidates.length < 2) {
-        error = NEED_TWO;
-      }
     } catch {
       error = "Failed to find video tabs";
       candidates = [];
@@ -125,7 +119,7 @@
   async function changeNudgeStep(event: Event) {
     const select = event.currentTarget as HTMLSelectElement;
     await changeSync({ type: 'SET_NUDGE_STEP', payload: Number(select.value) });
-    select.value = String(nudgeStep);
+    if (active) select.value = String(active.nudgeStep);
   }
 
   function openSetup() {
@@ -159,8 +153,8 @@
 </script>
 
 <section class="sync-section" aria-label="Video sync">
-  {#if error}<div class="sync-error" role="alert">{error}</div>{/if}
-  {#if syncStatus?.active}
+  {#if message}<div class="sync-error" role="alert">{message}</div>{/if}
+  {#if active}
     <div class="sync-active">
       <div class="sync-header">
         <div class="sync-badge">SYNC</div>
@@ -170,15 +164,11 @@
       <div class="sync-tabs">
         <div class="sync-tab">
           <span class="tab-label">A</span>
-          <span class="tab-title" title={syncStatus.videoA?.title}>
-            {syncStatus.videoA?.title ?? "Tab A"}
-          </span>
+          <span class="tab-title" title={active.videoA.title}>{active.videoA.title}</span>
         </div>
         <div class="sync-tab">
           <span class="tab-label">B</span>
-          <span class="tab-title" title={syncStatus.videoB?.title}>
-            {syncStatus.videoB?.title ?? "Tab B"}
-          </span>
+          <span class="tab-title" title={active.videoB.title}>{active.videoB.title}</span>
         </div>
       </div>
 
@@ -194,13 +184,13 @@
           <button
             class="nudge-btn"
             disabled={loading}
-            onclick={() => changeSync({ type: 'NUDGE_OFFSET', payload: -nudgeStep })}
-            title="Shift B earlier by {formatStep(nudgeStep)}"
+            onclick={() => changeSync({ type: 'NUDGE_OFFSET', payload: -active.nudgeStep })}
+            title="Shift B earlier by {formatStep(active.nudgeStep)}"
             aria-label="Shift B earlier"
           >◀</button>
           <select
             class="step-select"
-            value={nudgeStep}
+            value={active.nudgeStep}
             onchange={changeNudgeStep}
             disabled={loading}
             aria-label="Nudge step"
@@ -212,8 +202,8 @@
           <button
             class="nudge-btn"
             disabled={loading}
-            onclick={() => changeSync({ type: 'NUDGE_OFFSET', payload: nudgeStep })}
-            title="Shift B later by {formatStep(nudgeStep)}"
+            onclick={() => changeSync({ type: 'NUDGE_OFFSET', payload: active.nudgeStep })}
+            title="Shift B later by {formatStep(active.nudgeStep)}"
             aria-label="Shift B later"
           >▶</button>
         </div>

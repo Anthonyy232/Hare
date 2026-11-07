@@ -1,15 +1,27 @@
 import { browser } from 'wxt/browser';
-import { withTimeout } from './async-utils';
 import type { HareMessage, Reply } from './messages';
 
-export function sendToTab<M extends HareMessage>(tabId: number, message: M, frameId?: number, timeoutMs?: number): Promise<Reply<M>> {
+export async function withTimeout<T>(request: Promise<T>, timeoutMs = 2500): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('The tab did not respond. Reload it and try again.')), timeoutMs);
+      }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
+export function sendToTab<M extends HareMessage>(tabId: number, message: M, frameId?: number): Promise<Reply<M>> {
   const request = frameId == null
     ? browser.tabs.sendMessage(tabId, message)
     : browser.tabs.sendMessage(tabId, message, { frameId });
-  return withTimeout(request as Promise<Reply<M>>, timeoutMs);
+  return withTimeout(request as Promise<Reply<M>>);
 }
 
-export function sendToBackground<M extends HareMessage>(message: M): Promise<Reply<M>> {
+// After an extension update, sendMessage throws synchronously in old content scripts; async turns that into a rejection.
+export async function sendToBackground<M extends HareMessage>(message: M): Promise<Reply<M>> {
   return browser.runtime.sendMessage(message);
 }
 
@@ -20,23 +32,13 @@ export async function getFrameIds(tabId: number): Promise<number[]> {
   } catch { return [0]; }
 }
 
+/** Sends to every frame of a tab; frames without Hare, or that fail to answer, are left out. */
+export async function askEveryFrame<M extends HareMessage>(tabId: number, message: M): Promise<Array<{ frameId: number; reply: Reply<M> }>> {
+  const replies = await Promise.all((await getFrameIds(tabId)).map(frameId =>
+    sendToTab(tabId, message, frameId).then(reply => ({ frameId, reply }), () => null)));
+  return replies.filter(reply => reply !== null);
+}
+
 export async function getTabMedia(tabId: number): Promise<Array<{ frameId: number; speeds: number[] }>> {
-  const frames = await Promise.all((await getFrameIds(tabId)).map(frameId =>
-    sendToTab(tabId, { type: 'GET_STATUS' }, frameId).then(reply => ({ frameId, speeds: reply.speeds ?? [] }), () => null)));
-  return frames.filter(frame => frame !== null);
-}
-
-export interface MediaSummary {
-  videoCount: number;
-  currentSpeed: number;
-  mixedSpeeds: boolean;
-}
-
-export function summarize(speeds: number[]): MediaSummary {
-  const currentSpeed = speeds[0] ?? 1;
-  return {
-    videoCount: speeds.length,
-    currentSpeed,
-    mixedSpeeds: speeds.some(speed => Math.abs(speed - currentSpeed) > 0.001),
-  };
+  return (await askEveryFrame(tabId, { type: 'GET_STATUS' })).map(({ frameId, reply }) => ({ frameId, speeds: reply.speeds ?? [] }));
 }

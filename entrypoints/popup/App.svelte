@@ -2,12 +2,24 @@
   import { onMount, onDestroy } from "svelte";
   import SpeedControl from "../../components/SpeedControl.svelte";
   import SyncMode from "../../components/SyncMode.svelte";
-  import type { HareMessage } from "../../lib/messages";
-  import { SPEED, UI } from "../../lib/constants";
-  import { loadSettings, saveSettings, isBlacklisted, removeExactSiteExclusions } from "../../lib/settings";
-  import { getTabMedia, summarize, sendToTab, type MediaSummary } from "../../lib/messaging";
-  import { exportToPlayer } from "../../lib/player-export";
+  import { clampSpeed, sameSpeed } from "../../lib/speed";
+  import { isHarePage } from "../../lib/hostname";
+  import { loadSettings, saveSettings, isBlacklisted, includeSite } from "../../lib/settings/settings";
+  import { getTabMedia, sendToTab } from "../../lib/messaging";
+  import { exportToPlayer } from "../../lib/export/player-export";
 
+  interface MediaSummary {
+    videoCount: number;
+    currentSpeed: number;
+    mixedSpeeds: boolean;
+  }
+
+  function summarize(speeds: number[]): MediaSummary {
+    const currentSpeed = speeds[0] ?? 1;
+    return { videoCount: speeds.length, currentSpeed, mixedSpeeds: speeds.some(speed => !sameSpeed(speed, currentSpeed)) };
+  }
+
+  const TOAST_MS = 4000;
   let status: MediaSummary | null = $state(null);
   let loading = $state(true);
   let busy = $state(false);
@@ -20,7 +32,6 @@
   let tabUrl = '';
   let siteLabel = $state('Current tab');
   let siteAction: 'enable' | 'include' | 'settings' | null = $state(null);
-  const speedPresets = [0.75, 1, 1.25, 1.5, 2];
   let disposed = false;
   let toastTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -32,7 +43,7 @@
   function showToast(message: string) {
     if (toastTimeout) clearTimeout(toastTimeout);
     toast = message;
-    toastTimeout = setTimeout(() => { toast = null; }, UI.TOAST_DURATION_MS * 2);
+    toastTimeout = setTimeout(() => { toast = null; }, TOAST_MS);
   }
 
   function loadStatus(): Promise<void> {
@@ -51,19 +62,18 @@
       // Without the tabs permission, protected pages can omit their URL entirely.
       const url = tabUrl ? new URL(tabUrl) : null;
       siteLabel = url ? (url.protocol === 'file:' ? 'Local file' : url.hostname || 'Current tab') : 'Browser page';
-      const settings = await loadSettings({ strict: true });
+      const settings = await loadSettings();
       if (!settings.enabled) {
         nextSiteAction = 'enable';
         nextHint = 'Enable Hare to control playback.';
         throw new Error('Hare is turned off');
       }
-      if (!url || !/^(https?|file):/.test(tabUrl)) {
+      if (!url || !isHarePage(tabUrl)) {
         nextHint = 'Open a regular webpage with video or audio.';
         throw new Error('Hare cannot run on this browser page');
       }
       if (isBlacklisted(settings.blacklist, url.hostname)) {
-        const remaining = removeExactSiteExclusions(settings.blacklist, url.hostname);
-        nextSiteAction = isBlacklisted(remaining, url.hostname) ? 'settings' : 'include';
+        nextSiteAction = includeSite(settings.blacklist, url.hostname) === null ? 'settings' : 'include';
         nextHint = nextSiteAction === 'include'
           ? 'Use Hare on this site to restore playback controls, including embedded players.'
           : 'A broader domain or regular expression excludes this site. Edit Excluded sites in Settings to use Hare here.';
@@ -87,32 +97,25 @@
     }
   }
 
-  async function command(message: Extract<HareMessage, { type: "SET_SPEED" | "RESET_SPEED" }>, requestedSpeed?: number) {
-    if (busy || tabId == null || !status) return;
+  async function setSpeed(requested: number) {
+    if (busy || tabId == null || !status || !Number.isFinite(requested)) return;
+    const speed = clampSpeed(requested);
     busy = true;
     try {
       await statusRequest;
       const frames = (await getTabMedia(tabId)).filter(frame => frame.speeds.length > 0);
-      const results = await Promise.allSettled(frames.map(frame => sendToTab(tabId!, message, frame.frameId)));
+      const results = await Promise.allSettled(frames.map(frame => sendToTab(tabId!, { type: 'SET_SPEED', payload: speed }, frame.frameId)));
       if (!results.length || results.some(result => result.status === "rejected" || !result.value.success)) {
         showToast('Some media could not be updated. Reload the tab and try again.');
       }
       await loadStatus();
-      if (requestedSpeed != null && status && (status.mixedSpeeds || Math.abs(status.currentSpeed - requestedSpeed) > 0.001)) {
+      if (status && (status.mixedSpeeds || !sameSpeed(status.currentSpeed, speed))) {
         showToast('This player limited or blocked the requested speed.');
       }
     } catch {
       showToast('Could not update playback. Reload the tab and try again.');
     } finally { busy = false; }
   }
-
-  function setSpeed(speed: number) {
-    if (!Number.isFinite(speed)) return;
-    const value = Math.round(Math.max(SPEED.MIN, Math.min(SPEED.MAX, speed)) * 100) / 100;
-    void command({ type: 'SET_SPEED', payload: value }, value);
-  }
-
-  function resetSpeed() { void command({ type: 'RESET_SPEED' }, SPEED.DEFAULT); }
 
   async function openInPlayer() {
     if (busy || tabId == null) return;
@@ -136,14 +139,13 @@
     try {
       await statusRequest;
       // Read immediately before writing so unrelated settings changed elsewhere survive.
-      const settings = await loadSettings({ strict: true });
+      const settings = await loadSettings();
       if (action === 'enable') settings.enabled = true;
       else {
         const tab = await browser.tabs.get(tabId!);
         if (tab.url !== actionUrl) throw new Error('The tab navigated. Try again on the new page.');
-        const host = new URL(actionUrl).hostname;
-        const remaining = removeExactSiteExclusions(settings.blacklist, host);
-        if (isBlacklisted(remaining, host)) throw new Error('A broader rule excludes this site. Edit Excluded sites in Settings.');
+        const remaining = includeSite(settings.blacklist, new URL(actionUrl).hostname);
+        if (remaining === null) throw new Error('A broader rule excludes this site. Edit Excluded sites in Settings.');
         settings.blacklist = remaining;
       }
       await saveSettings(settings);
@@ -213,29 +215,15 @@
         <div class="speed-display" aria-live="polite">
           {status.currentSpeed.toFixed(2)}<span class="speed-unit">x</span>
         </div>
-
-        <div class="speed-presets" role="group" aria-label="Speed presets">
-          {#each speedPresets as preset}
-            <button
-              class="preset"
-              data-speed-action
-              aria-label={`Set speed to ${preset}×`}
-              aria-pressed={!status.mixedSpeeds && Math.abs(status.currentSpeed - preset) < 0.001}
-              disabled={busy}
-              onclick={() => setSpeed(preset)}
-            >{preset}<span aria-hidden="true">×</span></button>
-          {/each}
-        </div>
-
         {/if}
 
         <SpeedControl
           speed={status.currentSpeed}
-          onSpeedChange={setSpeed}
-          onReset={resetSpeed}
+          mixedSpeeds={status.mixedSpeeds}
+          compact={syncExpanded}
           disabled={busy}
+          onSpeedChange={setSpeed}
         />
-        {#if !syncExpanded}<p class="input-hint">Custom speed: type a value and press Enter</p>{/if}
         {#if status.mixedSpeeds}
           <p class="hint">Media have different speeds. Changes apply to all media in this tab.</p>
         {:else if status.videoCount > 1}
@@ -439,12 +427,6 @@
     margin-left: 4px;
   }
 
-  .speed-presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; margin-top: 6px; }
-  .preset { min-height: 36px; padding: 6px 0; border: 1px solid #ffffff24; border-radius: 6px; background: #ffffff06; color: #c8d0dc; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
-  .preset span { margin-left: 1px; font-size: 11px; }
-  .preset:hover:not(:disabled) { background: #60a5fa1a; border-color: #60a5fa80; }
-  .preset[aria-pressed="true"] { background: var(--color-focus); border-color: var(--color-focus); color: #152236; }
-  .input-hint { color: #a2abba; font-size: 11px; margin: -4px 0 2px; }
 
   .settings-btn {
     width: 100%;

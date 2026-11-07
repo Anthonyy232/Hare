@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { ACTIONS, clampBindingValue, type KeyBinding } from "../lib/key-actions";
+  import { ACTIONS, clampBindingValue, isShortcutKey, type KeyBinding } from "../lib/settings/key-actions";
 
   interface Props {
     bindings: KeyBinding[];
@@ -40,8 +40,7 @@
     event.preventDefault();
     event.stopPropagation();
 
-    if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey
-      || /^(Control|Alt|Meta|Shift)/.test(event.code)) {
+    if (!isShortcutKey(event) || /^(Control|Alt|Meta|Shift)/.test(event.code)) {
       errorMessage = 'Choose a single key without Ctrl, Alt, Shift, or Command.';
       return;
     }

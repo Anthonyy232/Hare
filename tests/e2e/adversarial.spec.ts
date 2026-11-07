@@ -1,5 +1,5 @@
 import { test, expect, openVideo, openUI, rate, setSettings, rpc, tabId, launchExtension } from './fixtures/extension';
-import { DEFAULT_SETTINGS } from '../../lib/types';
+import { DEFAULT_SETTINGS } from '../../lib/settings/schema';
 
 test('large controller buttons remain reachable inside a small player', async ({ extension }, testInfo) => {
   await setSettings(extension.worker, { controllerButtonSize: 24, controllerOpacity: 1 });
@@ -84,8 +84,8 @@ test('sync recovers buffering after the real extension service worker is termina
   await a.locator('video').evaluate(v => v.dispatchEvent(new Event('waiting')));
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   await expect.poll(() => popup.evaluate(async () => {
-    const state = await (globalThis as any).chrome.storage.session.get('syncSession_v2');
-    return state.syncSession_v2.session.bufferingTab;
+    const state = await (globalThis as any).chrome.storage.session.get('syncSession');
+    return state.syncSession.bufferingSide;
   })).toBe('A');
   const cdp = await extension.context.newCDPSession(a);
   const versions = new Map<string, { versionId: string; scriptURL: string; runningStatus: string }>();
@@ -449,7 +449,7 @@ test('native buffer starvation recovers while paused and fatal media errors end 
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   // A second stall pauses the first source too; paused media recovers with canplay, not playing.
   await popup.evaluate(async tab => (globalThis as any).chrome.tabs.sendMessage(tab, {
-    type: 'SYNC_PAUSE', payload: { action: 'pause', position: -1, timestamp: Date.now(), generation: 1, buffering: true },
+    type: 'SYNC_PAUSE', payload: { buffering: true },
   }, { frameId: 0 }), aId);
   await expect.poll(() => a.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   await a.evaluate(() => (window as any).refill());

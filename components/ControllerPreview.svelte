@@ -1,6 +1,6 @@
 <script lang="ts">
   import controllerCSS from '../assets/controller.css?raw';
-  import { createControllerView } from '../lib/controller-view';
+  import { applyAppearance, createControllerView } from '../lib/media/controller-view';
 
   let { opacity, size, startHidden }: { opacity: number; size: number; startHidden: boolean } = $props();
   let expanded = $state(false);
@@ -10,14 +10,13 @@
     const style = document.createElement('style');
     style.textContent = controllerCSS + `
       :host { position: static; z-index: auto; pointer-events: none !important; max-width: 100%; --hare-max-width: 100%; }
-      .hare-controller, .hare-controller:hover { opacity: var(--preview-opacity); }
+      .hare-controller:hover, .hare-controller:focus-within { opacity: var(--hare-opacity); }
       .hare-controls { display: var(--preview-controls) !important; }
     `;
     const { controllerEl: controller } = createControllerView();
     shadow.append(style, controller);
     function update(value: typeof values) {
-      controller.style.setProperty('--hare-font-size', `${value.size}px`);
-      controller.style.setProperty('--preview-opacity', String(value.expanded ? 1 : value.opacity));
+      applyAppearance(controller, value.expanded ? 1 : value.opacity, value.size);
       controller.style.setProperty('--preview-controls', value.expanded ? 'flex' : 'none');
     }
     update(values);

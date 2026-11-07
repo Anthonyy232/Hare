@@ -163,8 +163,9 @@ end
 
 local function apply(query)
   local seek = tonumber(query.seek)
+  local tolerance = tonumber(query.tolerance) or 0
   local time = mp.get_property_number('time-pos')
-  if seek and time and math.abs(time - seek) > 0.05 then
+  if seek and time and math.abs(time - seek) > tolerance then
     expected_seek = seek
     mp.commandv('seek', tostring(seek), 'absolute+exact')
   end

@@ -1,25 +1,20 @@
 <script lang="ts">
-  import { SPEED } from "../lib/constants";
+  import { SPEED, sameSpeed } from "../lib/speed";
 
   interface Props {
     speed: number;
+    mixedSpeeds: boolean;
+    compact: boolean;
+    disabled: boolean;
     onSpeedChange: (speed: number) => void;
-    onReset: () => void;
-    disabled?: boolean;
   }
 
-  let { speed, onSpeedChange, onReset, disabled = false }: Props = $props();
+  const PRESETS = [0.75, 1, 1.25, 1.5, 2];
+  let { speed, mixedSpeeds, compact, disabled, onSpeedChange }: Props = $props();
+  let root: HTMLDivElement;
   let draft = $state('');
   let editing = $state(false);
   $effect(() => { if (!editing) draft = speed.toFixed(2); });
-
-  function decrease() {
-    onSpeedChange(Math.max(SPEED.MIN, speed - SPEED.STEP));
-  }
-
-  function increase() {
-    onSpeedChange(Math.min(SPEED.MAX, speed + SPEED.STEP));
-  }
 
   function handleInput(event: Event) {
     draft = (event.target as HTMLInputElement).value;
@@ -30,15 +25,29 @@
     editing = false;
     const value = draft.trim() ? Number(draft) : NaN;
     draft = speed.toFixed(2);
-    if (Number.isFinite(value) && Math.abs(value - speed) > 0.001) onSpeedChange(Math.max(SPEED.MIN, Math.min(SPEED.MAX, value)));
+    if (Number.isFinite(value) && !sameSpeed(value, speed)) onSpeedChange(value);
   }
 </script>
+
+<div class="speed-control-root" bind:this={root}>
+{#if !compact}
+  <div class="speed-presets" role="group" aria-label="Speed presets">
+    {#each PRESETS as preset}
+      <button
+        class="preset"
+        aria-label={`Set speed to ${preset}×`}
+        aria-pressed={!mixedSpeeds && sameSpeed(speed, preset)}
+        {disabled}
+        onclick={() => onSpeedChange(preset)}
+      >{preset}<span aria-hidden="true">×</span></button>
+    {/each}
+  </div>
+{/if}
 
 <div class="speed-control">
   <button
     class="btn"
-    data-speed-action
-    onclick={decrease}
+    onclick={() => onSpeedChange(speed - SPEED.STEP)}
     title="Decrease speed"
     aria-label="Decrease speed"
     disabled={disabled || speed <= SPEED.MIN}
@@ -59,7 +68,8 @@
     oninput={(event) => { editing = true; handleInput(event); }}
     onfocus={() => { editing = true; }}
     onblur={(event) => {
-      if (event.relatedTarget instanceof HTMLElement && event.relatedTarget.hasAttribute('data-speed-action')) {
+      // Clicking one of these buttons replaces the draft, so it must not also commit it.
+      if (event.relatedTarget instanceof HTMLButtonElement && root.contains(event.relatedTarget)) {
         editing = false;
         draft = speed.toFixed(2);
       } else commit();
@@ -73,8 +83,7 @@
 
   <button
     class="btn"
-    data-speed-action
-    onclick={increase}
+    onclick={() => onSpeedChange(speed + SPEED.STEP)}
     title="Increase speed"
     aria-label="Increase speed"
     disabled={disabled || speed >= SPEED.MAX}
@@ -87,15 +96,24 @@
 
   <button
     class="btn reset"
-    data-speed-action
     {disabled}
-    onclick={onReset}
+    onclick={() => onSpeedChange(SPEED.DEFAULT)}
     title="Reset to 1.0x"
     aria-label="Reset speed to 1.0x">Reset</button
   >
 </div>
+{#if !compact}<p class="input-hint">Custom speed: type a value and press Enter</p>{/if}
+</div>
 
 <style>
+  .speed-control-root { display: contents; }
+  .speed-presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; margin-top: 6px; }
+  .preset { min-height: 36px; padding: 6px 0; border: 1px solid #ffffff24; border-radius: 6px; background: #ffffff06; color: #c8d0dc; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+  .preset span { margin-left: 1px; font-size: 11px; }
+  .preset:hover:not(:disabled) { background: #60a5fa1a; border-color: #60a5fa80; }
+  .preset[aria-pressed="true"] { background: var(--color-focus); border-color: var(--color-focus); color: #152236; }
+  .input-hint { color: #a2abba; font-size: 11px; margin: -4px 0 2px; }
+
   .speed-control {
     display: flex;
     align-items: center;

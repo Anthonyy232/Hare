@@ -1,6 +1,6 @@
 import { test as base, expect, chromium, type BrowserContext, type Page, type Worker } from '@playwright/test';
 import path from 'node:path';
-import { DEFAULT_SETTINGS, type Settings } from '../../../lib/types';
+import { DEFAULT_SETTINGS, type Settings } from '../../../lib/settings/schema';
 
 export { expect };
 export const fixture = 'http://127.0.0.1:41739/video.html';

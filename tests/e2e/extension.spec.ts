@@ -517,9 +517,9 @@ test('a forwarded iframe button targets only its own media', async ({ extension 
   await expect(controllers).toHaveCount(2);
   const controllerId = await controllers.nth(1).getAttribute('id');
   await page.evaluate(controllerId => {
-    document.querySelector('iframe')!.contentWindow!.postMessage({ __hareButtonAction: true, controllerId, action: 'faster', value: 0.25 }, '*');
+    document.querySelector('iframe')!.contentWindow!.postMessage({ __hareAction: true, controllerId, action: 'faster', value: 0.25 }, '*');
   }, controllerId);
-  await expect.poll(() => frame.locator('video').nth(1).evaluate((v: HTMLVideoElement) => v.playbackRate)).toBe(1.25);
+  await expect.poll(() => frame.locator('video').nth(1).evaluate((v: HTMLVideoElement) => v.playbackRate)).toBe(1.1);
   expect(await frame.locator('video').first().evaluate((v: HTMLVideoElement) => v.playbackRate)).toBe(1);
 });
 

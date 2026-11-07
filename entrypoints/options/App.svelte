@@ -8,12 +8,11 @@
     saveSettings,
     resetSettings,
     watchSettings,
-    normalizeSettings,
     validateBlacklist,
-  } from "../../lib/settings";
-  import { CONTROLLER, UI } from "../../lib/constants";
-  import type { Settings } from "../../lib/types";
+  } from "../../lib/settings/settings";
+  import { OPACITY_RANGE, BUTTON_SIZE_RANGE, type Settings } from "../../lib/settings/schema";
 
+  const SAVE_FEEDBACK_MS = 2000;
   let settings: Settings | null = $state(null);
   let loading = $state(true);
   let saving = $state(false);
@@ -34,14 +33,14 @@
     saveFeedbackTimeout = setTimeout(() => {
       saved = false;
       saveFeedbackTimeout = null;
-    }, UI.SAVE_FEEDBACK_MS);
+    }, SAVE_FEEDBACK_MS);
   }
 
   async function load() {
     loading = true;
     error = null;
     try {
-      const value = await loadSettings({ strict: true });
+      const value = await loadSettings();
       settings = value;
       savedSnapshot = JSON.stringify(value);
       conflictWarning = false;
@@ -54,9 +53,8 @@
 
     saving = true;
     error = null;
-    const snapshot = normalizeSettings(settings);
     try {
-      await saveSettings(snapshot);
+      const snapshot = await saveSettings(settings);
       savedSnapshot = JSON.stringify(snapshot);
       settings = snapshot;
       conflictWarning = false;
@@ -127,7 +125,7 @@
 
   {#if error && !settings}
     <div class="conflict-warning" role="alert">{error}
-      {#if !settings}<button class="btn secondary" onclick={load}>Try again</button>{/if}
+      <button class="btn secondary" onclick={load}>Try again</button>
     </div>
   {/if}
 
@@ -212,8 +210,8 @@
               <input
                 type="range"
                 id="opacity"
-                min={CONTROLLER.MIN_OPACITY}
-                max={CONTROLLER.MAX_OPACITY}
+                min={OPACITY_RANGE.MIN}
+                max={OPACITY_RANGE.MAX}
                 step="0.01"
                 value={settings.controllerOpacity}
                 oninput={(event) => updateSettings({ controllerOpacity: event.currentTarget.valueAsNumber })}
@@ -233,8 +231,8 @@
               <input
                 type="range"
                 id="size"
-                min={CONTROLLER.MIN_BUTTON_SIZE}
-                max={CONTROLLER.MAX_BUTTON_SIZE}
+                min={BUTTON_SIZE_RANGE.MIN}
+                max={BUTTON_SIZE_RANGE.MAX}
                 step="1"
                 value={settings.controllerButtonSize}
                 oninput={(event) => updateSettings({ controllerButtonSize: event.currentTarget.valueAsNumber })}
@@ -266,6 +264,7 @@
         </div>
         <BlacklistEditor
           blacklist={settings.blacklist}
+          errors={validationErrors}
           onBlacklistChange={(blacklist) => updateSettings({ blacklist })}
         />
       </section>
