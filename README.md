@@ -12,183 +12,82 @@ Control HTML5 video/audio playback speed with keyboard shortcuts
   - `R` - Reset speed to 1.0x
   - `Z` - Rewind 10 seconds
   - `X` - Advance 10 seconds
-  - `V` - Toggle display visibility
+  - `V` - Show/hide the controller
 - **Visual Controller**: Draggable on-screen speed display
-- **Site-Specific Handlers**: Optimized for YouTube, Netflix, Disney+, Twitch, and 10+ more platforms
+- **Site-Specific Handlers**: Tuned for YouTube, Netflix, Prime Video, Disney+, Twitch, and 10 more sites
 - **Audio Support**: Optional audio element speed control
-- **Excluded sites**: Exclude domains (including subdomains), pasted URLs, or regular expressions
-- **Persistent Settings**: Synced across devices
-- **Sync Mode**: Pair media in two tabs, preserving their starting offset while coordinating playback, seeking, and speed
-- **Open in video player**: Hand the current video to your desktop player
+- **Excluded Sites**: Exclude domains (including subdomains), pasted URLs, or regular expressions
+- **Synced Settings**: Settings follow you across devices through your browser's sync
+- **Sync Mode**: Pair media in two tabs, or a tab and [mpv](https://mpv.io), preserving their starting offset while coordinating playback, seeking, and speed
+- **Open in Video Player**: Hand the current video to your desktop player
 
-## Browser Compatibility
+## Browser Support
 
-| Browser | Support     | Manifest |
-| ------- | ----------- | -------- |
-| Chrome / Chromium | Automated extension tests | V3 |
-| Firefox | Automated native Firefox tests | V3 |
-| Edge | Uses the Chromium build; not separately tested | V3 |
+- **Firefox**
+- **Chrome** and other Chromium browsers such as Edge (Edge isn't tested separately)
 
-Safari packaging and playback are not validated by this repository.
+Safari isn't supported.
 
 ## Installation
 
-### Manual Installation (Development)
+**Firefox:** Install from [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/hare-video-controller/).
 
-**Chrome/Edge:**
+**Chrome/Edge:** Hare isn't in the Chrome Web Store, so install it unpacked. It won't update itself; repeat these steps for a new version.
 
-1. Download the latest release
+1. Download `hare-<version>-chrome.zip` from the [latest release](https://github.com/Anthonyy232/Hare/releases/latest)
 2. Extract the ZIP file
 3. Open `chrome://extensions/` (or `edge://extensions/`)
 4. Enable "Developer mode"
 5. Click "Load unpacked"
 6. Select the extracted folder
 
-**Firefox:**
-
-1. Download the latest release
-2. Open `about:debugging#/runtime/this-firefox`
-3. Click "Load Temporary Add-on"
-4. Select the `manifest.json` file
+Reload pages that were already open. Browser settings pages and some protected pages can't run extensions. For local files, allow file access in the extension's details.
 
 ## Usage
 
-Navigate to any page with HTML5 video/audio and use keyboard shortcuts to control playback speed. Click the extension icon to access the popup interface, or open Settings to customize keybindings and preferences.
+Open any page with HTML5 video/audio and use the keyboard shortcuts, or click the extension icon for the popup. Shortcuts are single keys without modifiers and do nothing while you type in a text field. The popup applies a speed to all media in the current tab; some players reject speeds or allow a narrower range.
 
-Type a complete speed in the popup and press Enter or leave the field to apply it. The popup shows the rate reported by the player; some players reject speeds or impose narrower limits. Changes apply to all detected media in the current tab. Keyboard shortcuts use physical keys without modifiers and leave text editors and form fields alone.
+On an excluded site, **Use Hare on this site** in the popup removes that site's exclusion. Broader domain or regular expression rules stay and can be edited in Settings.
 
-Presets highlight the actual playback speed. No preset is selected for a custom rate or when players have different speeds. Choosing a speed button replaces an unfinished custom value. The popup identifies the current site and provides Settings in its header.
+### Sync Mode
 
-On an excluded site, **Use Hare on this site** in the popup removes that hostname's exclusion and restores controls immediately. Broader domain or regular expression rules stay intact and can be edited in Settings. If Hare is turned off globally, the popup offers **Enable Hare**.
+Load media in two different tabs and cue each to the moment you want to pair. Select tab A, then tab B (**Swap A / B** changes their roles). A sets the playback speed and play/pause state; B keeps its starting offset, which you can fine-tune with the offset buttons. Closing a paired tab, replacing its media, or turning Hare off ends the session. Each tab syncs one video, preferring playing media and then the larger player.
 
-To use Sync Mode, load media in two different tabs and cue each to the moment you want to pair. Select tab A, then tab B. A supplies the playback speed and play/pause state; B retains its starting offset. Use the offset buttons to fine-tune B. Closing a paired tab, replacing its media source, or disabling Hare ends the session. Sync is for one primary loaded media element per tab, preferring playing media and then the larger player.
+To sync with mpv, open **Sync with mpv** in the Sync Mode list, download [hare.lua](public/hare.lua), and move it to mpv's scripts folder (`%APPDATA%\mpv\scripts` on Windows, `~/.config/mpv/scripts` on macOS and Linux). After that, any video you open in mpv appears in the list. The script needs an mpv build that uses LuaJIT, which most do. Only one mpv window can be paired at a time, and opening another file in mpv ends the session. The script listens on `127.0.0.1:42730` and only answers requests from browser extensions.
 
-Use **Swap A / B** before starting to change their roles. Deselect a selected tab before choosing a different pair.
+### Open in Video Player
 
-Sync Mode can also pair a tab with a video playing in [mpv](https://mpv.io). One-time setup: open **Sync with mpv** in the Sync Mode list, download [hare.lua](public/hare.lua), and move it to mpv's scripts folder (`%APPDATA%\mpv\scripts` on Windows, `~/.config/mpv/scripts` on macOS and Linux). After that, any video you open in mpv appears in the list on its own. The script needs an mpv build that uses LuaJIT, which most do, and only one mpv window can be paired at a time. Opening another file in mpv ends the session. The script listens on `127.0.0.1:42730` and only answers requests from browser extensions.
+**Open in video player** at the bottom of the popup saves `hare.m3u` to your Downloads folder and opens it with your default player for `.m3u` files. It points to the video file, or to the HLS/DASH stream the page plays, such as on Twitch, Kick, Patreon, and PeerTube. For protected or site-specific formats, such as YouTube and Vimeo, it points to the page itself, which players that resolve sites (such as mpv with yt-dlp) can play. The playlist also tells the player where to start and which site the video is from, which some hosts, such as Patreon's, require. VLC reads these on its own; mpv needs [hare.lua](public/hare.lua).
 
-**Open in video player** at the bottom of the popup saves a one-item playlist, `hare.m3u`, to your Downloads folder and opens it with your default player for `.m3u` files. The playlist points to the video file, or to the HLS/DASH playlist the page streams from, such as on Twitch, Kick, Patreon, and PeerTube. For sites that stream protected or site-specific formats, such as YouTube and Vimeo, it points to the page itself; players that resolve sites, such as mpv with yt-dlp, can play those. The playlist also tells the player where to start and which site the video is from, which some hosts, such as Patreon's, require. VLC reads these on its own; mpv needs [hare.lua](public/hare.lua), the same script Sync with mpv uses. Video calls and screen shares can't be opened. The first use asks for permission to manage downloads. If the browser can't open the file, it stays in Downloads. Firefox only lets extensions open a file during the click itself, so in Firefox, click `hare.m3u` in the downloads panel.
+Video calls and screen shares can't be opened. The first use asks for permission to manage downloads. Firefox doesn't let Hare open the file itself, so click `hare.m3u` in the downloads panel.
 
-### Configuration
+### Settings
 
-- **Keyboard Shortcuts**: Customize in Settings
-- **Shortcut Values**: Press Enter to apply a numeric edit, or Escape to cancel it before saving
-- **Excluded sites**: Add domains to exclude; exclusions also apply to embedded players on those pages (defaults include Instagram, Twitter/X, Imgur, Teams, and Google Meet)
-- **Controller Appearance**: Adjust opacity and button size with a live preview of the resting and expanded controller; save to apply changes to videos
-- **Audio Control**: Enable/disable audio speed control
-- **Hidden Mode**: Start with controller hidden
+- **Core Settings**: Turn Hare on or off, include audio-only media, or start with the controller hidden
+- **Controller Display**: Opacity and button size, with a live preview
+- **Keybindings**: Each shortcut's key and amount; **Override site shortcut** wins when a site uses the same key
+- **Excluded Sites**: Domains, URLs, or `/regular expressions/`, also applied to players embedded in those pages. Defaults: Instagram, X/Twitter, Imgur, Teams, and Google Meet
 
-Save settings to apply changes to existing pages. Failed saves preserve the draft and provide a retry. Browser settings pages and some protected pages cannot run extensions; reload existing webpages after installing or updating Hare. Local files also require enabling file access in the browser's extension details.
+Click **Save Settings** to apply changes to open pages.
 
-## Development
+## Building From Source
 
-### Prerequisites
-
-- Node.js 22.12+ (Node 24 LTS recommended)
-- npm
-
-### Setup
-
-```bash
-git clone https://github.com/Anthonyy232/Hare.git
-cd Hare
-npm ci
-
-# Start development server (Chrome)
-npm run dev
-
-# Start development server (Firefox)
-npm run dev:firefox
-```
-
-Development uses WXT's manual browser runner. Load the printed development output folder into a separate browser profile once; WXT then rebuilds as you edit. Automatic browser launching is an optional WXT integration and is not bundled here.
-
-### Project Structure
-
-```
-Hare/
-├── entrypoints/        # Extension entry points
-│   ├── background.ts   # Background service worker
-│   ├── content.ts      # Content script (main logic)
-│   ├── popup/          # Popup UI (Svelte)
-│   └── options/        # Settings page (Svelte)
-├── components/         # Reusable Svelte components
-├── lib/                # Core logic
-│   ├── media/          # In-page controls: controller overlay, media discovery,
-│   │                   #   site rules, shortcuts and cross-frame actions
-│   ├── settings/       # Settings shape and defaults, storage, shortcut definitions,
-│   │                   #   excluded-site rules
-│   ├── sync/           # Sync Mode: background service, coordinator (session,
-│   │                   #   startup, drift), tab endpoint and agent, mpv client
-│   ├── export/         # Open in video player: stream detection, recorded
-│   │                   #   manifests, playlist download
-│   ├── messages.ts     # Extension message and reply contracts
-│   ├── messaging.ts    # Message delivery and frame discovery
-│   ├── speed.ts        # Speed limits, rounding and comparison
-│   └── hostname.ts     # The pages Hare runs on, and host matching for site rules and exclusions
-├── assets/             # Icons and CSS
-└── public/             # Static assets
-```
-
-### Tech Stack
-
-- **Framework**: WXT (Web eXtension Tooling)
-- **UI**: Svelte 5
-- **Language**: TypeScript
-- **Manifest**: V3
-
-### Build
-
-```bash
-# Build for Chrome
-npm run build
-npm run zip
-
-# Build for Firefox
-npm run build:firefox
-npm run zip:firefox
-```
-
-Build outputs:
-
-- Chrome: `.output/chrome-mv3/`; ZIP under `.output/` with the package version
-- Firefox: `.output/firefox-mv3/`; ZIP under `.output/` with the package version
-
-### Firefox source review
-
-Version 1.9.3 was verified on Windows 11 x64 and Ubuntu with Node.js 24.16.0 and npm 11.13.0. Release packages are built by GitHub Actions on Ubuntu with Node.js 24. Install Node.js from [nodejs.org](https://nodejs.org/en/download). Dependencies and build tools are pinned by `package-lock.json`.
-
-Extract the matching source ZIP into a fresh directory, open a terminal in that directory, and run:
+For Firefox add-on review. Release packages are built on Ubuntu with Node.js 24 and npm 11, as in Mozilla's default reviewer environment ([install Node.js](https://nodejs.org/en/download) if needed). In the extracted source archive, run:
 
 ```bash
 npm ci
 npm run build:firefox
 ```
 
-Compare all files under `.output/firefox-mv3/` with the contents of the submitted Firefox extension ZIP. Run `npm run zip:firefox` to package that output. ZIP container timestamps can differ; the extension files must match. Dependency installation requires access to the public npm registry. The build runs locally and needs no credentials or private dependencies.
-
-Submit `.output/hare-1.9.3-firefox.zip` as the add-on and `.output/hare-1.9.3-sources.zip` as its matching source archive. See Mozilla's [source submission instructions](https://extensionworkshop.com/documentation/publish/source-code-submission/).
-
-### Verification
-
-```bash
-npm run check             # Svelte/TypeScript, unit tests, Chrome and Firefox builds
-npx playwright install chromium
-npm run test:e2e          # Builds Chrome, then tests a separate temporary Chromium profile
-npm audit
-```
-
-Browser tests use a local HTTP fixture with generated silent PCM media and a synthetic VP8 video, require no website accounts or external media downloads, and close their browser profiles after each test. They cover media events, seeking, editing, shadow DOMs, iframes, settings persistence/failure, fullscreen, picture-in-picture, sync, opening a stream in a video player, and browser/service-worker restart. Popup/options accessibility checks use axe. Reports and screenshots are written to `playwright-report/` and `test-results/`. Native Firefox testing has [separate instructions](tests/native/README.md).
-
-Site-specific selectors and DRM restrictions still require checks against the actual services. Browser-native video fullscreen and picture-in-picture may not display a custom DOM overlay; keyboard or popup control and player-container fullscreen are covered.
+The extension is built to `.output/firefox-mv3/` and matches the submitted package. `npm ci` installs the exact versions in `package-lock.json` from the public npm registry; no credentials are needed.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. Changes are made with coding agents; point yours at [AGENTS.md](AGENTS.md) and open a pull request.
 
 ## License
 
-MIT License, please adhere.
+[MIT](LICENSE)
 
 ## Acknowledgments
 
