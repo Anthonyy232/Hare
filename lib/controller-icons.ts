@@ -8,7 +8,6 @@ export const ICONS = {
 
 const parsed = new Map<keyof typeof ICONS, SVGElement>();
 
-/** Parse each bundled icon once; settings never enter SVG markup. */
 export function createIcon(name: keyof typeof ICONS): SVGElement {
   let svg = parsed.get(name);
   if (!svg) {

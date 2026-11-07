@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { SyncCandidate, SyncStatusResponse } from "../lib/sync-types";
-  import type { HareMessage } from "../lib/types";
+  import type { HareMessage } from "../lib/messages";
   import { SYNC, NUDGE_STEPS } from "../lib/sync-types";
   import { sendToBackground } from "../lib/messaging";
   import { browser } from "wxt/browser";
-  import { mpv, MPV_TAB_ID } from "../lib/mpv";
+  import { MPV_TAB_ID } from "../lib/sync-types";
 
   let { onExpandedChange }: { onExpandedChange?: (expanded: boolean) => void } = $props();
 
@@ -31,7 +31,7 @@
   $effect(() => {
     if (!showSetup || mpvFound) return;
     const timer = setInterval(async () => {
-      const found = await mpv.candidate();
+      const found = await sendToBackground({ type: "GET_MPV_CANDIDATE" }).catch(() => null);
       if (!found || loading || mpvFound) return;
       candidates = [...candidates, found];
       if (error === NEED_TWO && candidates.length >= 2) error = null;

@@ -2,14 +2,14 @@ import { loadSettings, saveSettings } from '../lib/settings';
 import { logger } from '../lib/logger';
 import { SyncCoordinator } from '../lib/sync-coordinator';
 import { SyncStartup } from '../lib/sync-startup';
-import { getTabMedia } from '../lib/messaging';
-import { mpv, MPV_TAB_ID } from '../lib/mpv';
-import { MANIFEST_URLS, forgetAllManifests, forgetManifests, recordManifest } from '../lib/stream';
-import type { SyncCandidate } from '../lib/sync-types';
-import type { HareMessage, Replies } from '../lib/types';
+import { mpv } from '../lib/mpv';
+import { MPV_TAB_ID } from '../lib/sync-types';
+import { syncCandidates, sendToEndpoint } from '../lib/sync-transport';
+import { MANIFEST_URLS, forgetAllManifests, forgetManifests, recordManifest, findManifest } from '../lib/manifest-store';
+import type { HareMessage, Replies } from '../lib/messages';
 
 export default defineBackground(() => {
-  const coordinator = new SyncCoordinator();
+  const coordinator = new SyncCoordinator(sendToEndpoint);
   const startup = new SyncStartup(coordinator);
   void coordinator.restoreSession();
   mpv.onEvent = event => { void coordinator.handleSyncEvent(MPV_TAB_ID, event); };
@@ -35,18 +35,12 @@ export default defineBackground(() => {
       await coordinator.ready;
       switch (message.type) {
         case 'GET_PAGE_CONTEXT': return { hostname: sender.tab?.url ? new URL(sender.tab.url).hostname : '' };
+        case 'FIND_MANIFEST': return { url: await findManifest(message.payload.tabId, message.payload.manifests) };
         case 'SYNC_EVENT':
           if (sender.tab?.id != null) await coordinator.handleSyncEvent(sender.tab.id, message.payload, sender.frameId);
           return { success: true };
-        case 'GET_SYNC_CANDIDATES': {
-          const tabs = (await browser.tabs.query({})).map(async (tab): Promise<SyncCandidate | null> => {
-            if (tab.id == null || !tab.url || !/^(https?|file):/.test(tab.url)) return null;
-            const videoCount = (await getTabMedia(tab.id)).reduce((count, frame) => count + frame.speeds.length, 0);
-            return videoCount ? { tabId: tab.id, title: tab.title || 'Untitled', domain: new URL(tab.url).hostname, favIconUrl: tab.favIconUrl, videoCount } : null;
-          });
-          const candidates = await Promise.all([...tabs, mpv.candidate()]);
-          return candidates.filter(candidate => candidate !== null);
-        }
+        case 'GET_SYNC_CANDIDATES': return syncCandidates();
+        case 'GET_MPV_CANDIDATE': return mpv.candidate();
         case 'START_SYNC': {
           await startup.start(message.payload.tabIdA, message.payload.tabIdB);
           return { success: true };

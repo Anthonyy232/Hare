@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import { withTimeout } from './async-utils';
-import type { HareMessage, Reply } from './types';
+import type { HareMessage, Reply } from './messages';
 
 export function sendToTab<M extends HareMessage>(tabId: number, message: M, frameId?: number, timeoutMs?: number): Promise<Reply<M>> {
   const request = frameId == null
@@ -20,7 +20,6 @@ export async function getFrameIds(tabId: number): Promise<number[]> {
   } catch { return [0]; }
 }
 
-/** Speeds of the controlled players in each frame of a tab. Frames without Hare are skipped. */
 export async function getTabMedia(tabId: number): Promise<Array<{ frameId: number; speeds: number[] }>> {
   const frames = await Promise.all((await getFrameIds(tabId)).map(frameId =>
     sendToTab(tabId, { type: 'GET_STATUS' }, frameId).then(reply => ({ frameId, speeds: reply.speeds ?? [] }), () => null)));

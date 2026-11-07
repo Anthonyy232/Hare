@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SyncCoordinator } from './sync-coordinator';
+import { sendToTab } from './messaging';
+import type { SyncEndpointRef, SyncPositionResponse } from './sync-types';
+
+function startPair(coordinator: SyncCoordinator, a: SyncEndpointRef, b: SyncEndpointRef, positionA: Partial<SyncPositionResponse>, positionB: Partial<SyncPositionResponse>) {
+  const participant = (endpoint: SyncEndpointRef, position: Partial<SyncPositionResponse>) => ({
+    endpoint, title: `Tab ${endpoint.tabId}`, domain: 'example.com',
+    position: { currentTime: 0, timestamp: Date.now(), playbackRate: 1, paused: false, buffering: false, ...position },
+  });
+  return coordinator.startSync(participant(a, positionA), participant(b, positionB));
+}
 
 import { browser } from 'wxt/browser';
 
@@ -22,7 +32,7 @@ describe('SyncCoordinator', () => {
       }
       return { success: true };
     });
-    coordinator = new SyncCoordinator();
+    coordinator = new SyncCoordinator(sendToTab);
     await coordinator.restoreSession();
   });
 
@@ -32,19 +42,46 @@ describe('SyncCoordinator', () => {
   });
 
   describe('session management', () => {
+    it('waits for an earlier asynchronous stop before starting another pair', async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
+      const deactivation = Promise.withResolvers<{ success: true }>();
+      mockSendMessage.mockImplementation(async (_tab, message) => message.type === 'SYNC_DEACTIVATE'
+        ? deactivation.promise : { success: true });
+      const stopped = coordinator.stopSync('tab was removed');
+      const replacement = startPair(coordinator, { tabId: 3 }, { tabId: 4 }, { currentTime: 0 }, { currentTime: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(coordinator.getStatus().active).toBe(false);
+      deactivation.resolve({ success: true });
+      await stopped;
+      await replacement;
+      expect(coordinator.getStatus().videoA?.tabId).toBe(3);
+    });
+
+    it('does not create a replacement after stop arrives during teardown', async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
+      const deactivation = Promise.withResolvers<{ success: true }>();
+      mockSendMessage.mockImplementation(async (_tab, message) => message.type === 'SYNC_DEACTIVATE'
+        ? deactivation.promise : { success: true });
+      const replacement = startPair(coordinator, { tabId: 3 }, { tabId: 4 }, { currentTime: 0 }, { currentTime: 0 });
+      const rejected = expect(replacement).rejects.toThrow('cancelled');
+      const stopped = coordinator.stopSync('user stopped sync');
+      deactivation.resolve({ success: true });
+      await stopped;
+      await rejected;
+      expect(coordinator.getStatus().active).toBe(false);
+    });
+
     it('does not retain metadata from earlier sync pairs in session storage', async () => {
-      for (const id of [1, 2]) coordinator.setTabMeta(id, `Tab ${id}`, 'old.example');
-      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 0 });
-      for (const id of [3, 4]) coordinator.setTabMeta(id, `Tab ${id}`, 'new.example');
-      coordinator.startSync({ tabId: 3 }, { tabId: 4 }, { currentTimeA: 0, currentTimeB: 0 });
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
+      await startPair(coordinator, { tabId: 3 }, { tabId: 4 }, { currentTime: 0 }, { currentTime: 0 });
       await coordinator.setNudgeStep(0.1);
       expect(mockStorageSessionSet).toHaveBeenLastCalledWith({ syncSession_v2: expect.objectContaining({
-        tabMeta: [[3, { title: 'Tab 3', domain: 'new.example' }], [4, { title: 'Tab 4', domain: 'new.example' }]],
+        tabMeta: [[3, { title: 'Tab 3', domain: 'example.com' }], [4, { title: 'Tab 4', domain: 'example.com' }]],
       }) });
     });
 
     it('persists a selected nudge step with the session', async () => {
-      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 5 });
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 5 });
       await coordinator.setNudgeStep(0.5);
       expect(coordinator.getStatus().nudgeStep).toBe(0.5);
       expect(mockStorageSessionSet).toHaveBeenLastCalledWith({ syncSession_v2: expect.objectContaining({ session: expect.objectContaining({ nudgeStep: 0.5 }) }) });
@@ -56,7 +93,7 @@ describe('SyncCoordinator', () => {
     it.each([false, {},
       { currentTime: 1, paused: false, buffering: false, playbackRate: 0, timestamp: 1 },
     ])('ends sync after repeated malformed position replies: %j', async response => {
-      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 0 });
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
       mockSendMessage.mockResolvedValue(response);
       await vi.advanceTimersByTimeAsync(10000);
       expect(coordinator.getStatus().active).toBe(false);
@@ -65,14 +102,14 @@ describe('SyncCoordinator', () => {
 
     it('does not send a stale drift correction to a replacement session', async () => {
       let resolveOld!: (position: unknown) => void;
-      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 0 });
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
       mockSendMessage.mockImplementation((tabId, message) => {
         if (message.type === 'SYNC_GET_POSITION' && tabId === 1) return new Promise(resolve => { resolveOld = resolve; });
         if (message.type === 'SYNC_GET_POSITION') return Promise.resolve({ currentTime: 20, paused: false, buffering: false, playbackRate: 1, timestamp: Date.now() });
         return Promise.resolve({ success: true });
       });
       await vi.advanceTimersByTimeAsync(2000);
-      coordinator.startSync({ tabId: 3 }, { tabId: 4 }, { currentTimeA: 0, currentTimeB: 0 });
+      await startPair(coordinator, { tabId: 3 }, { tabId: 4 }, { currentTime: 0 }, { currentTime: 0 });
       mockSendMessage.mockClear();
       resolveOld({ currentTime: 10, paused: false, buffering: false, playbackRate: 1, timestamp: Date.now() });
       await vi.advanceTimersByTimeAsync(0);
@@ -80,7 +117,7 @@ describe('SyncCoordinator', () => {
     });
 
     it('bounds unanswered position requests without overlapping drift polls', async () => {
-      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 0 });
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
       mockSendMessage.mockImplementation(() => new Promise(() => {}));
       await vi.advanceTimersByTimeAsync(22000);
       expect(coordinator.getStatus().active).toBe(false);
@@ -88,7 +125,7 @@ describe('SyncCoordinator', () => {
     });
 
     it('cancels automatic buffering resume when the user pauses', async () => {
-      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 0 });
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
       await coordinator.handleSyncEvent(1, { action: 'buffering_start', position: 0, timestamp: Date.now() });
       await coordinator.handleSyncEvent(1, { action: 'buffering_end', position: 0, timestamp: Date.now() });
       await coordinator.handleSyncEvent(2, { action: 'pause', position: 0, timestamp: Date.now() });
@@ -97,8 +134,8 @@ describe('SyncCoordinator', () => {
       expect(mockSendMessage.mock.calls.filter(call => call[1].type === 'SYNC_PLAY')).toHaveLength(0);
     });
 
-    it('nudges the offset and ignores non-finite updates', () => {
-      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 5 });
+    it('nudges the offset and ignores non-finite updates', async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 5 });
       coordinator.nudgeOffset(0.5);
       expect(coordinator.getStatus().offset).toBe(5.5);
       coordinator.nudgeOffset(NaN);
@@ -107,12 +144,8 @@ describe('SyncCoordinator', () => {
   });
 
   describe('event relay', () => {
-    beforeEach(() => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 0, currentTimeB: 5 }
-      );
+    beforeEach(async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 5 });
     });
 
     it.each([
@@ -128,11 +161,7 @@ describe('SyncCoordinator', () => {
 
     it('does not relay events from unsynced frames in a synced tab', async () => {
       coordinator.stopSync();
-      coordinator.startSync(
-        { tabId: 1, frameId: 0 },
-        { tabId: 2, frameId: 7 },
-        { currentTimeA: 0, currentTimeB: 5 }
-      );
+      await startPair(coordinator, { tabId: 1, frameId: 0 }, { tabId: 2, frameId: 7 }, { currentTime: 0 }, { currentTime: 5 });
       mockSendMessage.mockClear();
 
       await coordinator.handleSyncEvent(1, {
@@ -176,12 +205,8 @@ describe('SyncCoordinator', () => {
   });
 
   describe('tab lifecycle', () => {
-    it('stops sync when a synced tab is removed', () => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 0, currentTimeB: 0 }
-      );
+    it('stops sync when a synced tab is removed', async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
 
       coordinator.handleTabRemoved(1);
       expect(coordinator.getStatus().active).toBe(false);
@@ -189,12 +214,8 @@ describe('SyncCoordinator', () => {
   });
 
   describe('buffering', () => {
-    beforeEach(() => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 0, currentTimeB: 0 }
-      );
+    beforeEach(async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
     });
 
     it('ignores duplicate and opposite-side recovery while one side still buffers', async () => {
@@ -229,7 +250,7 @@ describe('SyncCoordinator', () => {
         tabMeta: [],
       } });
       coordinator.destroy();
-      coordinator = new SyncCoordinator();
+      coordinator = new SyncCoordinator(sendToTab);
       await coordinator.restoreSession();
       mockSendMessage.mockImplementation(async (_tabId, message) => message.type === 'SYNC_GET_POSITION'
         ? { currentTime: 10, paused: true, buffering: false, playbackRate: 1, timestamp: Date.now() }
@@ -238,11 +259,8 @@ describe('SyncCoordinator', () => {
       expect(mockSendMessage.mock.calls.filter(([, msg]) => msg.type === 'SYNC_PLAY')).toHaveLength(2);
     });
 
-    it('starts with an already stalled source without extrapolating its frozen clock', () => {
-      coordinator.startSync({ tabId: 3 }, { tabId: 4 }, {
-        currentTimeA: 10, currentTimeB: 20, timestampA: 1000, timestampB: 2000,
-        pausedA: false, pausedB: true, bufferingA: true,
-      });
+    it('starts with an already stalled source without extrapolating its frozen clock', async () => {
+      await startPair(coordinator, { tabId: 3 }, { tabId: 4 }, { currentTime: 10, timestamp: 1000, paused: false, buffering: true }, { currentTime: 20, timestamp: 2000, paused: true });
       expect(coordinator.getStatus().offset).toBe(10);
       expect(mockSendMessage).toHaveBeenCalledWith(4, expect.objectContaining({
         type: 'SYNC_PAUSE', payload: expect.objectContaining({ buffering: true, position: 20 }),
@@ -296,11 +314,7 @@ describe('SyncCoordinator', () => {
     });
 
     it('pauses without seeking when the buffering target would be negative', async () => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 10, currentTimeB: 0 }
-      );
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 10 }, { currentTime: 0 });
       mockSendMessage.mockClear();
 
       await coordinator.handleSyncEvent(1, {
@@ -320,12 +334,8 @@ describe('SyncCoordinator', () => {
   });
 
   describe('drift correction thresholds', () => {
-    beforeEach(() => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 0, currentTimeB: 0 }
-      );
+    beforeEach(async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
     });
     it.each([
       { drift: 0.03, method: undefined },
@@ -342,11 +352,7 @@ describe('SyncCoordinator', () => {
     });
 
     it('skips drift correction when expected position would be negative', async () => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 10, currentTimeB: 0 }
-      );
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 10 }, { currentTime: 0 });
 
       mockSendMessage
         .mockResolvedValueOnce({ currentTime: 5, paused: false, buffering: false, playbackRate: 1, timestamp: Date.now() })
@@ -360,7 +366,7 @@ describe('SyncCoordinator', () => {
 
   describe('sendToTab error handling', () => {
     it.each(['connection rejection', 'content failure'])('stops sync after repeated %s', async failure => {
-      coordinator.startSync({ tabId: 1 }, { tabId: 2 }, { currentTimeA: 0, currentTimeB: 0 });
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
       if (failure === 'connection rejection') mockSendMessage.mockRejectedValue(new Error('Could not establish connection'));
       else mockSendMessage.mockResolvedValue({ success: false, error: 'No active sync agent' });
       for (let i = 0; i < 5; i++) {
@@ -370,11 +376,7 @@ describe('SyncCoordinator', () => {
     });
 
     it('does not let healthy peer responses reset failures for a dead endpoint', async () => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 0, currentTimeB: 0 }
-      );
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
 
       mockSendMessage.mockImplementation(async (tabId: number, message: { type: string }) => {
         if (message.type === 'SYNC_GET_POSITION') {
@@ -394,11 +396,7 @@ describe('SyncCoordinator', () => {
     });
 
     it('resets failure count on successful send', async () => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 0, currentTimeB: 0 }
-      );
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
 
       // 2 failures, then success, then 2 more failures — should NOT stop
       mockSendMessage
@@ -421,12 +419,8 @@ describe('SyncCoordinator', () => {
   });
 
   describe('rate-aware drift correction', () => {
-    beforeEach(() => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 0, currentTimeB: 0 }
-      );
+    beforeEach(async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
     });
 
     it('does not flag false drift when both tabs play at non-1.0x but the same rate', async () => {
@@ -462,18 +456,14 @@ describe('SyncCoordinator', () => {
   });
 
   describe('rate change relay', () => {
-    beforeEach(() => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 0, currentTimeB: 5 }
-      );
+    beforeEach(async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 5 });
     });
 
     it.each([[1, 2, 1.5], [2, 1, 0.5]])('relays rate changes from %s to %s at %sx', async (from, to, rate) => {
       await coordinator.handleSyncEvent(from, { action: 'ratechange', position: 0, timestamp: Date.now(), rate });
       expect(mockSendMessage).toHaveBeenCalledWith(to, expect.objectContaining({
-        type: 'SYNC_RATE', payload: expect.objectContaining({ action: 'ratechange', rate }),
+        type: 'SYNC_RATE', payload: expect.objectContaining({ rate }),
       }));
     });
 
@@ -488,40 +478,14 @@ describe('SyncCoordinator', () => {
   });
 
   describe('startSync measurement-skew compensation', () => {
-    it('compensates for the time gap between A and B position reads', () => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        {
-          currentTimeA: 100,
-          currentTimeB: 100,
-          timestampA: 1000,
-          timestampB: 1500,
-          rateA: 1,
-          rateB: 1,
-          pausedA: false,
-          pausedB: false,
-        }
-      );
+    it('compensates for the time gap between A and B position reads', async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 100, timestamp: 1000, playbackRate: 1, paused: false }, { currentTime: 100, timestamp: 1500, playbackRate: 1, paused: false });
 
       expect(coordinator.getStatus().offset).toBeCloseTo(-0.5, 5);
     });
 
-    it('does not extrapolate paused inputs', () => {
-      coordinator.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        {
-          currentTimeA: 100,
-          currentTimeB: 100,
-          timestampA: 1000,
-          timestampB: 1500,
-          rateA: 1,
-          rateB: 1,
-          pausedA: true,
-          pausedB: false,
-        }
-      );
+    it('does not extrapolate paused inputs', async () => {
+      await startPair(coordinator, { tabId: 1 }, { tabId: 2 }, { currentTime: 100, timestamp: 1000, playbackRate: 1, paused: true }, { currentTime: 100, timestamp: 1500, playbackRate: 1, paused: false });
 
       expect(coordinator.getStatus().offset).toBeCloseTo(0, 5);
     });
@@ -529,12 +493,8 @@ describe('SyncCoordinator', () => {
 
   describe('ready gate', () => {
     it('handleSyncEvent waits for restoreSession before processing', async () => {
-      const fresh = new SyncCoordinator();
-      fresh.startSync(
-        { tabId: 1 },
-        { tabId: 2 },
-        { currentTimeA: 0, currentTimeB: 0 }
-      );
+      const fresh = new SyncCoordinator(sendToTab);
+      await startPair(fresh, { tabId: 1 }, { tabId: 2 }, { currentTime: 0 }, { currentTime: 0 });
       mockSendMessage.mockClear();
 
       const eventPromise = fresh.handleSyncEvent(1, {

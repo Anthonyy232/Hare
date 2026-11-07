@@ -1,5 +1,6 @@
-import { isKeyAction, type Settings, type KeyAction } from './types';
-import type { VideoController } from './controller';
+import type { Settings } from './types';
+import { ACTIONS, isKeyAction, type KeyAction } from './key-actions';
+import type { ActionTarget } from './controller-contracts';
 
 function isInputElement(element: Element): boolean {
   return element.matches('input, textarea, select')
@@ -36,9 +37,20 @@ function forwardToChildFrames(action: KeyAction, value: number): void {
 }
 
 export function createKeybindHandler(
-  getControllers: () => VideoController[],
+  getControllers: () => ActionTarget[],
   getSettings: () => Settings
 ): KeybindHandler {
+  const dispatch = (action: KeyAction, value: number): boolean => {
+    const controllers = getControllers();
+    if (controllers.length > 0) {
+      for (const controller of controllers) controller.perform(action, value);
+      return true;
+    }
+    if (window.frames.length === 0) return false;
+    forwardToChildFrames(action, value);
+    return true;
+  };
+
   const handleKeyDown = (event: KeyboardEvent): void => {
     if (event.isComposing || event.keyCode === 229 || document.designMode === 'on') return;
     if (event.composedPath().some(target => target instanceof Element && isInputElement(target))) return;
@@ -50,16 +62,9 @@ export function createKeybindHandler(
 
     const binding = settings.keyBindings.find(binding => binding.key && binding.key === event.code);
     if (!binding) return;
-    if (event.repeat && (binding.action === 'display' || binding.action === 'reset')) return;
+    if (event.repeat && !ACTIONS[binding.action].repeat) return;
 
-    const controllers = getControllers();
-    if (controllers.length > 0) {
-      for (const controller of controllers) controller.perform(binding.action, binding.value);
-    } else if (window.frames.length > 0) {
-      forwardToChildFrames(binding.action, binding.value);
-    } else {
-      return;
-    }
+    if (!dispatch(binding.action, binding.value)) return;
 
     if (binding.force) {
       event.preventDefault();
@@ -75,12 +80,7 @@ export function createKeybindHandler(
     if (!getSettings().enabled) return;
 
     const { action, value } = event.data;
-    const controllers = getControllers();
-    if (controllers.length > 0) {
-      for (const controller of controllers) controller.perform(action, value);
-    } else if (window.frames.length > 0) {
-      forwardToChildFrames(action, value);
-    }
+    dispatch(action, value);
   };
 
   // Capture on window so document/body handlers cannot hide shortcuts.

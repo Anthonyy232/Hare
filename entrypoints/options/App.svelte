@@ -87,7 +87,6 @@
   }
 
   onMount(() => {
-    // Watch after loading so a racing storage event cannot overwrite the initial form.
     (async () => {
       await load();
       if (disposed) return;
@@ -317,7 +316,6 @@
     min-height: 100%;
   }
 
-  /* Fixed background to cover full viewport without causing growth loop */
   :global(body)::before {
     content: "";
     position: fixed;

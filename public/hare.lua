@@ -105,7 +105,6 @@ if net.bind(server, addr, 16) ~= 0 or net.listen(server, 8) ~= 0 then
 end
 net.nonblocking(server)
 
--- Player state. 'file' changes whenever a new file loads, so Hare can end a sync whose file is gone.
 local file, files_loaded = nil, 0
 local seq, events = 0, {}
 local expected, expected_seek = {}, nil
@@ -119,7 +118,6 @@ local function emit(action)
   if #events > 50 then table.remove(events, 1) end
 end
 
--- Hare's own changes come back through these observers too; skip them so they aren't echoed back.
 local function from_hare(name, value)
   local want = expected[name]
   expected[name] = nil

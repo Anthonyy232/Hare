@@ -41,7 +41,14 @@ test('shortcuts leave inputs, rich text, shadow inputs, and modified keys alone'
 
 test('discovers and cleans up media in pre-existing nested shadow trees', async ({ extension }) => {
   const page = await openVideo(extension.context, '?empty');
-  await page.waitForTimeout(200);
+  await expect(async () => {
+    const reply = await extension.worker.evaluate(async url => {
+      const api = (globalThis as any).chrome;
+      const tab = (await api.tabs.query({})).find((tab: any) => tab.url === url);
+      return api.tabs.sendMessage(tab.id, { type: 'GET_STATUS' }, { frameId: 0 });
+    }, page.url());
+    expect(reply).toEqual({ speeds: [] });
+  }).toPass();
   await page.evaluate(() => {
     const host = document.querySelector('#shadow-host')!.shadowRoot!.querySelector('#nested-host')!;
     host.attachShadow({ mode: 'open' }).innerHTML = '<div><video controls src="/media.wav"></video></div>';
@@ -117,13 +124,13 @@ test('controller buttons expand on keyboard focus and hidden display can be rest
 
 const masterPlaylist = '#EXTM3U\n#EXTINF:-1,Video Test\n#EXTVLCOPT:http-referrer=http://127.0.0.1:41739/\nhttp://127.0.0.1:41739/master.m3u8\n';
 
-/** Clicks Open in video player and returns the playlist it opened. */
 async function openInPlayer(popup: Page): Promise<string> {
   // The downloads permission prompt can't be accepted in automation.
   await popup.evaluate(() => {
     const api = (globalThis as any).browser;
     api.permissions.request = async () => true;
     api.downloads = {
+      onChanged: { addListener() {}, removeListener() {} },
       download: async ({ url }: { url: string }) => { (globalThis as any).playlist = await (await fetch(url)).text(); return 7; },
       search: async () => [{ state: 'complete' }],
       open: async (id: number) => { (globalThis as any).opened = id; },
@@ -188,18 +195,18 @@ test('speed presets reflect actual rates and take precedence over an unfinished 
   const video = await openVideo(extension.context);
   const popup = await openUI(extension, 'popup', video);
   await expect(popup.getByText('127.0.0.1', { exact: true })).toBeVisible();
-  const preset = popup.getByRole('button', { name: 'Set speed to 1.5x', exact: true });
+  const preset = popup.getByRole('button', { name: 'Set speed to 1.5×', exact: true });
   await popup.getByRole('spinbutton', { name: 'Playback speed' }).fill('1.75');
   await preset.click();
   await expect.poll(() => rate(video)).toBe(1.5);
   await expect(preset).toHaveAttribute('aria-pressed', 'true');
   await expect(popup.getByRole('spinbutton', { name: 'Playback speed' })).toHaveValue('1.50');
-  const slower = popup.getByRole('button', { name: 'Set speed to 0.75x', exact: true });
+  const slower = popup.getByRole('button', { name: 'Set speed to 0.75×', exact: true });
   await slower.focus();
   await slower.press('Space');
   await expect.poll(() => rate(video)).toBe(0.75);
   // Reset releases Hare's intentional non-default rate enforcement.
-  await popup.getByRole('button', { name: 'Set speed to 1x', exact: true }).click();
+  await popup.getByRole('button', { name: 'Set speed to 1×', exact: true }).click();
   await expect.poll(() => rate(video)).toBe(1);
   await video.locator('video').evaluate((v: HTMLVideoElement) => { v.playbackRate = 1.35; });
   await expect(popup.locator('.preset[aria-pressed="true"]')).toHaveCount(0);

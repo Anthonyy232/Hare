@@ -1,11 +1,10 @@
 <script lang="ts">
   import controllerCSS from '../assets/controller.css?raw';
-  import { ICONS, createIcon } from '../lib/controller-icons';
+  import { createControllerView } from '../lib/controller-view';
 
   let { opacity, size, startHidden }: { opacity: number; size: number; startHidden: boolean } = $props();
   let expanded = $state(false);
 
-  // Render the real overlay styles in isolation, without media or playback listeners.
   function preview(node: HTMLDivElement, values: { opacity: number; size: number; expanded: boolean }) {
     const shadow = node.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
@@ -14,20 +13,7 @@
       .hare-controller, .hare-controller:hover { opacity: var(--preview-opacity); }
       .hare-controls { display: var(--preview-controls) !important; }
     `;
-    const controller = document.createElement('div');
-    controller.className = 'hare-controller';
-    const speed = document.createElement('span');
-    speed.className = 'hare-speed';
-    speed.textContent = '1.00x';
-    const controls = document.createElement('span');
-    controls.className = 'hare-controls';
-    for (const icon of Object.keys(ICONS) as Array<keyof typeof ICONS>) {
-      const button = document.createElement('span');
-      button.className = 'hare-btn';
-      button.append(createIcon(icon));
-      controls.append(button);
-    }
-    controller.append(speed, controls);
+    const { controllerEl: controller } = createControllerView();
     shadow.append(style, controller);
     function update(value: typeof values) {
       controller.style.setProperty('--hare-font-size', `${value.size}px`);

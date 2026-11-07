@@ -10,7 +10,6 @@ const playbackRateDescriptor = Object.getOwnPropertyDescriptor(mediaProto, 'play
 const playMethod = mediaProto.play;
 const pauseMethod = mediaProto.pause;
 
-/** Clamp VOD seeks and live/DVR seeks to the nearest available range. */
 export function clampSeekTime(media: HTMLMediaElement, value: number): number {
     if (!Number.isFinite(value)) throw new RangeError('Seek position must be finite');
     const ranges = media.seekable;

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createKeybindHandler, type KeybindHandler } from './keybinds';
 import { DEFAULT_SETTINGS } from './types';
-import type { VideoController } from './controller';
 
 describe('keyboard ownership', () => {
   const controller = { perform: vi.fn() };
@@ -9,7 +8,7 @@ describe('keyboard ownership', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     document.body.innerHTML = '';
-    handler = createKeybindHandler(() => [controller as unknown as VideoController], () => DEFAULT_SETTINGS);
+    handler = createKeybindHandler(() => [controller], () => DEFAULT_SETTINGS);
   });
   afterEach(() => handler.destroy());
   function press(target: Element, options: KeyboardEventInit = {}) {

@@ -1,11 +1,8 @@
 import { logger } from './logger';
-import { sendToTab } from './messaging';
-import { SYNC } from './sync-types';
+import { SYNC, MPV_TAB_ID } from './sync-types';
 import type { SyncCandidate, SyncEventPayload, SyncPositionResponse } from './sync-types';
-import type { HareMessage, Reply } from './types';
+import type { HareMessage } from './messages';
 
-/** Stands in for a tab id, so the coordinator can pair mpv like any tab. */
-export const MPV_TAB_ID = -1;
 const SERVER = 'http://127.0.0.1:42730';
 
 interface MpvState { file: string; time: number; paused: boolean; buffering: boolean; speed: number; title: string }
@@ -13,10 +10,6 @@ interface MpvEvents {
   file: string | null;
   seq: number;
   events: Array<{ action: SyncEventPayload['action']; position: number; rate: number }>;
-}
-
-export function isEndpointId(id: number): boolean {
-  return id === MPV_TAB_ID || (Number.isInteger(id) && id >= 0);
 }
 
 /** mpv's side of a sync pair, served by public/hare.lua running inside mpv. */
@@ -41,13 +34,13 @@ class MpvClient {
   async handle(message: HareMessage): Promise<unknown> {
     switch (message.type) {
       case 'SYNC_ACTIVATE': {
-        this.stop();
+        try { await this.restoreCorrection(); } finally { this.stop(); }
         const position = await this.state();
         this.listen();
         return { success: true, ...position };
       }
       case 'SYNC_DEACTIVATE':
-        this.stop();
+        try { await this.restoreCorrection(); } finally { this.stop(); }
         return { success: true };
       case 'SYNC_GET_POSITION':
         // Restarts the event stream after the background worker restarts.
@@ -55,28 +48,38 @@ class MpvClient {
         return this.state();
       case 'SYNC_PAUSE': {
         const { position } = message.payload;
+        if (position >= 0) await this.restoreCorrection();
         return this.set({ pause: 1, seek: position >= 0 ? position : undefined });
       }
       case 'SYNC_PLAY': {
         const { position, rate, timestamp } = message.payload;
+        if (position >= 0) await this.restoreCorrection();
         const seek = position >= 0 ? position + (rate ?? this.baseSpeed ?? 1) * (Date.now() - timestamp) / 1000 : undefined;
         return this.set({ pause: 0, seek });
       }
       case 'SYNC_SEEK':
+        await this.restoreCorrection();
         return this.set({ seek: message.payload.position });
       case 'SYNC_RATE': {
         const { rate } = message.payload;
         if (rate == null) return { success: false };
         clearTimeout(this.correctionTimer);
+        this.correctionTimer = undefined;
         this.baseSpeed = rate;
         return this.set({ speed: rate });
       }
       case 'SYNC_DRIFT_CORRECT': {
         const drift = message.payload;
-        if (drift.method === 'seek') return this.set({ seek: drift.position });
+        if (drift.method === 'seek') {
+          await this.restoreCorrection();
+          return this.set({ seek: drift.position });
+        }
         const base = this.baseSpeed ?? 1;
         clearTimeout(this.correctionTimer);
-        this.correctionTimer = setTimeout(() => { this.set({ speed: base }).catch(() => {}); }, drift.durationMs);
+        this.correctionTimer = setTimeout(() => {
+          this.correctionTimer = undefined;
+          this.set({ speed: base }).catch(error => logger.debug('Could not restore mpv speed:', error));
+        }, drift.durationMs);
         return this.set({ speed: base + drift.rateFactor });
       }
       default:
@@ -117,7 +120,6 @@ class MpvClient {
     return { success: true };
   }
 
-  /** Like a tab replacing its media, mpv opening another file ends the sync. */
   private checkFile(file: string | null): void {
     if (this.file === null) this.file = file;
     else if (file !== this.file) {
@@ -141,6 +143,7 @@ class MpvClient {
             for (const { action, position, rate } of reply.events) {
               if (action === 'ratechange') {
                 clearTimeout(this.correctionTimer);
+                this.correctionTimer = undefined;
                 this.baseSpeed = rate;
               }
               this.onEvent({ action, position, rate, timestamp: received });
@@ -156,20 +159,21 @@ class MpvClient {
     })();
   }
 
+  private async restoreCorrection(): Promise<void> {
+    if (this.correctionTimer === undefined) return;
+    clearTimeout(this.correctionTimer);
+    this.correctionTimer = undefined;
+    if (this.baseSpeed !== null) await this.set({ speed: this.baseSpeed });
+  }
+
   private stop(): void {
     this.listener?.abort();
     this.listener = null;
     this.file = null;
     this.baseSpeed = null;
     clearTimeout(this.correctionTimer);
+    this.correctionTimer = undefined;
   }
 }
 
 export const mpv = new MpvClient();
-
-/** Sends a sync message to a tab, or to mpv. */
-export function sendToEndpoint<M extends HareMessage>(...args: Parameters<typeof sendToTab<M>>): Promise<Reply<M>> {
-  const [tabId, message] = args;
-  if (tabId === MPV_TAB_ID) return mpv.handle(message) as Promise<Reply<M>>;
-  return sendToTab(...args);
-}

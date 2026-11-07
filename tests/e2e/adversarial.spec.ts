@@ -243,7 +243,7 @@ test('real video playback stays controllable in picture-in-picture and after ret
   await video.getByRole('button', { name: 'Open picture-in-picture' }).click();
   await expect.poll(() => video.evaluate(() => document.pictureInPictureElement?.tagName)).toBe('VIDEO');
   const popup = await openUI(extension, 'popup', video);
-  await popup.getByRole('button', { name: 'Set speed to 1.5x', exact: true }).click();
+  await popup.getByRole('button', { name: 'Set speed to 1.5×', exact: true }).click();
   await expect.poll(() => rate(video)).toBe(1.5);
   await video.evaluate(() => document.exitPictureInPicture());
   await expect(video.locator('hare-controller')).toHaveCount(1);
@@ -328,14 +328,14 @@ test('oversized settings and failed reset preserve saved data and recover', asyn
 test('popup reports site rate limiting', async ({ extension }) => {
   const page = await openVideo(extension.context);
   const popup = await openUI(extension, 'popup', page);
-  await popup.getByRole('button', { name: 'Set speed to 1.5x', exact: true }).click();
+  await popup.getByRole('button', { name: 'Set speed to 1.5×', exact: true }).click();
   await expect.poll(() => rate(page)).toBe(1.5);
   await page.locator('video').first().evaluate((video: HTMLVideoElement) => {
     window.addEventListener('ratechange', event => {
       if (event.target === video && video.playbackRate > 1.5) video.playbackRate = 1.5;
     }, { capture: true });
   });
-  await popup.getByRole('button', { name: 'Set speed to 2x', exact: true }).click();
+  await popup.getByRole('button', { name: 'Set speed to 2×', exact: true }).click();
   await expect(popup.getByText('This player limited or blocked the requested speed.', { exact: true })).toBeVisible();
   await expect.poll(() => rate(page)).toBe(1.5);
 });
@@ -356,7 +356,8 @@ test('buffering signals pause the partner and recovery never overrides a deliber
   await popup.evaluate(async tabId => {
     await (globalThis as any).chrome.tabs.sendMessage(tabId, { type: 'SYNC_DRIFT_CORRECT', payload: { method: 'rate', rateFactor: 1, durationMs: 200 } }, { frameId: 0 });
   }, await tabId(popup, b));
-  await a.waitForTimeout(300);
+  const initialTime = await a.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime);
+  await expect.poll(() => a.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(initialTime + 0.2);
   await a.locator('video').evaluate(v => v.dispatchEvent(new Event('waiting')));
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   await a.locator('video').evaluate((v: HTMLVideoElement) => v.pause());

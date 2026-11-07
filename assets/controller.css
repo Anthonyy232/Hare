@@ -140,11 +140,6 @@
   stroke-linejoin: round;
 }
 
-.hare-btn-hide {
-  opacity: 0.8;
-}
-
-/* Compact feedback follows the draggable controller without covering the video. */
 .hare-osd {
   position: absolute;
   top: calc(100% + 8px);

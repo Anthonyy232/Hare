@@ -1,14 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ObserverPool } from './observer-pool';
-import { OBSERVER } from './constants';
-import { setTimeout as delay } from 'node:timers/promises';
-
-// happy-dom has no idle callbacks; browsers run them by IDLE_TIMEOUT_MS at the latest.
-globalThis.requestIdleCallback ??= callback => setTimeout(callback, OBSERVER.IDLE_TIMEOUT_MS);
-globalThis.cancelIdleCallback ??= id => clearTimeout(id);
-const flushObserver = () => delay(OBSERVER.IDLE_TIMEOUT_MS + 20);
-
 describe('ObserverPool', () => {
+  let pool: ObserverPool;
+  afterEach(() => pool?.disconnect());
   beforeEach(() => {
     document.body.innerHTML = '';
   });
@@ -19,34 +13,30 @@ describe('ObserverPool', () => {
     const outer = host.attachShadow({ mode: 'open' });
     const innerHost = document.createElement('div'); outer.append(innerHost);
     const inner = innerHost.attachShadow({ mode: 'open' });
-    const pool = new ObserverPool(media => found.push(media), media => removed.push(media));
+    pool = new ObserverPool(media => found.push(media), media => removed.push(media));
     pool.observe(document);
     const video = document.createElement('video'); inner.append(video);
-    await flushObserver();
-    expect(found).toEqual([video]);
+    await vi.waitFor(() => expect(found).toEqual([video]));
     host.remove();
-    await flushObserver();
-    expect(removed).toEqual([video]);
+    await vi.waitFor(() => expect(removed).toEqual([video]));
     inner.append(document.createElement('video'));
-    await flushObserver();
-    expect(found).toHaveLength(1);
-    pool.disconnect();
+    const survivor = document.createElement('video'); document.body.append(survivor);
+    await vi.waitFor(() => expect(found).toEqual([video, survivor]));
   });
 
   it('does not report media added and removed before the batch flushes', async () => {
     const found: HTMLMediaElement[] = [];
-    const pool = new ObserverPool(media => found.push(media), () => {});
+    pool = new ObserverPool(media => found.push(media), () => {});
     pool.observe(document);
     const video = document.createElement('video'); document.body.append(video); video.remove();
-    await flushObserver();
-    expect(found).toEqual([]);
-    pool.disconnect();
+    const survivor = document.createElement('video'); document.body.append(survivor);
+    await vi.waitFor(() => expect(found).toEqual([survivor]));
   });
 
   it('does not report a removed media element when it is reparented', async () => {
     const found: HTMLMediaElement[] = [];
     const removed: HTMLMediaElement[] = [];
-    const pool = new ObserverPool(
+    pool = new ObserverPool(
       media => found.push(media),
       media => removed.push(media),
     );
@@ -57,13 +47,11 @@ describe('ObserverPool', () => {
     pool.observe(document);
     const video = document.createElement('video');
     firstParent.appendChild(video);
-    await flushObserver();
+    await vi.waitFor(() => expect(found).toEqual([video]));
 
     secondParent.appendChild(video);
-    await flushObserver();
-
-    expect(found).toEqual([video]);
+    const survivor = document.createElement('video'); secondParent.append(survivor);
+    await vi.waitFor(() => expect(found).toEqual([video, survivor]));
     expect(removed).toEqual([]);
-    pool.disconnect();
   });
 });

@@ -7,9 +7,7 @@ type EventCallback = (event: SyncEventPayload) => void;
 export class SyncAgent {
   private media: HTMLMediaElement;
   private sendEvent: EventCallback;
-  /** Applies a coordinator-issued rate to the local controller (so enforcement state stays consistent). */
   private setIntendedSpeed: (rate: number) => void;
-  /** Applies a temporary correction rate without changing the user's intended speed. */
   private setTransientRate: (rate: number) => void;
   private pendingPause = 0;
   private pendingPlay = 0;
@@ -139,7 +137,6 @@ export class SyncAgent {
       await safeMedia.play(this.media);
       return !this.destroyed && revision === this.playRevision;
     } catch {
-      // A rejected play must not suppress later user events.
       if (this.destroyed || revision !== this.playRevision) return false;
       this.buffering = false;
       if (this.pendingPlay > 0) this.pendingPlay--;
@@ -154,7 +151,6 @@ export class SyncAgent {
       clearTimeout(this.seekDebounceTimer);
       this.seekDebounceTimer = null;
     }
-    // A seek invalidates the current drift correction.
     if (this.rateCorrectionTimer) {
       clearTimeout(this.rateCorrectionTimer);
       this.rateCorrectionTimer = null;
@@ -167,7 +163,6 @@ export class SyncAgent {
     this.pendingSeekPosition = this.media.seeking || Math.abs(after - before) > 1e-3 ? after : null;
   }
 
-  /** Apply a coordinator-issued rate while suppressing the synchronous controller callback. */
   executeRateChange(rate: number): void {
     if (this.destroyed || !Number.isFinite(rate) || rate <= 0) return;
     if (this.rateCorrectionTimer) {
@@ -180,7 +175,6 @@ export class SyncAgent {
     finally { this.applyingRemoteRate = false; }
   }
 
-  // Propagate local speed changes; suppress synchronous echoes from remote changes.
   notifyIntendedSpeedChange(rate: number): void {
     if (this.destroyed) return;
     if (this.applyingRemoteRate) return;

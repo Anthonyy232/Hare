@@ -4,7 +4,6 @@ import { getShadowRoot } from './shadow-dom';
 
 type MediaCallback = (media: HTMLMediaElement) => void;
 
-/** One observer per root allows detached shadow trees to be released independently. */
 export class ObserverPool {
   private observers = new Map<Document | ShadowRoot, MutationObserver>();
   private pendingMutations: MutationRecord[] = [];
@@ -17,12 +16,22 @@ export class ObserverPool {
     private includeAudio = false,
   ) {}
 
-  observe(root: Document | ShadowRoot): HTMLMediaElement[] {
+  observe(root: Document | ShadowRoot): void {
     this.attach(root);
     const found = new Set<HTMLMediaElement>();
     this.scan(root, found, true);
     this.reportFound(found);
-    return [...found];
+  }
+
+  rescan(root: Document | ShadowRoot): void {
+    this.attach(root);
+    const found = new Set<HTMLMediaElement>();
+    this.scan(root, found, true);
+    for (const media of found) {
+      if (!media.isConnected) continue;
+      this.trackedMedia.add(media);
+      this.onMediaFound(media);
+    }
   }
 
   private attach(root: Document | ShadowRoot): void {

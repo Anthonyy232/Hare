@@ -1,10 +1,11 @@
 import { SPEED, CONTROLLER, UI, OBSERVER } from './constants';
-import type { Settings, SiteHandler, KeyAction } from './types';
-import type { HitmapButton } from './cross-frame-pointer';
+import type { Settings, SiteHandler } from './types';
+import type { KeyAction } from './key-actions';
+import type { HitmapButton } from './controller-contracts';
 import controllerCSS from '../assets/controller.css?raw';
 import { logger } from './logger';
 import { safeMedia } from './safe-media';
-import { createIcon, type ICONS } from './controller-icons';
+import { createControllerView } from './controller-view';
 
 let sharedStyleSheet: CSSStyleSheet | null = null;
 
@@ -28,22 +29,15 @@ const ENFORCEMENT_DEBOUNCE_MS = 500;
 type ControllerPosition = { target: Element; method: 'prepend' | 'append' };
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
 
-const BUTTONS: ReadonlyArray<[icon: keyof typeof ICONS, action: KeyAction, label: string]> = [
-  ['rewind', 'rewind', 'Rewind'],
-  ['slower', 'slower', 'Slower'],
-  ['faster', 'faster', 'Faster'],
-  ['advance', 'advance', 'Advance'],
-  ['hide', 'display', 'Hide controller'],
-];
-
 export class VideoController {
   readonly id = `hare-${++controllerIdCounter}`;
 
   private readonly wrapper = document.createElement(CONTROLLER.ELEMENT_TAG);
-  private readonly controllerEl = document.createElement('div');
-  private readonly speedDisplay = document.createElement('span');
+  private readonly view = createControllerView();
+  private readonly controllerEl = this.view.controllerEl;
+  private readonly speedDisplay = this.view.speedDisplay;
+  private readonly buttons = this.view.buttons;
   private readonly osdEl = document.createElement('div');
-  private readonly buttons: HTMLButtonElement[];
   private readonly listeners = new AbortController();
   private readonly resizeObserver = new ResizeObserver(() => {
     clearTimeout(this.resizeDebounceTimeout);
@@ -89,11 +83,6 @@ export class VideoController {
     this.wrapper.style.setProperty('--hare-z-index', String(CONTROLLER.Z_INDEX));
 
     const { signal } = this.listeners;
-    this.speedDisplay.className = 'hare-speed';
-    this.speedDisplay.setAttribute('role', 'status');
-    this.speedDisplay.setAttribute('aria-live', 'polite');
-    this.speedDisplay.setAttribute('aria-label', 'Current playback speed');
-    this.speedDisplay.tabIndex = 0;
     this.speedDisplay.addEventListener('pointerdown', this.handleDragStart, { signal });
     this.speedDisplay.addEventListener('pointermove', this.handleDragMove, { signal });
     for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
@@ -101,30 +90,15 @@ export class VideoController {
     }
     this.updateSpeedDisplay();
 
-    this.buttons = BUTTONS.map(([icon, action, label]) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'hare-btn';
-      button.dataset.action = action;
-      button.setAttribute('aria-label', label);
-      button.append(createIcon(icon));
+    for (const [action, button] of this.buttons) {
       button.addEventListener('click', event => {
         event.preventDefault();
         event.stopPropagation();
-        if (action === 'display') this.toggleVisibility();
-        else if (action === 'rewind' || action === 'advance') this.seek((action === 'rewind' ? -1 : 1) * this.valueFor(action));
-        else this.adjustSpeed((action === 'slower' ? -1 : 1) * this.valueFor(action));
+        this.executeAction(action, this.valueFor(action));
       }, { signal });
-      return button;
-    });
-    const controls = document.createElement('span');
-    controls.className = 'hare-controls';
-    controls.append(...this.buttons);
-
-    this.controllerEl.className = 'hare-controller';
+    }
     this.controllerEl.addEventListener('mouseenter', () => this.clampPosition(), { signal });
     this.controllerEl.addEventListener('focusin', () => this.clampPosition(), { signal });
-    this.controllerEl.append(this.speedDisplay, controls);
     this.applyAppearance();
     this.renderVisibility();
 
@@ -166,7 +140,6 @@ export class VideoController {
     this.speedDisplay.textContent = formatSpeed(this.speed);
   }
 
-  /** Sets the user-intended speed and keeps enforcing it; warns when the player rejects or limits it. */
   setSpeed(speed: number): boolean {
     if (this.destroyed || !Number.isFinite(speed)) return false;
     const roundedSpeed = Math.round(clamp(speed, SPEED.MIN, SPEED.MAX) * 100) / 100;
@@ -198,7 +171,6 @@ export class VideoController {
     this.setSpeed(this.speed + delta);
   }
 
-  /** Corrects drift without changing the user's intended speed. */
   applyTransientRate(speed: number): void {
     if (this.destroyed) return;
     const clampedSpeed = clamp(speed, SPEED.MIN, SPEED.MAX);
@@ -215,17 +187,19 @@ export class VideoController {
     safeMedia.setCurrentTime(this.media, safeMedia.getCurrentTime(this.media) + seconds);
   }
 
-  /** Runs a shortcut or forwarded button action, with on-screen feedback for speed changes. */
   perform(action: KeyAction, value: number): void {
+    if (this.executeAction(action, value)) this.showOSD(formatSpeed(this.speed));
+  }
+
+  private executeAction(action: KeyAction, value: number): boolean {
     switch (action) {
-      case 'slower': this.adjustSpeed(-value); break;
-      case 'faster': this.adjustSpeed(value); break;
-      case 'reset': this.setSpeed(value); break;
-      case 'rewind': this.seek(-value); return;
-      case 'advance': this.seek(value); return;
-      case 'display': this.toggleVisibility(); return;
+      case 'slower': this.adjustSpeed(-value); return true;
+      case 'faster': this.adjustSpeed(value); return true;
+      case 'reset': this.setSpeed(value); return true;
+      case 'rewind': this.seek(-value); return false;
+      case 'advance': this.seek(value); return false;
+      case 'display': this.toggleVisibility(); return false;
     }
-    this.showOSD(formatSpeed(this.speed));
   }
 
   toggleVisibility(): void {
@@ -240,12 +214,10 @@ export class VideoController {
     this.osdTimeout = setTimeout(() => this.osdEl.classList.remove('show'), UI.OSD_FADE_MS);
   }
 
-  /** Viewport button bounds and actions, for clicks forwarded by a host frame. */
   getButtonHitmap(): HitmapButton[] {
     if (this.destroyed || this.hidden) return [];
-    return this.buttons.flatMap(button => {
+    return [...this.buttons].flatMap(([action, button]) => {
       const rect = button.getBoundingClientRect();
-      const action = button.dataset.action as KeyAction;
       return rect.width > 0 && rect.height > 0
         ? [{ controllerId: this.id, action, value: this.valueFor(action), x: rect.left, y: rect.top, w: rect.width, h: rect.height }]
         : [];
@@ -279,14 +251,13 @@ export class VideoController {
 
   private renderVisibility(): void {
     this.controllerEl.classList.toggle('hidden', this.hidden);
-    this.buttons.at(-1)!.setAttribute('aria-pressed', String(this.hidden));
+    this.buttons.get('display')!.setAttribute('aria-pressed', String(this.hidden));
   }
 
   private applyPosition(): void {
     this.wrapper.style.transform = `translate(${this.positionX}px, ${this.positionY}px)`;
   }
 
-  // Throttle reactive rate writes to avoid fighting player scripts.
   private enforceSpeedIfNeeded(): void {
     if (!this.isEnforcingSpeed) return;
     const now = Date.now();
@@ -311,7 +282,6 @@ export class VideoController {
     this.enforceSpeedIfNeeded();
   };
 
-  // Repair positioning after dynamic player DOM changes.
   private verifyAndRepairPosition(): void {
     if (!this.media.isConnected) return;
     const parent = this.wrapper.parentElement;
@@ -356,7 +326,6 @@ export class VideoController {
     if (this.wrapper.parentElement) this.resizeObserver.observe(this.wrapper.parentElement);
   }
 
-  /** Shared parents get `position: relative` while any controller needs it, then their own value back. */
   private ensurePositioningContext(parent: HTMLElement): void {
     if (this.positionedParent !== parent) {
       this.releasePositioningContext();
@@ -387,7 +356,6 @@ export class VideoController {
     positionedParents.delete(parent);
   }
 
-  /** Converts viewport pixels into the containing block's CSS coordinates. */
   private getPositionGeometry() {
     const parent = this.wrapper.offsetParent instanceof HTMLElement ? this.wrapper.offsetParent : this.wrapper.parentElement;
     if (!parent) return null;
@@ -401,7 +369,6 @@ export class VideoController {
     };
   }
 
-  /** Keeps the expanded controls within the media box, in local CSS coordinates. */
   private getClampedBounds(): Bounds | null {
     const geometry = this.getPositionGeometry();
     if (!geometry) return null;
@@ -421,7 +388,6 @@ export class VideoController {
     }
 
     const padding = CONTROLLER.BOUNDARY_PADDING;
-    // Wrap controls before measuring them, including large buttons on narrow players.
     this.controllerEl.style.setProperty('--hare-max-width', `${Math.max(0, maxX - minX - padding * 2)}px`);
     const controllerRect = this.controllerEl.getBoundingClientRect();
     return {

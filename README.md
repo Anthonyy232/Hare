@@ -114,16 +114,23 @@ Hare/
 │   └── options/        # Settings page (Svelte)
 ├── components/         # Reusable Svelte components
 ├── lib/                # Core logic
-│   ├── controller.ts   # Video controller class
+│   ├── controller.ts   # Playback controls and positioning
+│   ├── controller-view.ts # Shared overlay and settings-preview structure
+│   ├── media-registry.ts # Media eligibility, controller and listener lifecycle
+│   ├── key-actions.ts  # Shortcut defaults, value rules and editor metadata
 │   ├── settings.ts     # Settings management
 │   ├── keybinds.ts     # Keyboard event handling
-│   ├── messaging.ts    # Typed messages, frame discovery, and status summaries
+│   ├── messages.ts     # Extension message and reply contracts
+│   ├── messaging.ts    # Message delivery, frame discovery and status summaries
 │   ├── sync-startup.ts # Pair activation, cancellation, and rollback
 │   ├── sync-coordinator.ts # Session state and drift correction
+│   ├── sync-transport.ts # Browser/mpv routing and endpoint discovery
 │   ├── sync-endpoint.ts # A frame's side of a sync pair, plus the worker keepalive
 │   ├── sync-agent.ts   # Per-media command execution and echo suppression
 │   ├── mpv.ts          # mpv's side of a sync pair, talking to public/hare.lua
-│   ├── stream.ts       # Stream links and the playlist for Open in video player
+│   ├── manifest-store.ts # Background-owned stream discovery and persistence
+│   ├── player-export.ts # Playlist download and desktop-player handoff
+│   ├── stream.ts       # Playlist format shared with desktop players
 │   └── site-handlers.ts # Per-site player containers and ignore rules
 ├── assets/             # Icons and CSS
 └── public/             # Static assets

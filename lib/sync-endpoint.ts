@@ -1,6 +1,6 @@
 import { browser, type Browser } from 'wxt/browser';
 import type { VideoController } from './controller';
-import type { HareMessage, Reply } from './types';
+import type { HareMessage, Reply } from './messages';
 import { SyncAgent } from './sync-agent';
 import { SYNC } from './sync-types';
 import { sendToBackground } from './messaging';
@@ -10,7 +10,6 @@ type SyncCommand = Extract<HareMessage, { type: 'SYNC_PAUSE' | 'SYNC_PLAY' | 'SY
 
 const DRIFT_IGNORE_S = SYNC.DRIFT_IGNORE_THRESHOLD_MS / 1000;
 
-/** This frame's side of a sync pair: one player's agent, plus a port that keeps the background worker alive. */
 export class SyncEndpoint {
   private agent: SyncAgent | null = null;
   private controller: VideoController | null = null;
@@ -31,7 +30,6 @@ export class SyncEndpoint {
       controller.media,
       event => { sendToBackground({ type: 'SYNC_EVENT', payload: event }).catch(() => {}); },
       baseRate,
-      // Route remote rates through the controller so its enforcement stays consistent.
       rate => controller.setSpeed(rate),
       rate => controller.applyTransientRate(rate),
     );
@@ -62,7 +60,6 @@ export class SyncEndpoint {
     switch (message.type) {
       case 'SYNC_PAUSE': {
         const { position, buffering } = message.payload;
-        // Do not extrapolate a paused source; skip tiny seeks to avoid visible jitter.
         if (position >= 0 && Math.abs(agent.getPosition().currentTime - position) > DRIFT_IGNORE_S) agent.executeSeek(position);
         agent.executePause(buffering === true);
         return { success: true };
@@ -76,7 +73,6 @@ export class SyncEndpoint {
         return { success: await agent.executePlay() };
       }
       case 'SYNC_SEEK': {
-        // A peer's buffering pause has usually already moved this player there.
         const { position } = message.payload;
         if (Math.abs(agent.getPosition().currentTime - position) > DRIFT_IGNORE_S) agent.executeSeek(position);
         return { success: true };

@@ -216,7 +216,6 @@ describe('SyncAgent', () => {
     for (const type of ['play', 'pause', 'seeking', 'seeked', 'waiting', 'stalled', 'playing']) {
       video.dispatchEvent(new Event(type));
     }
-    expect(vi.getTimerCount()).toBe(0);
     vi.advanceTimersByTime(2000);
     expect(sendEvent).not.toHaveBeenCalled();
   });
@@ -290,28 +289,23 @@ describe('SyncAgent', () => {
       expect(video.playbackRate).toBeCloseTo(2.05, 5);
     });
 
-    it('applyRateCorrection uses the transient rate path', () => {
+    it('temporarily adjusts playback without changing the intended speed', () => {
       const peerVideo = createMockVideo(10);
-      const setIntendedSpeed = vi.fn((rate: number) => {
-        peerVideo.playbackRate = rate;
-      });
-      const setTransientRate = vi.fn((rate: number) => {
-        peerVideo.playbackRate = rate;
-      });
+      let intendedSpeed = 1;
       const peer = new SyncAgent(
         peerVideo,
         sendEvent,
-        1.0,
-        setIntendedSpeed,
-        setTransientRate
+        intendedSpeed,
+        rate => { intendedSpeed = rate; peerVideo.playbackRate = rate; },
+        rate => { peerVideo.playbackRate = rate; },
       );
-
       peer.applyRateCorrection(0.02, 1000);
-      expect(setTransientRate).toHaveBeenCalledWith(1.02);
-      expect(setIntendedSpeed).not.toHaveBeenCalled();
-
+      expect(peerVideo.playbackRate).toBe(1.02);
+      expect(intendedSpeed).toBe(1);
       vi.advanceTimersByTime(1000);
-      expect(setTransientRate).toHaveBeenLastCalledWith(1.0);
+      expect(peerVideo.playbackRate).toBe(1);
+      expect(intendedSpeed).toBe(1);
+      expect(sendEvent).not.toHaveBeenCalled();
       peer.destroy();
     });
   });

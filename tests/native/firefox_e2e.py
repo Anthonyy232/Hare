@@ -168,7 +168,7 @@ class FirefoxFlows(unittest.TestCase):
         self.fill(self.field("Playback speed"), "1.75")
         self.field("Playback speed").send_keys(Keys.ENTER)
         WebDriverWait(self.d, 12).until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, ".speed-display"), "1.75"))
-        self.button("Set speed to 1.5x").click()
+        self.button("Set speed to 1.5×").click()
         WebDriverWait(self.d, 12).until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, ".speed-display"), "1.50"))
         self.patch(blacklist="127.0.0.1")
         self.until(lambda: "This site is excluded" in self.body())

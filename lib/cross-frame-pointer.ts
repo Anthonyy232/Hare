@@ -1,19 +1,9 @@
-import type { VideoController } from './controller';
-import { isKeyAction, type KeyAction } from './types';
+import type { HitmapButton, PointerTarget } from './controller-contracts';
+import { isKeyAction, type KeyAction } from './key-actions';
 import { CROSS_FRAME } from './constants';
 
 // Host overlays can intercept clicks above cross-origin players. Child frames publish
 // button bounds so their direct parent can forward the matching controller action.
-
-export type HitmapButton = {
-  controllerId: string;
-  action: KeyAction;
-  value: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-};
 
 type HareHitmapMessage = {
   __hareHitmap: true;
@@ -65,10 +55,9 @@ export type CrossFramePointerBridge = {
 };
 
 export function createCrossFramePointerBridge(
-  getControllers: () => VideoController[]
+  getControllers: () => PointerTarget[]
 ): CrossFramePointerBridge {
   const isChildFrame = window.parent !== window;
-  // Start at '[]' so a frame that never shows buttons stays silent on destroy.
   let lastPublishedJson = '[]';
 
   const publish = (buttons: HitmapButton[]): void => {

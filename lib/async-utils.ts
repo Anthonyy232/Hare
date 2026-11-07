@@ -1,4 +1,3 @@
-/** Always release the timeout after a request settles, including rejected requests. */
 export async function withTimeout<T>(request: Promise<T>, timeoutMs = 2500): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

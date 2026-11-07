@@ -2,11 +2,11 @@
   import { onMount, onDestroy } from "svelte";
   import SpeedControl from "../../components/SpeedControl.svelte";
   import SyncMode from "../../components/SyncMode.svelte";
-  import type { HareMessage } from "../../lib/types";
+  import type { HareMessage } from "../../lib/messages";
   import { SPEED, UI } from "../../lib/constants";
   import { loadSettings, saveSettings, isBlacklisted, removeExactSiteExclusions } from "../../lib/settings";
-  import { getFrameIds, getTabMedia, summarize, sendToTab, type MediaSummary } from "../../lib/messaging";
-  import { findManifest, playlist } from "../../lib/stream";
+  import { getTabMedia, summarize, sendToTab, type MediaSummary } from "../../lib/messaging";
+  import { exportToPlayer } from "../../lib/player-export";
 
   let status: MediaSummary | null = $state(null);
   let loading = $state(true);
@@ -120,20 +120,7 @@
     if (!await browser.permissions.request({ permissions: ['downloads', 'downloads.open'] })) return;
     busy = true;
     try {
-      const replies = await Promise.all((await getFrameIds(tabId)).map(frameId =>
-        sendToTab(tabId!, { type: 'GET_STREAM' }, frameId).catch(() => null)));
-      const media = replies.find(reply => reply);
-      if (!media) throw new Error('This tab has no video that can play outside the browser.');
-      // Players can't decrypt protected streams, but some (mpv with yt-dlp) can resolve the page.
-      const url = media.src ?? (media.encrypted ? undefined : await findManifest(tabId, media.manifests)) ?? media.page;
-      const { title = '' } = await browser.tabs.get(tabId);
-      const file = URL.createObjectURL(new Blob([playlist(url, title, media.time, media.page)], { type: 'audio/x-mpegurl' }));
-      const id = await browser.downloads.download({ url: file, filename: 'hare.m3u', conflictAction: 'overwrite', saveAs: false });
-      let state;
-      while ((state = (await browser.downloads.search({ id }))[0]?.state) === 'in_progress') await new Promise(resolve => setTimeout(resolve, 50));
-      URL.revokeObjectURL(file);
-      if (state !== 'complete') throw new Error('Could not save the playlist.');
-      await browser.downloads.open(id).catch(() => showToast('Saved hare.m3u to Downloads. Open it to play.'));
+      if (await exportToPlayer(tabId) === 'saved') showToast('Saved hare.m3u to Downloads. Open it to play.');
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not open the video.');
     } finally { busy = false; }
@@ -232,7 +219,7 @@
             <button
               class="preset"
               data-speed-action
-              aria-label={`Set speed to ${preset}x`}
+              aria-label={`Set speed to ${preset}×`}
               aria-pressed={!status.mixedSpeeds && Math.abs(status.currentSpeed - preset) < 0.001}
               disabled={busy}
               onclick={() => setSpeed(preset)}

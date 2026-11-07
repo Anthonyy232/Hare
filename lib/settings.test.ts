@@ -79,6 +79,15 @@ describe('settings boundary', () => {
         expect(bindings.filter(binding => binding.key === 'KeyQ')).toHaveLength(1);
         expect(bindings.find(binding => binding.action === 'display')!.key).toBe('');
     });
+    it('keeps shortcut values within their playback and seek ranges', async () => {
+        const settings = {
+            ...DEFAULT_SETTINGS,
+            keyBindings: DEFAULT_SETTINGS.keyBindings.map(binding => ({ ...binding, value: binding.action === 'reset' ? 0 : 100000 })),
+        };
+        await saveSettings(settings);
+        const values = Object.fromEntries((await loadSettings()).keyBindings.map(binding => [binding.action, binding.value]));
+        expect(values).toEqual({ slower: 16, faster: 16, rewind: 86400, advance: 86400, reset: 0.07, display: 100000 });
+    });
     it('supports pasted URLs, wildcard domains, case and trailing dots', () => {
         for (const blacklist of ['https://Example.com/watch?x=1', '*.example.com', 'example.com.']) {
             expect(isBlacklisted(blacklist, 'SUB.EXAMPLE.COM.')).toBe(true);

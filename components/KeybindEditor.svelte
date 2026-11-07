@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import type { KeyBinding, KeyAction } from "../lib/types";
-  import { clampBindingValue } from "../lib/settings";
+  import { ACTIONS, clampBindingValue, type KeyBinding } from "../lib/key-actions";
 
   interface Props {
     bindings: KeyBinding[];
@@ -14,24 +13,6 @@
   let editingIndex: number | null = $state(null);
   let errorMessage: string | null = $state(null);
   let errorTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  const actionLabels: Record<KeyAction, string> = {
-    slower: "Decrease Speed",
-    faster: "Increase Speed",
-    rewind: "Rewind",
-    advance: "Advance",
-    reset: "Reset Speed",
-    display: "Show/Hide Controller",
-  };
-
-  const actionValueLabels: Record<KeyAction, string> = {
-    slower: "Speed step",
-    faster: "Speed step",
-    rewind: "Seconds",
-    advance: "Seconds",
-    reset: "Target speed",
-    display: "",
-  };
 
   function formatKey(key: string): string {
     if (key.startsWith("Key")) return key.slice(3);
@@ -77,7 +58,6 @@
       return;
     }
 
-    // Empty keys mean unbound — they don't conflict with each other.
     const isDuplicate = bindings.some(
       (b, i) => i !== editingIndex && b.key === event.code && b.key !== "",
     );
@@ -123,7 +103,7 @@
   <ul class="shortcut-list" aria-label="Keyboard shortcuts">
     {#each bindings as binding, index}
       <li class="shortcut-row">
-        <h3>{actionLabels[binding.action]}</h3>
+        <h3>{ACTIONS[binding.action].label}</h3>
         <div class="shortcut-field">
           <span class="field-label" aria-hidden="true">Shortcut</span>
           <div class="key-cell">
@@ -133,7 +113,7 @@
               class:unbound={!binding.key && editingIndex !== index}
               onclick={() => startListening(index)}
               onblur={() => { editingIndex = null; }}
-              aria-label={`Change shortcut for ${actionLabels[binding.action]}`}
+              aria-label={`Change shortcut for ${ACTIONS[binding.action].label}`}
               aria-pressed={editingIndex === index}
             >
               {#if editingIndex === index}Press a key…
@@ -141,19 +121,19 @@
               {:else}Unbound{/if}
             </button>
             <button type="button" class="key-clear" title="Clear shortcut"
-              aria-label={`Clear shortcut for ${actionLabels[binding.action]}`}
+              aria-label={`Clear shortcut for ${ACTIONS[binding.action].label}`}
               disabled={!binding.key} onclick={() => { editingIndex = null; patch(index, { key: '' }); }}>×</button>
           </div>
         </div>
         <div class="shortcut-field value-field">
-          {#if actionValueLabels[binding.action]}
-            <label for={`binding-value-${index}`} class="field-label">{actionValueLabels[binding.action]}</label>
+          {#if ACTIONS[binding.action].value?.label}
+            <label for={`binding-value-${index}`} class="field-label">{ACTIONS[binding.action].value?.label}</label>
             <div class="value-control">
               <input id={`binding-value-${index}`} type="number" class="value-input"
                 value={binding.value} step="0.01"
-                min={clampBindingValue(binding.action, 0)}
-                max={clampBindingValue(binding.action, Infinity)}
-                aria-label={`${actionLabels[binding.action]} ${actionValueLabels[binding.action]}`}
+                min={ACTIONS[binding.action].value?.min}
+                max={ACTIONS[binding.action].value?.max}
+                aria-label={`${ACTIONS[binding.action].label} ${ACTIONS[binding.action].value?.label}`}
                 onkeydown={(event) => {
                   if (event.key !== 'Enter' && event.key !== 'Escape') return;
                   event.preventDefault();
@@ -161,13 +141,13 @@
                   event.currentTarget.blur();
                 }}
                 oninput={() => onDraftChange?.(true)} onblur={(e) => handleBlur(index, e)} />
-              <span class="unit" aria-hidden="true">{binding.action === 'rewind' || binding.action === 'advance' ? 'sec' : '×'}</span>
+              <span class="unit" aria-hidden="true">{ACTIONS[binding.action].value?.unit}</span>
             </div>
           {/if}
         </div>
         <label class="override-label">
           <input type="checkbox" checked={binding.force} onchange={() => toggleForce(index)}
-            aria-label={`Override site shortcut for ${actionLabels[binding.action]}`} />
+            aria-label={`Override site shortcut for ${ACTIONS[binding.action].label}`} />
           <span>Override site shortcut</span>
         </label>
       </li>

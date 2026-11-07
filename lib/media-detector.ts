@@ -19,7 +19,6 @@ export function scanMediaTree(
         stack.push(shadow);
       }
     }
-    // Reverse the stack push to preserve document order for the primary media.
     for (let i = node.childNodes.length - 1; i >= 0; i--) {
       const child = node.childNodes[i];
       if (child instanceof Element) stack.push(child);
@@ -28,7 +27,6 @@ export function scanMediaTree(
   return media;
 }
 
-/** The most prominent player: playing before paused, then largest. */
 export function primaryMedia<T extends { media: HTMLMediaElement }>(items: T[]): T | undefined {
   const area = (media: HTMLMediaElement) => {
     const rect = media.getBoundingClientRect();

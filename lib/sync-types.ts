@@ -1,3 +1,21 @@
+export const MPV_TAB_ID = -1;
+
+export function isEndpointId(id: number): boolean {
+  return id === MPV_TAB_ID || (Number.isInteger(id) && id >= 0);
+}
+
+export interface SyncEndpointRef {
+  tabId: number;
+  frameId?: number;
+}
+
+export interface SyncParticipant {
+  endpoint: SyncEndpointRef;
+  position: SyncPositionResponse;
+  title: string;
+  domain: string;
+}
+
 export interface SyncSession {
   videoA: { tabId: number; frameId?: number };
   videoB: { tabId: number; frameId?: number };
@@ -23,10 +41,8 @@ export interface SyncEventPayload {
 }
 
 export interface SyncCommandPayload {
-  action: 'pause' | 'play' | 'seek' | 'ratechange';
   position: number; // absolute target position; -1 means preserve current position for pause/play
   timestamp: number; // Date.now() when command was sent
-  generation: number;
   buffering?: boolean; // Pause caused by a peer stall; preserve readiness reporting.
   rate?: number; // source playback rate (used by receiver for time compensation; required for ratechange)
 }

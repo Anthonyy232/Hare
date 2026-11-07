@@ -2,14 +2,11 @@ import type { SiteHandler } from './types';
 
 interface SiteRule {
   domains: readonly string[];
-  /** Player containers in priority order; the first match wins. */
   containers: readonly string[];
-  /** Previews, ads, and decorative videos that should not get a controller. */
   ignore?: string;
   minWidth: number;
   minHeight: number;
   ignoreIf?: (video: HTMLVideoElement) => boolean;
-  /** Mount point when no container matches. Defaults to the parent element. */
   fallback?: (video: HTMLVideoElement) => Element | null;
 }
 
@@ -135,7 +132,6 @@ function fromRule(rule: SiteRule): SiteHandler {
   };
 }
 
-/** Catch-all for sites without custom rules: common player class names, then a positioned parent. */
 export const genericHandler: SiteHandler = {
   findContainer(video) {
     const container = video.closest(

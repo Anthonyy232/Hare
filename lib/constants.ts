@@ -29,7 +29,6 @@ export const CLEANUP = {
 } as const;
 
 export const CROSS_FRAME = {
-  /** How often each child frame republishes its button hitmap to its parent. */
   HITMAP_POLL_MS: 500,
 } as const;
 

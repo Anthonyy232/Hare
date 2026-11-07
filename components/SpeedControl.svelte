@@ -21,7 +21,6 @@
     onSpeedChange(Math.min(SPEED.MAX, speed + SPEED.STEP));
   }
 
-  // Allow incomplete input while typing; clamp only when committed.
   function handleInput(event: Event) {
     draft = (event.target as HTMLInputElement).value;
   }
@@ -60,7 +59,6 @@
     oninput={(event) => { editing = true; handleInput(event); }}
     onfocus={() => { editing = true; }}
     onblur={(event) => {
-      // A direct speed action takes precedence over the unfinished custom value.
       if (event.relatedTarget instanceof HTMLElement && event.relatedTarget.hasAttribute('data-speed-action')) {
         editing = false;
         draft = speed.toFixed(2);

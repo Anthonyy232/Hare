@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SyncStartup } from './sync-startup';
-import type { SyncCoordinator } from './sync-coordinator';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn(), get: vi.fn() }));
 vi.mock('wxt/browser', () => ({ browser: { tabs: { get: mocks.get } } }));
@@ -8,8 +7,8 @@ vi.mock('./messaging', () => ({ getFrameIds: async () => [0], sendToTab: mocks.s
 
 const activation = { success: true, currentTime: 10, playbackRate: 1, paused: true, buffering: false, timestamp: 1 };
 function setup() {
-  const coordinator = { ready: Promise.resolve(), stopSync: vi.fn().mockResolvedValue(undefined), startSync: vi.fn(), setTabMeta: vi.fn() };
-  return { coordinator, startup: new SyncStartup(coordinator as unknown as SyncCoordinator) };
+  const coordinator = { ready: Promise.resolve(), stopSync: vi.fn().mockResolvedValue(undefined), startSync: vi.fn() };
+  return { coordinator, startup: new SyncStartup(coordinator) };
 }
 
 describe('sync startup transaction', () => {

@@ -56,7 +56,7 @@ describe('mpv client', () => {
   it('starts playing where the tab will be once the command arrives', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(10_000);
     await mpv.handle({ type: 'SYNC_ACTIVATE' });
-    await mpv.handle({ type: 'SYNC_PLAY', payload: { action: 'play', position: 20, rate: 2, timestamp: 9_500, generation: 1 } });
+    await mpv.handle({ type: 'SYNC_PLAY', payload: { position: 20, rate: 2, timestamp: 9_500 } });
     expect(sentChanges()).toEqual([{ pause: '0', seek: '21' }]);
   });
 
@@ -66,5 +66,28 @@ describe('mpv client', () => {
     await mpv.handle({ type: 'SYNC_DRIFT_CORRECT', payload: { method: 'rate', rateFactor: 0.02, durationMs: 3000 } });
     await vi.advanceTimersByTimeAsync(3000);
     expect(sentChanges()).toEqual([{ speed: '1.02' }, { speed: '1' }]);
+  });
+
+  it.each(['SYNC_DEACTIVATE', 'SYNC_SEEK'] as const)('restores intended speed when %s cancels a correction', async type => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    state.speed = 1.5;
+    await mpv.handle({ type: 'SYNC_ACTIVATE' });
+    await mpv.handle({ type: 'SYNC_DRIFT_CORRECT', payload: { method: 'rate', rateFactor: 0.02, durationMs: 3000 } });
+    await mpv.handle(type === 'SYNC_DEACTIVATE' ? { type } : { type, payload: { position: 20, timestamp: Date.now() } });
+    const expected = [{ speed: '1.52' }, { speed: '1.5' }];
+    expect(sentChanges().slice(0, 2)).toEqual(expected);
+    const count = sentChanges().length;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sentChanges()).toHaveLength(count);
+  });
+
+  it('keeps a new intended speed when it replaces a correction', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await mpv.handle({ type: 'SYNC_ACTIVATE' });
+    await mpv.handle({ type: 'SYNC_DRIFT_CORRECT', payload: { method: 'rate', rateFactor: 0.02, durationMs: 3000 } });
+    await mpv.handle({ type: 'SYNC_RATE', payload: { rate: 2, position: 0, timestamp: Date.now() } });
+    await mpv.handle({ type: 'SYNC_DEACTIVATE' });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sentChanges()).toEqual([{ speed: '1.02' }, { speed: '2' }]);
   });
 });

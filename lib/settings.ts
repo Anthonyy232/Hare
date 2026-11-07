@@ -1,6 +1,7 @@
 import { storage } from '#imports';
-import { DEFAULT_SETTINGS, isKeyAction, type Settings, type KeyBinding, type KeyAction } from './types';
-import { STORAGE_KEY, CONTROLLER, SPEED } from './constants';
+import { DEFAULT_SETTINGS, type Settings } from './types';
+import { clampBindingValue, isKeyAction, type KeyBinding, type KeyAction } from './key-actions';
+import { STORAGE_KEY, CONTROLLER } from './constants';
 import { logger } from './logger';
 
 const settingsStorage = storage.defineItem<Settings>(`sync:${STORAGE_KEY}`, {
@@ -8,18 +9,6 @@ const settingsStorage = storage.defineItem<Settings>(`sync:${STORAGE_KEY}`, {
 });
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
-/** Each action's valid value: a target speed, a speed step, or seek seconds. */
-export function clampBindingValue(action: KeyAction, value: number): number {
-  switch (action) {
-    case 'reset': return clamp(value, SPEED.MIN, SPEED.MAX);
-    case 'slower':
-    case 'faster': return clamp(value, 0.01, SPEED.MAX);
-    case 'rewind':
-    case 'advance': return clamp(value, 0.01, 86400);
-    case 'display': return value;
-  }
-}
 
 export function validateKeyBindings(value: unknown): KeyBinding[] {
   const stored = new Map<KeyAction, KeyBinding>();
@@ -33,7 +22,6 @@ export function validateKeyBindings(value: unknown): KeyBinding[] {
   const usedKeys = new Set<string>();
   return DEFAULT_SETTINGS.keyBindings.map(defaultBinding => {
     const { action, key, value, force } = stored.get(defaultBinding.action) ?? defaultBinding;
-    // A duplicate shortcut can only execute one action. Keep the first assignment.
     const uniqueKey = usedKeys.has(key) ? '' : key;
     if (uniqueKey) usedKeys.add(uniqueKey);
     return { action, key: uniqueKey, value: clampBindingValue(action, value), force };
@@ -45,7 +33,6 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
     ? clamp(value, min, max) : fallback;
 }
 
-/** Use the same boundary for storage reads, writes, and live updates. Always returns a fresh object. */
 export function normalizeSettings(value: unknown): Settings {
   const stored = value && typeof value === 'object' ? value as Partial<Settings> : {};
   return {
@@ -120,7 +107,6 @@ export function validateBlacklist(blacklist: string): string[] {
   });
 }
 
-/** Remove only domain rules for this host, preserving broader domains and regex rules. */
 export function removeExactSiteExclusions(blacklist: string, hostname: string): string {
   const host = hostname.toLowerCase().replace(/\.$/, '');
   return blacklist.split('\n').filter(line => {
@@ -131,7 +117,6 @@ export function removeExactSiteExclusions(blacklist: string, hostname: string): 
   }).join('\n');
 }
 
-/** Cached because media detection checks the blacklist frequently. */
 function compileBlacklistPatterns(blacklist: string): CompiledPattern[] {
   if (blacklist === cachedBlacklist) return cachedPatterns;
 
