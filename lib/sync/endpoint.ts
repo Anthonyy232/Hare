@@ -14,12 +14,11 @@ const KEEPALIVE_PING_MS = 20_000;
 /** A content frame's side of a sync pair: the one media element it syncs, and the port that keeps sync alive. */
 export class SyncEndpoint {
   private agent: SyncAgent | null = null;
-  private media: HTMLMediaElement | null = null;
   private port: Browser.runtime.Port | null = null;
   private timers: ReturnType<typeof setInterval>[] = [];
 
   isFor(media: HTMLMediaElement): boolean {
-    return this.media === media;
+    return this.agent?.media === media;
   }
 
   /** Replies to sync's messages; null for messages that aren't sync's. */
@@ -40,7 +39,6 @@ export class SyncEndpoint {
     if (!this.agent) return;
     this.agent.destroy();
     this.agent = null;
-    this.media = null;
     this.stopKeepAlive();
     if (notifyCoordinator) sendToBackground({ type: 'STOP_SYNC' }).catch(() => {});
   }
@@ -50,7 +48,6 @@ export class SyncEndpoint {
     const controller = primaryMedia(controllers.filter(({ media }) => media.isConnected && media.readyState >= HTMLMediaElement.HAVE_METADATA));
     if (!controller) return { success: false, error: 'No video found' };
     this.agent = new SyncAgent(controller, event => { sendToBackground({ type: 'SYNC_EVENT', payload: event }).catch(() => {}); });
-    this.media = controller.media;
     this.startKeepAlive();
     // Report the user's chosen speed: the media may be mid drift correction.
     return { success: true, ...this.agent.getPosition(), playbackRate: controller.intendedSpeed };

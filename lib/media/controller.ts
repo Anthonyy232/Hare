@@ -72,7 +72,7 @@ export class VideoController implements PointerTarget {
   constructor(
     readonly media: HTMLMediaElement,
     private settings: Settings,
-    private readonly siteHandler: SiteHandler | null = null,
+    private readonly siteHandler: SiteHandler,
   ) {
     this.hidden = settings.startHidden;
     this.targetSpeed = safeMedia.getPlaybackRate(media);
@@ -306,7 +306,7 @@ export class VideoController implements PointerTarget {
     if (fullscreen && fullscreen !== this.media && fullscreen.contains(this.media)) {
       return { target: fullscreen, method: 'append' };
     }
-    const target = this.media instanceof HTMLVideoElement ? this.siteHandler?.findContainer(this.media) : null;
+    const target = this.media instanceof HTMLVideoElement ? this.siteHandler.findContainer(this.media) : null;
     // Video elements cannot display DOM children (e.g. a .vjs-tech selector).
     return target && !(target instanceof HTMLMediaElement) ? { target, method: 'prepend' } : null;
   }

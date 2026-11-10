@@ -18,7 +18,7 @@ export interface SyncedController {
 
 /** Reports a tab's media events to sync and carries out the commands sync sends back. */
 export class SyncAgent implements SyncPlayer {
-  private readonly media: HTMLMediaElement;
+  readonly media: HTMLMediaElement;
   private pendingPause = 0;
   private pendingPlay = 0;
   private pendingSeekPosition: number | null = null;

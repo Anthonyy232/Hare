@@ -39,6 +39,13 @@ export async function askEveryFrame<M extends HareMessage>(tabId: number, messag
   return replies.filter(reply => reply !== null);
 }
 
+/** Sets the speed of all media in a tab. False when there is none, or some could not be set. */
+export async function setTabSpeed(tabId: number, speed: number): Promise<boolean> {
+  const frames = (await getTabMedia(tabId)).filter(frame => frame.speeds.length > 0);
+  const results = await Promise.allSettled(frames.map(frame => sendToTab(tabId, { type: 'SET_SPEED', payload: speed }, frame.frameId)));
+  return results.length > 0 && results.every(result => result.status === 'fulfilled' && result.value.success);
+}
+
 export async function getTabMedia(tabId: number): Promise<Array<{ frameId: number; speeds: number[] }>> {
   return (await askEveryFrame(tabId, { type: 'GET_STATUS' })).map(({ frameId, reply }) => ({ frameId, speeds: reply.speeds ?? [] }));
 }

@@ -2,7 +2,6 @@ import { storage } from '#imports';
 import { BUTTON_SIZE_RANGE, DEFAULT_SETTINGS, OPACITY_RANGE, type Settings } from './schema';
 import { clampBindingValue, isKeyAction, type KeyBinding, type KeyAction } from './key-actions';
 import { matchesDomain, normalizeHost } from '../hostname';
-import { logger } from '../logger';
 
 const STORAGE_KEY = 'hare-settings';
 // chrome.storage.sync's per-item quota.
@@ -66,27 +65,17 @@ export async function saveSettings(settings: Settings): Promise<Settings> {
   return normalized;
 }
 
-export function watchSettings(
-  callback: (settings: Settings) => void
-): () => void {
-  return settingsStorage.watch(newVal => {
-    try {
-      callback(normalizeSettings(newVal));
-    } catch (error) {
-      logger.error('Settings watch callback error:', error);
-    }
-  });
+export function watchSettings(callback: (settings: Settings) => void): () => void {
+  return settingsStorage.watch(stored => callback(normalizeSettings(stored)));
 }
 
 export function resetSettings(): Promise<Settings> {
   return saveSettings(DEFAULT_SETTINGS);
 }
 
-type CompiledPattern = { type: 'regex'; pattern: RegExp } | { type: 'domain'; pattern: string };
-let cachedBlacklist = '';
-let cachedPatterns: CompiledPattern[] = [];
+type Rule = { type: 'regex'; pattern: RegExp } | { type: 'domain'; pattern: string };
 
-function parsePattern(line: string): CompiledPattern {
+function parseRule(line: string): Rule {
   if (line.startsWith('/') && line.endsWith('/')) {
     return { type: 'regex', pattern: new RegExp(line.slice(1, -1), 'i') };
   }
@@ -97,29 +86,23 @@ function parsePattern(line: string): CompiledPattern {
   return { type: 'domain', pattern: normalizeHost(url.hostname) };
 }
 
-export function validateBlacklist(blacklist: string): string[] {
-  return blacklist.split('\n').flatMap((line, index) => {
-    if (!line.trim()) return [];
-    try { parsePattern(line.trim()); return []; }
-    catch { return [`Line ${index + 1}: enter a valid domain, URL, or /regular expression/.`]; }
+/** Every line of the list with its rule: null for a blank line or one that isn't a rule. */
+function parseBlacklist(blacklist: string): Array<{ line: string; rule: Rule | null }> {
+  return blacklist.split('\n').map(line => {
+    try { return { line, rule: line.trim() ? parseRule(line.trim()) : null }; }
+    catch { return { line, rule: null }; }
   });
 }
 
-function compileBlacklistPatterns(blacklist: string): CompiledPattern[] {
-  if (blacklist === cachedBlacklist) return cachedPatterns;
-  cachedBlacklist = blacklist;
-  cachedPatterns = [];
-  for (const line of blacklist.split('\n').map(l => l.trim()).filter(Boolean)) {
-    try { cachedPatterns.push(parsePattern(line)); }
-    catch { logger.warn('Invalid excluded-site pattern:', line); }
-  }
-  return cachedPatterns;
+export function validateBlacklist(blacklist: string): string[] {
+  return parseBlacklist(blacklist).flatMap(({ line, rule }, index) =>
+    line.trim() && !rule ? [`Line ${index + 1}: enter a valid domain, URL, or /regular expression/.`] : []);
 }
 
 export function isBlacklisted(blacklist: string, hostname: string): boolean {
-  return compileBlacklistPatterns(blacklist).some(compiled => compiled.type === 'regex'
-    ? compiled.pattern.test(hostname)
-    : matchesDomain(hostname, compiled.pattern));
+  return parseBlacklist(blacklist).some(({ rule }) => rule !== null && (rule.type === 'regex'
+    ? rule.pattern.test(hostname)
+    : matchesDomain(hostname, rule.pattern)));
 }
 
 /**
@@ -128,11 +111,8 @@ export function isBlacklisted(blacklist: string, hostname: string): boolean {
  */
 export function includeSite(blacklist: string, hostname: string): string | null {
   const host = normalizeHost(hostname);
-  const remaining = blacklist.split('\n').filter(line => {
-    try {
-      const rule = parsePattern(line.trim());
-      return rule.type !== 'domain' || rule.pattern !== host;
-    } catch { return true; }
-  }).join('\n');
+  const remaining = parseBlacklist(blacklist)
+    .filter(({ rule }) => rule?.type !== 'domain' || rule.pattern !== host)
+    .map(({ line }) => line).join('\n');
   return isBlacklisted(remaining, hostname) ? null : remaining;
 }

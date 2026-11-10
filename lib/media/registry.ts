@@ -20,7 +20,7 @@ export class MediaRegistry {
     private readonly onSourceInvalidated: (media: HTMLMediaElement) => void,
   ) {
     this.observer = this.createObserver();
-    this.observer.observe(document);
+    this.observer.scan();
     this.cleanupInterval = setInterval(() => {
       for (const media of this.entries.keys()) {
         if (!media.isConnected) this.remove(media);
@@ -34,7 +34,7 @@ export class MediaRegistry {
   }
 
   rescan(): void {
-    if (!this.destroyed) this.observer.rescan(document);
+    if (!this.destroyed) this.observer.scan();
   }
 
   updateSettings(settings: Settings): void {
@@ -47,7 +47,7 @@ export class MediaRegistry {
         if (media instanceof HTMLAudioElement && !settings.enableAudio) this.remove(media);
       }
       this.observer = this.createObserver();
-      this.observer.observe(document);
+      this.observer.scan();
     }
     for (const { controller } of this.entries.values()) controller?.updateSettings(settings);
   }

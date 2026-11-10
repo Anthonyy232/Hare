@@ -16,17 +16,11 @@ export class ObserverPool {
     private includeAudio = false,
   ) {}
 
-  observe(root: Document | ShadowRoot): void {
-    this.attach(root);
+  /** Reports every media element in the document, including ones already reported. */
+  scan(): void {
+    this.attach(document);
     const found = new Set<HTMLMediaElement>();
-    this.scan(root, found, true);
-    this.reportFound(found);
-  }
-
-  rescan(root: Document | ShadowRoot): void {
-    this.attach(root);
-    const found = new Set<HTMLMediaElement>();
-    this.scan(root, found, true);
+    this.collect(document, found, true);
     for (const media of found) {
       if (!media.isConnected) continue;
       this.trackedMedia.add(media);
@@ -45,7 +39,7 @@ export class ObserverPool {
     this.observers.set(root, observer);
   }
 
-  private scan(root: Node, media: Set<HTMLMediaElement>, observeShadows: boolean): void {
+  private collect(root: Node, media: Set<HTMLMediaElement>, observeShadows: boolean): void {
     for (const element of scanMediaTree(root, this.includeAudio, shadow => {
       if (observeShadows && shadow.host.isConnected) this.attach(shadow);
     })) media.add(element);
@@ -72,11 +66,11 @@ export class ObserverPool {
         const shadow = getShadowRoot(mutation.target);
         if (shadow && !this.observers.has(shadow)) {
           this.attach(shadow);
-          this.scan(shadow, found, true);
+          this.collect(shadow, found, true);
         }
       }
-      for (const node of mutation.removedNodes) this.scan(node, removed, false);
-      for (const node of mutation.addedNodes) this.scan(node, found, true);
+      for (const node of mutation.removedNodes) this.collect(node, removed, false);
+      for (const node of mutation.addedNodes) this.collect(node, found, true);
     }
     for (const media of removed) {
       if (!media.isConnected && this.trackedMedia.has(media)) {

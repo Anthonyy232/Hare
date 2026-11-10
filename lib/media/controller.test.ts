@@ -60,9 +60,9 @@ describe('controller', () => {
     controller.destroy();
     const parent = video.parentElement!;
     parent.style.position = 'static';
-    controller = new VideoController(video, structuredClone(DEFAULT_SETTINGS));
+    controller = new VideoController(video, structuredClone(DEFAULT_SETTINGS), getSiteHandler('example.com'));
     const secondVideo = document.createElement('video'); parent.append(secondVideo);
-    const second = new VideoController(secondVideo, structuredClone(DEFAULT_SETTINGS));
+    const second = new VideoController(secondVideo, structuredClone(DEFAULT_SETTINGS), getSiteHandler('example.com'));
     controller.destroy();
     expect(parent.style.position).toBe('relative');
     second.destroy();

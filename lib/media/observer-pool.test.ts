@@ -14,7 +14,7 @@ describe('ObserverPool', () => {
     const innerHost = document.createElement('div'); outer.append(innerHost);
     const inner = innerHost.attachShadow({ mode: 'open' });
     pool = new ObserverPool(media => found.push(media), media => removed.push(media));
-    pool.observe(document);
+    pool.scan();
     const video = document.createElement('video'); inner.append(video);
     await vi.waitFor(() => expect(found).toEqual([video]));
     host.remove();
@@ -26,7 +26,7 @@ describe('ObserverPool', () => {
   it('does not report media added and removed before the batch flushes', async () => {
     const found: HTMLMediaElement[] = [];
     pool = new ObserverPool(media => found.push(media), () => {});
-    pool.observe(document);
+    pool.scan();
     const video = document.createElement('video'); document.body.append(video); video.remove();
     const survivor = document.createElement('video'); document.body.append(survivor);
     await vi.waitFor(() => expect(found).toEqual([survivor]));
@@ -43,7 +43,7 @@ describe('ObserverPool', () => {
     const secondParent = document.createElement('div');
     document.body.append(firstParent, secondParent);
 
-    pool.observe(document);
+    pool.scan();
     const video = document.createElement('video');
     firstParent.appendChild(video);
     await vi.waitFor(() => expect(found).toEqual([video]));
