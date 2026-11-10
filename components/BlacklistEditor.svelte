@@ -92,7 +92,6 @@
   }
 
   .blacklist-input:focus {
-    outline: none;
     border-color: rgba(59, 130, 246, 0.6);
     background: rgba(40, 40, 40, 0.8);
   }

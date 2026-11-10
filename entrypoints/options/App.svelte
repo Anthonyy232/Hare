@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
   import KeybindEditor from "../../components/KeybindEditor.svelte";
   import BlacklistEditor from "../../components/BlacklistEditor.svelte";
   import ControllerPreview from "../../components/ControllerPreview.svelte";
@@ -22,9 +22,7 @@
   const hasUnsavedChanges = $derived(hasDraftInput || (settings !== null && JSON.stringify(settings) !== savedSnapshot));
   const validationErrors = $derived.by(() => settings ? validateBlacklist(settings.blacklist) : []);
   let error: string | null = $state(null);
-  let disposed = false;
   let conflictWarning = $state(false);
-  let unwatchSettings: (() => void) | null = null;
   let saveFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function showSavedFeedback() {
@@ -87,8 +85,7 @@
   onMount(() => {
     (async () => {
       await load();
-      if (disposed) return;
-      unwatchSettings = watchSettings((newSettings) => {
+      watchSettings((newSettings) => {
         if (saving) return;
         if (hasUnsavedChanges) {
           conflictWarning = true;
@@ -98,15 +95,6 @@
         }
       });
     })();
-  });
-
-  onDestroy(() => {
-    disposed = true;
-    unwatchSettings?.();
-    if (saveFeedbackTimeout) {
-      clearTimeout(saveFeedbackTimeout);
-      saveFeedbackTimeout = null;
-    }
   });
 </script>
 
@@ -563,7 +551,6 @@
     height: 4px;
     border-radius: 2px;
     background: rgba(255, 255, 255, 0.1);
-    outline: none;
     cursor: pointer;
     -webkit-appearance: none;
     appearance: none;

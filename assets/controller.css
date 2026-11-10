@@ -31,7 +31,7 @@
   pointer-events: auto !important;
   user-select: none;
   opacity: var(--hare-opacity);
-  transition: opacity 0.15s ease, backdrop-filter 0.15s ease, border-color 0.15s ease;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
   contain: layout style paint;
 }
 
@@ -162,8 +162,7 @@
   pointer-events: none;
   z-index: 999999;
   opacity: 0;
-  transition: opacity 0.2s ease,
-              transform 0.2s ease;
+  transition: opacity 0.2s ease;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 

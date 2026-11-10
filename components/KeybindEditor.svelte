@@ -5,7 +5,7 @@
   interface Props {
     bindings: KeyBinding[];
     onBindingsChange: (bindings: KeyBinding[]) => void;
-    onDraftChange?: (dirty: boolean) => void;
+    onDraftChange: (dirty: boolean) => void;
   }
 
   let { bindings, onBindingsChange, onDraftChange }: Props = $props();
@@ -82,7 +82,7 @@
     const next = Number.isFinite(target.valueAsNumber) ? clampBindingValue(action, target.valueAsNumber) : value;
     if (next !== value) patch(index, { value: next });
     target.value = String(next);
-    onDraftChange?.(false);
+    onDraftChange(false);
   }
 
   function toggleForce(index: number) {
@@ -124,7 +124,7 @@
               disabled={!binding.key} onclick={() => { editingIndex = null; patch(index, { key: '' }); }}>×</button>
           </div>
         </div>
-        <div class="shortcut-field value-field">
+        <div class="shortcut-field">
           {#if ACTIONS[binding.action].value?.label}
             <label for={`binding-value-${index}`} class="field-label">{ACTIONS[binding.action].value?.label}</label>
             <div class="value-control">
@@ -139,7 +139,7 @@
                   if (event.key === 'Escape') event.currentTarget.value = binding.value.toString();
                   event.currentTarget.blur();
                 }}
-                oninput={() => onDraftChange?.(true)} onblur={(e) => handleBlur(index, e)} />
+                oninput={() => onDraftChange(true)} onblur={(e) => handleBlur(index, e)} />
               <span class="unit" aria-hidden="true">{ACTIONS[binding.action].value?.unit}</span>
             </div>
           {/if}

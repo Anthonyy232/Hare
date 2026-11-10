@@ -172,13 +172,11 @@
   }
 
   .speed-input:focus {
-    outline: none;
     border-color: rgba(59, 130, 246, 0.6);
     background: rgba(40, 40, 40, 0.8);
   }
 
   .btn:focus-visible {
-    outline: 2px solid rgba(59, 130, 246, 0.8);
     outline-offset: 2px;
   }
 

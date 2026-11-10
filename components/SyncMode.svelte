@@ -5,7 +5,7 @@
   import { sendToBackground } from "../lib/messaging";
   import { browser } from "wxt/browser";
 
-  let { onExpandedChange }: { onExpandedChange?: (expanded: boolean) => void } = $props();
+  let { onExpandedChange }: { onExpandedChange: (expanded: boolean) => void } = $props();
 
   let syncStatus: SyncStatusResponse | null = $state(null);
   let candidates: SyncCandidate[] = $state([]);
@@ -19,7 +19,7 @@
   const offsetDisplay = $derived(offsetLabel(active?.offset ?? 0));
   const expanded = $derived(showSetup || active !== null);
   const message = $derived(error ?? (showSetup && !loading && candidates.length < 2 ? "Need at least 2 tabs with videos" : null));
-  $effect(() => { onExpandedChange?.(expanded); });
+  $effect(() => { onExpandedChange(expanded); });
 
   const scriptsFolder = navigator.userAgent.includes("Windows") ? "%APPDATA%\\mpv\\scripts" : "~/.config/mpv/scripts";
   let copied = $state(false);
@@ -79,40 +79,37 @@
   }
 
   async function startSync() {
-    if (selectedTabs.length !== 2 || loading) return;
-    loading = true;
+    if (selectedTabs.length !== 2) return;
     starting = true;
-    error = null;
-    try {
-      await statusRequest;
-      const result = await sendToBackground({
-        type: "START_SYNC",
-        payload: { tabIdA: selectedTabs[0], tabIdB: selectedTabs[1] },
-      });
-      if (!result.success) throw new Error(result.error || 'Failed to start sync');
+    const started = await changeSync(
+      { type: "START_SYNC", payload: { tabIdA: selectedTabs[0], tabIdB: selectedTabs[1] } },
+      'Failed to start sync',
+    );
+    if (started) {
       showSetup = false;
       selectedTabs = [];
-      await loadSyncStatus();
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to start sync';
-    } finally {
-      loading = false;
-      starting = false;
     }
+    starting = false;
   }
 
-  async function changeSync(message: Extract<HareMessage, { type: 'STOP_SYNC' | 'NUDGE_OFFSET' | 'SET_NUDGE_STEP' }>) {
-    if (loading) return;
+  /** Resolves whether sync accepted the change; a refusal is shown as the error. */
+  async function changeSync(
+    message: Extract<HareMessage, { type: 'START_SYNC' | 'STOP_SYNC' | 'NUDGE_OFFSET' | 'SET_NUDGE_STEP' }>,
+    failure = 'Could not update sync. Try again.',
+  ): Promise<boolean> {
+    if (loading) return false;
     loading = true;
     error = null;
     try {
       await statusRequest;
       const result = await sendToBackground(message);
-      if (!result.success) throw new Error(result.error || 'Could not update sync. Try again.');
+      if (!result.success) throw new Error(result.error || failure);
       if (message.type === 'STOP_SYNC') syncStatus = null;
       await loadSyncStatus();
+      return true;
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Could not update sync. Try again.';
+      error = e instanceof Error ? e.message : failure;
+      return false;
     } finally { loading = false; }
   }
 
@@ -264,7 +261,7 @@
 
         <button
           class="start-btn"
-          disabled={selectedTabs.length !== 2 || loading}
+          disabled={selectedTabs.length !== 2}
           onclick={startSync}
         >
           Start Sync

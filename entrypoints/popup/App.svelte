@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
   import SpeedControl from "../../components/SpeedControl.svelte";
   import SyncMode from "../../components/SyncMode.svelte";
   import { clampSpeed, sameSpeed } from "../../lib/speed";
   import { isHarePage } from "../../lib/hostname";
   import { loadSettings, saveSettings, isBlacklisted, includeSite } from "../../lib/settings/settings";
-  import { getTabMedia, sendToTab } from "../../lib/messaging";
+  import { getTabMedia, setTabSpeed } from "../../lib/messaging";
   import { exportToPlayer } from "../../lib/export/player-export";
 
   interface MediaSummary {
@@ -32,13 +32,7 @@
   let tabUrl = '';
   let siteLabel = $state('Current tab');
   let siteAction: 'enable' | 'include' | 'settings' | null = $state(null);
-  let disposed = false;
   let toastTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  onDestroy(() => {
-    disposed = true;
-    if (toastTimeout) clearTimeout(toastTimeout);
-  });
 
   function showToast(message: string) {
     if (toastTimeout) clearTimeout(toastTimeout);
@@ -47,7 +41,6 @@
   }
 
   function loadStatus(): Promise<void> {
-    if (disposed) return Promise.resolve();
     statusRequest ??= refreshStatus().finally(() => { statusRequest = null; });
     return statusRequest;
   }
@@ -98,14 +91,12 @@
   }
 
   async function setSpeed(requested: number) {
-    if (busy || tabId == null || !status || !Number.isFinite(requested)) return;
+    if (busy || tabId == null || !status) return;
     const speed = clampSpeed(requested);
     busy = true;
     try {
       await statusRequest;
-      const frames = (await getTabMedia(tabId)).filter(frame => frame.speeds.length > 0);
-      const results = await Promise.allSettled(frames.map(frame => sendToTab(tabId!, { type: 'SET_SPEED', payload: speed }, frame.frameId)));
-      if (!results.length || results.some(result => result.status === "rejected" || !result.value.success)) {
+      if (!await setTabSpeed(tabId, speed)) {
         showToast('Some media could not be updated. Reload the tab and try again.');
       }
       await loadStatus();
@@ -188,7 +179,7 @@
       {#if status}
         <div class="status-indicator">
           <div class="status-dot"></div>
-          <span class="status-text"
+          <span
             >{status.videoCount} {status.videoCount === 1 ? 'player' : 'players'}</span
           >
         </div>
@@ -453,7 +444,6 @@
   }
 
   .settings-btn:focus-visible {
-    outline: 2px solid rgba(59, 130, 246, 0.8);
     outline-offset: 2px;
   }
 

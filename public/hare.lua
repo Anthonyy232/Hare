@@ -139,6 +139,7 @@ mp.register_event('playback-restart', function()
   expected_seek = nil
   if file and not landed then emit('seek') end
 end)
+-- A file change bumps seq without an event, so a waiting /events request answers with the new file.
 mp.register_event('file-loaded', function()
   files_loaded = files_loaded + 1
   file = mp.get_property('pid', '0') .. '-' .. files_loaded
