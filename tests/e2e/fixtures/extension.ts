@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, type Settings } from '../../../lib/settings/schema';
 
 export { expect };
 export const fixture = 'http://127.0.0.1:41739/video.html';
-export const extensionPath = path.resolve('.output/chrome-mv3');
+const extensionPath = path.resolve('.output/chrome-mv3');
 
 export async function launchExtension(profile: string) {
   return chromium.launchPersistentContext(profile, {
