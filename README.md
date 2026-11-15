@@ -7,6 +7,8 @@
   <a href="https://addons.mozilla.org/firefox/addon/hare-video-controller/"><b>Get Hare for Firefox</b></a>
   &nbsp;·&nbsp;
   <a href="https://github.com/Anthonyy232/Hare/releases/latest"><b>Download for Chrome and Edge</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://anthonyy232.github.io/Hare/"><b>Website</b></a>
 </p>
 
 Hare is a browser extension that sets the playback speed of any HTML5 video or audio, from 0.07× to 16×. It works from the keyboard, from a small controller on the player, or from the toolbar popup, and it can keep two tabs playing in step.
