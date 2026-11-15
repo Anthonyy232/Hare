@@ -1,55 +1,76 @@
 # Working on Hare
 
-Guidance for anyone changing this codebase, human or AI. These are defaults, not laws: follow them unless you have a good reason not to, and say what the reason was.
+A browser extension (WXT, Svelte 5, TypeScript, MV3) that controls video and audio speed in Chrome and Firefox. `npm run dev` doesn't launch a browser: load the printed output folder unpacked in a separate profile.
 
-Hare is a browser extension (WXT, Svelte 5, TypeScript, MV3) for Chrome and Firefox. See the [README](README.md) for features. `npm run dev` doesn't launch a browser: load the printed output folder unpacked in a separate profile.
+## Code
 
-## Architecture
-
-- **`lib/` is grouped by feature.** A feature owns its messages and listeners; `background.ts` and `content.ts` only route, and the popup and options pages are views.
-
-## How we write code
-
-- **Simple beats clever.** Write the most direct code that solves today's problem. No speculative abstractions, options or extension points for needs that don't exist yet.
-- **Stay in scope.** Build what was asked; suggest extras instead of adding them.
-- **Don't hand-roll what already exists**, in the browser APIs, WXT, Svelte, a dependency or this repo. Search before you write a helper.
-- **Not overly defensive.** Validate at real boundaries (page messages, stored settings, network) and trust internal callers. No checks, fallbacks or try/catch for cases that can't happen.
-- **One source of truth.** Define a value or rule once instead of keeping copies in step.
-- **Delete dead code** you come across or create: unused exports, messages, styles and dependencies.
-- **Match the surrounding code**: naming, structure, comment density and idioms.
-- **Fix root causes.** A site or browser workaround gets a comment saying why.
-- **Fix it everywhere.** After fixing a bug or a convention slip, look for the same pattern elsewhere.
+- Simple and direct. No speculative abstractions, options or extension points.
+- Stay in scope; suggest extras instead of adding them.
+- Use what the platform, framework, dependencies and this repo already provide before writing a helper.
+- Validate only at real boundaries (user input, storage, network, other processes). No checks, fallbacks or try/catch for cases that can't happen.
+- One source of truth for each value or rule.
+- Delete dead code you find or create.
+- Match the surrounding code.
+- Fix root causes, and fix the same pattern everywhere it occurs.
 
 ## Comments
 
-- Explain **why**, not **what**: a browser or site quirk, a race, a non-obvious decision. One tight line where possible.
-- Don't restate names or code, narrate the next line, or label sections. Remove comments that no longer match the code.
+- Only where the reason isn't clear from the code: a quirk, a race, a non-obvious decision.
+- Short fragments, not sentences. Never restate code, narrate, or label sections.
+- Delete comments that no longer match.
 
 ## Tests
 
-- Test **behaviour and the edges that can break**: sync lifecycle and races, cross-frame messaging, settings persistence.
-- No trivial, duplicate, obvious or low-signal tests. A regression test should fail without its fix.
-- Keep tests deterministic: fake timers and observable events, not sleeps.
+- Behaviour and the edges that can break. No trivial, duplicate, obvious or low-signal tests.
+- A regression test fails without its fix.
+- Deterministic: fake time and observable events, no sleeps.
 - A failing test is a bug until shown otherwise.
 
-## Before you call something done
+## Hare
 
-- You have **reviewed your own diff against this file**: over-engineering, over-abstraction, defensive code, hand-rolled or duplicated code, low-signal tests, restating comments.
-- `npm run check` passes with **zero warnings**, and `npm run test:e2e` passes for anything that runs in pages, the popup or sync.
-- **Check the real case in a browser**, not just the tests.
-- The README still matches the code. Behaviour changes are deliberate and called out.
+- `lib/` is grouped by feature. A feature owns its messages and listeners; `background.ts` and `content.ts` only route, and the popup and options pages are views.
+- Page messages and stored settings are the real boundaries; trust internal callers.
+- `npm run test:e2e` builds first and drives the built Chrome extension. Run it for anything that runs in pages, the popup or sync.
+- Mozilla reviewers rebuild from the source archive: `zip.includeSources` in `wxt.config.ts` lists what goes in it, and the README's "Building from source" section is their instructions. Keep both true.
+- `site/` is the GitHub Pages site, deployed by `.github/workflows/pages.yml`. It is not part of the extension or the source archive.
+
+## Done means
+
+- Diff reviewed against this file.
+- `npm run check` passes with zero warnings.
+- UI changes seen in the running app, light and dark. Docs and metadata changes need no end-to-end run.
+- README updated for anything users will notice; behaviour changes called out.
+
+## Docs
+
+- README is for users: what it does, how to get it, how to use it. No internals, no agent instructions.
+- This file is for agents: only what can't be found quickly in the code.
+- No meta docs in the repo (notes, audits, plans, reports).
 
 ## Git
 
-- **Commit messages are short and informal**: lowercase, no trailing punctuation, bullets only when they help, e.g. `keep recorded stream playlists across extension updates`. Releases are `release x.y.z`.
-- **No AI attribution** in commits, branches, PRs or release notes.
-- **Don't commit meta docs**: review notes, audits, decision logs or verification reports.
-- One logical change per commit. Work on a branch off `main` and merge when asked.
-- Release notes are short and user-facing: no internals or test counts.
+- `type: summary` or `type(scope): summary`: lowercase, imperative, no full stop, about 70 characters at most. Types: `feat` `fix` `refactor` `perf` `test` `docs` `style` `build` `ci` `chore`.
+- Body only to say why. `Fixes #123` closes an issue.
+- One logical change per commit. Squash fix-ups before merging.
+- Branch off `main`. A single commit fast-forwards; several merge with `merge: <summary>`.
+- No AI attribution in commits, branches, PRs or releases.
+- One maintainer: amending and force-pushing to tidy history is fine. Keep contributors as authors. Delete stale branches.
 
-## For AI agents
+## Pull requests
 
-- Ask before anything hard to undo or visible to others. Approval to commit or merge isn't approval to push.
-- Leave changes you didn't make alone, and clean up scratch files, browser profiles and processes when done.
-- Report honestly: what was verified and how, and what wasn't.
-- Keep replies short; give one clear recommendation rather than a list of options.
+- Title in commit format. Body: what changed, why, how it was checked. Short.
+
+## Releases
+
+- Bump commit `chore: release vX.Y.Z`; tag `vX.Y.Z`, which must match `package.json`.
+- Title `Hare X.Y.Z`.
+- Notes: banner image first, then `### New`, `### Improved`, `### Fixed` (only those that apply). One line per change, written for users; no internals, dependency lists or test counts. End with the install link(s) and the full changelog link.
+- Banner: on the orphan `media` branch, `node banner.cjs <version> "<highlight>"` writes `releases/v<version>.png`; reference its raw URL. The branch's README has the steps.
+- Pushing the tag makes CI build the ZIPs and open a draft release. Firefox Add-ons is submitted by hand with the Firefox and sources ZIPs.
+
+## Agents
+
+- Pushing, amending and force-pushing are allowed. Ask before publishing a release or submitting to a store.
+- Leave changes you didn't make alone. Clean up scratch files, processes and emulators.
+- Say what was checked and how, and what wasn't.
+- Short replies; one recommendation, not a list of options.
