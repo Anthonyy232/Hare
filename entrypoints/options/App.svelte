@@ -3,6 +3,7 @@
   import KeybindEditor from "../../components/KeybindEditor.svelte";
   import BlacklistEditor from "../../components/BlacklistEditor.svelte";
   import ControllerPreview from "../../components/ControllerPreview.svelte";
+  import logo from "../../assets/logo.svg";
   import {
     loadSettings,
     saveSettings,
@@ -104,7 +105,7 @@
 
 <div class="options">
   <header>
-    <div class="header-badge">🐇</div>
+    <img class="header-logo" src={logo} alt="" width="44" height="44" />
     <div class="header-text">
       <h1>Hare</h1>
       <p class="subtitle">Video Speed Control</p>
@@ -124,10 +125,7 @@
       <fieldset disabled={saving}>
       <div class="settings-grid">
         <section class="card">
-          <div class="section-header">
-            <div class="section-accent"></div>
-            <h2>Core Settings</h2>
-          </div>
+          <h2>Core Settings</h2>
 
           <label class="toggle-row">
             <div class="toggle-content">
@@ -182,10 +180,7 @@
         </section>
 
         <section class="card">
-          <div class="section-header">
-            <div class="section-accent"></div>
-            <h2>Controller Display</h2>
-          </div>
+          <h2>Controller Display</h2>
 
           <div class="slider-row">
             <div class="slider-label-group">
@@ -234,10 +229,7 @@
       </div>
 
       <section class="card">
-        <div class="section-header">
-          <div class="section-accent"></div>
-          <h2>Keybindings</h2>
-        </div>
+        <h2>Keybindings</h2>
         <KeybindEditor
           bindings={settings.keyBindings}
           onBindingsChange={(keyBindings) => updateSettings({ keyBindings })}
@@ -246,10 +238,7 @@
       </section>
 
       <section class="card">
-        <div class="section-header">
-          <div class="section-accent"></div>
-          <h2>Excluded sites</h2>
-        </div>
+        <h2>Excluded sites</h2>
         <BlacklistEditor
           blacklist={settings.blacklist}
           errors={validationErrors}
@@ -303,17 +292,6 @@
     min-height: 100%;
   }
 
-  :global(body)::before {
-    content: "";
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(165deg, #1e1e1e 0%, var(--color-surface) 100%);
-    z-index: -1;
-  }
-
   .options {
     max-width: 1000px;
     margin: 0 auto;
@@ -334,18 +312,6 @@
     gap: 16px;
   }
 
-  .header-badge {
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent));
-    border-radius: 10px;
-    font-size: 28px;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-  }
-
   .header-text {
     flex: 1;
   }
@@ -355,18 +321,13 @@
     font-size: 28px;
     font-weight: 700;
     letter-spacing: -0.02em;
-    background: linear-gradient(135deg, var(--color-accent), var(--color-focus));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
   }
 
   .subtitle {
     margin: 0;
-    color: var(--color-accent);
+    color: var(--color-text-muted);
     font-size: 14px;
     font-weight: 500;
-    opacity: 0.9;
   }
 
   .loading {
@@ -386,10 +347,9 @@
   .card {
     margin-bottom: 20px;
     padding: 20px;
-    background: rgba(40, 40, 40, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    backdrop-filter: blur(10px);
+    background: var(--color-raised);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-lg);
   }
 
   .settings-grid .card {
@@ -398,22 +358,8 @@
     flex-direction: column;
   }
 
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 16px;
-  }
-
-  .section-accent {
-    width: 3px;
-    height: 20px;
-    background: linear-gradient(180deg, var(--color-accent), var(--color-focus));
-    border-radius: 2px;
-  }
-
   h2 {
-    margin: 0;
+    margin: 0 0 16px;
     font-size: 18px;
     font-weight: 700;
     color: var(--color-text);
@@ -425,18 +371,12 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--color-divider);
     cursor: pointer;
-    transition: all 0.2s ease;
   }
 
   .toggle-row:last-of-type {
     border-bottom: none;
-  }
-
-  .toggle-row:hover {
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 6px;
   }
 
   .toggle-content {
@@ -478,10 +418,9 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(255, 255, 255, 0.15);
-    transition: all 0.2s ease;
+    background-color: var(--color-border);
+    transition: background-color 0.2s ease;
     border-radius: 24px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
   .toggle-slider:before {
@@ -489,22 +428,20 @@
     content: "";
     height: 16px;
     width: 16px;
-    left: 3px;
-    bottom: 3px;
+    left: 4px;
+    bottom: 4px;
     background-color: var(--color-text);
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease;
     border-radius: 50%;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
   input[type="checkbox"]:checked + .toggle-slider {
-    background: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent));
-    border-color: var(--color-accent);
+    background: var(--color-accent-strong);
   }
 
   input[type="checkbox"]:focus-visible + .toggle-slider {
-    outline: 2px solid rgba(96, 165, 250, 0.8);
-    outline-offset: 2px;
+    outline: 2px solid var(--color-focus);
+    outline-offset: 3px;
   }
 
   input[type="checkbox"]:checked + .toggle-slider:before {
@@ -516,7 +453,7 @@
     flex-direction: column;
     gap: 8px;
     padding: 12px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--color-divider);
   }
 
   .slider-row:last-of-type {
@@ -550,7 +487,7 @@
     flex: 1;
     height: 4px;
     border-radius: 2px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--color-border);
     cursor: pointer;
     -webkit-appearance: none;
     appearance: none;
@@ -562,9 +499,8 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--color-accent), var(--color-focus));
+    background: var(--color-accent-strong);
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   }
 
   .slider-value {
@@ -574,14 +510,14 @@
     font-variant-numeric: tabular-nums;
     font-size: 14px;
     font-weight: 600;
-    color: var(--color-focus);
+    color: var(--color-accent);
   }
 
   .conflict-warning {
     padding: 12px 16px;
     background: rgba(251, 191, 36, 0.1);
     border: 1px solid rgba(251, 191, 36, 0.2);
-    border-radius: 8px;
+    border-radius: var(--radius);
     color: #fbbf24;
     font-size: 13px;
     line-height: 1.5;
@@ -600,7 +536,7 @@
 
   .conflict-discard {
     padding: 6px 12px;
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: rgba(251, 191, 36, 0.15);
     border: 1px solid rgba(251, 191, 36, 0.4);
     color: #fbbf24;
@@ -621,9 +557,8 @@
     left: 0;
     right: 0;
     padding: 20px 24px;
-    background: rgba(26, 26, 26, 0.85);
-    backdrop-filter: blur(12px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-divider);
     z-index: 100;
   }
 
@@ -640,44 +575,37 @@
 
   .btn {
     padding: 10px 20px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
-    border: none;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    border: 1px solid transparent;
   }
 
   .btn.primary {
-    background: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent));
-    color: #0d172b;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    background: var(--color-accent-fill);
+    color: #fff;
   }
 
   .btn.primary:hover:not(:disabled) {
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-    transform: translateY(-1px);
-  }
-
-  .btn.primary:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+    background: var(--color-accent-fill-hover);
   }
 
   .btn.secondary {
-    background: rgba(40, 40, 40, 0.6);
+    background: var(--color-field);
     color: var(--color-text);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-color: var(--color-border);
   }
 
-  .btn.secondary:hover {
+  .btn.secondary:hover:not(:disabled) {
     background: rgba(239, 68, 68, 0.1);
-    color: var(--color-danger);
+    color: var(--color-danger-text);
     border-color: rgba(239, 68, 68, 0.3);
   }
 
   fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-  .save-status { margin-right: auto; align-self: center; font-size: 13px; color: #b5b5b5; }
+  .save-status { margin-right: auto; align-self: center; font-size: 13px; color: var(--color-text-muted); }
   .save-error { margin: 0 0 10px; color: var(--color-danger-text); font-size: 13px; }
   @media (max-width: 600px) {
     .options { padding: 24px 16px 140px; }

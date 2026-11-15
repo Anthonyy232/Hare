@@ -75,15 +75,15 @@
     width: 100%;
     box-sizing: border-box;
     padding: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
-    background: rgba(40, 40, 40, 0.6);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-field);
     color: var(--color-text);
     font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
     font-size: 13px;
     line-height: 1.7;
     resize: vertical;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease;
   }
 
   .blacklist-input::placeholder {
@@ -92,16 +92,14 @@
   }
 
   .blacklist-input:focus {
-    border-color: rgba(59, 130, 246, 0.6);
-    background: rgba(40, 40, 40, 0.8);
+    border-color: var(--color-accent-line);
   }
 
   .examples {
     margin-top: 16px;
     padding: 16px;
-    background: rgba(255, 255, 255, 0.03);
-    border-left: 3px solid rgba(59, 130, 246, 0.5);
-    border-radius: 4px;
+    background: var(--color-field);
+    border-radius: var(--radius);
     font-size: 13px;
     line-height: 1.6;
   }
@@ -125,10 +123,10 @@
   }
 
   .examples code {
-    background: rgba(40, 40, 40, 0.8);
+    background: var(--color-accent-soft);
     color: var(--color-focus);
     padding: 3px 8px;
-    border-radius: 3px;
+    border-radius: 6px;
     font-size: 12px;
     font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
     font-weight: 600;

@@ -108,11 +108,11 @@
 <style>
   .speed-control-root { display: contents; }
   .speed-presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; margin-top: 6px; }
-  .preset { min-height: 36px; padding: 6px 0; border: 1px solid #ffffff24; border-radius: 6px; background: #ffffff06; color: #c8d0dc; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+  .preset { min-height: 36px; padding: 6px 0; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-field); color: var(--color-text-secondary); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
   .preset span { margin-left: 1px; font-size: 11px; }
-  .preset:hover:not(:disabled) { background: #60a5fa1a; border-color: #60a5fa80; }
-  .preset[aria-pressed="true"] { background: var(--color-focus); border-color: var(--color-focus); color: #152236; }
-  .input-hint { color: #a2abba; font-size: 11px; margin: -4px 0 2px; }
+  .preset:hover:not(:disabled) { background: var(--color-accent-soft); border-color: var(--color-accent-line); }
+  .preset[aria-pressed="true"] { background: var(--color-accent-fill); border-color: var(--color-accent-fill); color: #fff; }
+  .input-hint { color: var(--color-text-muted); font-size: 11px; margin: -4px 0 2px; }
 
   .speed-control {
     display: flex;
@@ -127,23 +127,18 @@
     justify-content: center;
     width: var(--btn-size);
     height: var(--btn-size);
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    border-radius: 4px;
-    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-field);
     color: var(--color-text);
     font-size: 18px;
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
   }
 
-  .btn:hover {
-    background: rgba(59, 130, 246, 0.2);
-    border-color: rgba(59, 130, 246, 0.5);
-  }
-
-  .btn:active {
-    background: rgba(59, 130, 246, 0.3);
-    border-color: rgba(59, 130, 246, 0.6);
+  .btn:hover:not(:disabled) {
+    background: var(--color-accent-soft);
+    border-color: var(--color-accent-line);
   }
 
   .btn.reset {
@@ -159,21 +154,20 @@
     width: 90px;
     height: var(--btn-size);
     padding: 0 12px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
-    background: rgba(40, 40, 40, 0.6);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-field);
     color: var(--color-text);
     font-size: 16px;
     font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', monospace;
     font-variant-numeric: tabular-nums;
     font-weight: 600;
     text-align: center;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease;
   }
 
   .speed-input:focus {
-    border-color: rgba(59, 130, 246, 0.6);
-    background: rgba(40, 40, 40, 0.8);
+    border-color: var(--color-accent-line);
   }
 
   .btn:focus-visible {

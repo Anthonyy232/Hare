@@ -296,30 +296,28 @@
 </section>
 
 <style>
-  .selection-status { display: flex; justify-content: space-between; align-items: center; min-height: 32px; font-size: 11px; color: #c4b5fd; }
-  .swap-btn { background: #a78bfa14; border: 1px solid #a78bfa4d; color: #ddd6fe; padding: 6px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; }
-  .selection-marker { display: grid; place-items: center; width: 24px; height: 24px; margin-right: 8px; border: 1px solid #ffffff30; border-radius: 5px; flex-shrink: 0; color: #bbb; font-weight: 700; }
-  .selected .selection-marker { color: #1f1735; background: #c4b5fd; border-color: #c4b5fd; }
+  .selection-status { display: flex; justify-content: space-between; align-items: center; min-height: 32px; font-size: 11px; color: var(--color-accent); }
+  .swap-btn { background: var(--color-field); border: 1px solid var(--color-border); color: var(--color-text); padding: 6px 8px; border-radius: var(--radius); font-size: 11px; cursor: pointer; }
+  .selection-marker { display: grid; place-items: center; width: 24px; height: 24px; margin-right: 8px; border: 1px solid var(--color-border); border-radius: 50%; flex-shrink: 0; color: var(--color-text-muted); font-weight: 700; }
+  .selected .selection-marker { color: #fff; background: var(--color-accent-fill); border-color: var(--color-accent-fill); }
   .sync-description { font-size: 11px; color: var(--color-text-muted); text-align: center; margin: 7px 0 0; }
   .setup-hint { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; margin: 0; }
   .mpv-setup { margin-top: 10px; font-size: 12px; color: var(--color-text-muted); line-height: 1.5; }
   .mpv-setup summary { cursor: pointer; color: var(--color-text-secondary); }
   .mpv-setup ol { margin: 6px 0 0; padding-left: 18px; }
-  .mpv-setup a { color: #c4b5fd; }
+  .mpv-setup a { color: var(--color-accent); }
   .mpv-setup code { color: var(--color-text-secondary); overflow-wrap: anywhere; }
-  .copy-btn { background: #a78bfa14; border: 1px solid #a78bfa4d; color: #ddd6fe; padding: 1px 6px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+  .copy-btn { background: var(--color-field); border: 1px solid var(--color-border); color: var(--color-text); padding: 1px 6px; border-radius: var(--radius); font-size: 11px; cursor: pointer; }
   .sync-section {
     padding: 0 20px 18px;
-    position: relative;
-    z-index: 1;
   }
 
   .sync-mode-btn {
     width: 100%;
     padding: 10px 16px;
-    border: 1px solid rgba(139, 92, 246, 0.3);
-    border-radius: 6px;
-    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-field);
     color: var(--color-text);
     font-size: 13px;
     font-weight: 600;
@@ -332,8 +330,8 @@
   }
 
   .sync-mode-btn:hover {
-    background: rgba(139, 92, 246, 0.2);
-    border-color: rgba(139, 92, 246, 0.5);
+    background: var(--color-accent-soft);
+    border-color: var(--color-accent-line);
   }
 
   .sync-icon {
@@ -365,17 +363,16 @@
     color: #10b981;
     background: rgba(16, 185, 129, 0.15);
     padding: 3px 8px;
-    border-radius: 3px;
-    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 999px;
   }
 
   .stop-btn {
     font-size: 11px;
     font-weight: 600;
-    color: var(--color-danger);
+    color: var(--color-danger-text);
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 3px;
+    border-radius: var(--radius);
     padding: 3px 10px;
     cursor: pointer;
     transition: background 0.15s ease;
@@ -396,8 +393,8 @@
     align-items: center;
     gap: 8px;
     padding: 6px 8px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 4px;
+    background: var(--color-field);
+    border-radius: var(--radius);
     font-size: 12px;
   }
 
@@ -405,9 +402,9 @@
     font-size: 10px;
     font-weight: 700;
     color: var(--color-accent);
-    background: rgba(96, 165, 250, 0.15);
-    padding: 1px 5px;
-    border-radius: 2px;
+    background: var(--color-accent-soft);
+    padding: 1px 6px;
+    border-radius: 999px;
     flex-shrink: 0;
   }
 
@@ -455,9 +452,9 @@
   .nudge-btn {
     width: 28px;
     height: 26px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-field);
     color: var(--color-text);
     font-size: 12px;
     cursor: pointer;
@@ -469,20 +466,17 @@
   }
 
   .nudge-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .nudge-btn:active {
-    background: rgba(139, 92, 246, 0.2);
+    background: var(--color-accent-soft);
+    border-color: var(--color-accent-line);
   }
 
   .step-select {
     flex: 1;
     font-size: 11px;
     padding: 4px 6px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-field);
     color: var(--color-text-secondary);
     cursor: pointer;
     text-align: center;
@@ -542,9 +536,9 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius);
+    background: var(--color-field);
     color: var(--color-text-secondary);
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
@@ -554,12 +548,12 @@
   }
 
   .candidate:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--color-hover);
   }
 
   .candidate.selected {
-    border-color: rgba(139, 92, 246, 0.5);
-    background: rgba(139, 92, 246, 0.1);
+    border-color: var(--color-accent-line);
+    background: var(--color-accent-soft);
   }
 
   .candidate-icon {
@@ -569,8 +563,8 @@
     height: 20px;
     margin-right: 8px;
     flex-shrink: 0;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    background: var(--color-hover);
     color: var(--color-text-muted);
     font-size: 10px;
     font-weight: 700;
@@ -608,22 +602,17 @@
   .start-btn {
     width: 100%;
     padding: 8px 16px;
-    border: 1px solid rgba(139, 92, 246, 0.4);
-    border-radius: 4px;
-    background: rgba(139, 92, 246, 0.2);
-    color: var(--color-text);
+    border: 0;
+    border-radius: var(--radius);
+    background: var(--color-accent-fill);
+    color: #fff;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s ease, opacity 0.15s ease;
+    transition: background 0.15s ease;
   }
 
   .start-btn:hover:not(:disabled) {
-    background: rgba(139, 92, 246, 0.3);
-  }
-
-  .start-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+    background: var(--color-accent-fill-hover);
   }
 </style>

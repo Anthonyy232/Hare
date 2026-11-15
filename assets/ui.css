@@ -1,14 +1,25 @@
 :root {
   color-scheme: dark;
   --color-surface: #1a1a1a;
+  --color-raised: #222;
+  --color-field: #ffffff08;
+  --color-hover: #ffffff0f;
+  --color-border: #ffffff24;
+  --color-divider: #ffffff12;
   --color-text: #f0f0f0;
   --color-text-secondary: #ccc;
   --color-text-muted: #aaa;
   --color-accent: #60a5fa;
   --color-accent-strong: #3b82f6;
+  --color-accent-fill: #2563eb;
+  --color-accent-fill-hover: #1d4ed8;
+  --color-accent-soft: #3b82f61f;
+  --color-accent-line: #3b82f680;
   --color-focus: #93c5fd;
   --color-danger: #ef4444;
   --color-danger-text: #fca5a5;
+  --radius: 8px;
+  --radius-lg: 12px;
 }
 *, *::before, *::after { box-sizing: border-box; }
 button, input, select, textarea { font: inherit; }

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import SpeedControl from "../../components/SpeedControl.svelte";
   import SyncMode from "../../components/SyncMode.svelte";
+  import logo from "../../assets/logo.svg";
   import { clampSpeed, sameSpeed } from "../../lib/speed";
   import { isHarePage } from "../../lib/hostname";
   import { loadSettings, saveSettings, isBlacklisted, includeSite } from "../../lib/settings/settings";
@@ -162,11 +163,9 @@
 </script>
 
 <div class="popup">
-  <div class="accent-line"></div>
-
   <header>
     <div class="header-content">
-      <h1>Hare</h1>
+      <h1><img src={logo} alt="" width="22" height="22" />Hare</h1>
       <button class="settings-link" onclick={openOptions} aria-label="Settings" title="Settings">
         <svg viewBox="0 0 24 24" class="settings-icon" aria-hidden="true">
           <path d="M4 7h16M4 17h16M8 4v6M16 14v6"></path>
@@ -265,41 +264,13 @@
       BlinkMacSystemFont,
       "Segoe UI",
       sans-serif;
-    background: linear-gradient(165deg, #1e1e1e 0%, var(--color-surface) 100%);
     color: var(--color-text);
-    position: relative;
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
-  }
-
-  .popup::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-image: linear-gradient(
-        rgba(255, 255, 255, 0.02) 1px,
-        transparent 1px
-      ),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-    background-size: 20px 20px;
-    pointer-events: none;
-    opacity: 0.5;
-  }
-
-  .accent-line {
-    height: 2px;
-    background: linear-gradient(90deg, var(--color-accent-strong), var(--color-accent), var(--color-focus));
-    position: relative;
-    z-index: 1;
+    scrollbar-color: var(--color-border) transparent;
   }
 
   header {
     padding: 16px 20px 12px;
-    position: relative;
-    z-index: 1;
   }
 
   .header-content {
@@ -315,26 +286,25 @@
     padding: 7px 8px;
     margin-right: -8px;
     border: 0;
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: transparent;
-    color: #b9c5d6;
+    color: var(--color-text-secondary);
     font-size: 12px;
     cursor: pointer;
   }
 
-  .settings-link:hover { color: var(--color-text); background: #ffffff0d; }
+  .settings-link:hover { color: var(--color-text); background: var(--color-hover); }
   .tab-context { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
-  .site-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b9c5d6; font-size: 12px; }
+  .site-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); font-size: 12px; }
 
   h1 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin: 0;
     font-size: 20px;
     font-weight: 700;
     letter-spacing: -0.02em;
-    background: linear-gradient(135deg, var(--color-accent), var(--color-focus));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
   }
 
   .status-indicator {
@@ -357,9 +327,7 @@
 
   main {
     padding: 24px 20px 12px;
-    border-top: 1px solid #ffffff0d;
-    position: relative;
-    z-index: 1;
+    border-top: 1px solid var(--color-divider);
   }
 
   .loading {
@@ -422,9 +390,9 @@
   .settings-btn {
     width: 100%;
     padding: 10px 16px;
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    border-radius: 4px;
-    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-field);
     color: var(--color-text);
     font-size: 13px;
     font-weight: 600;
@@ -438,9 +406,9 @@
     gap: 8px;
   }
 
-  .settings-btn:hover {
-    background: rgba(59, 130, 246, 0.2);
-    border-color: rgba(59, 130, 246, 0.5);
+  .settings-btn:hover:not(:disabled) {
+    background: var(--color-accent-soft);
+    border-color: var(--color-accent-line);
   }
 
   .settings-btn:focus-visible {
@@ -460,8 +428,8 @@
   main.compact { padding-top: 12px; padding-bottom: 20px; }
   .compact .speed-section { gap: 8px; }
 
-  .open-player { display: flex; align-items: center; justify-content: center; gap: 6px; width: calc(100% - 40px); margin: -6px 20px 14px; padding: 7px; border: 0; border-radius: 6px; background: transparent; color: #b9c5d6; font-size: 12px; cursor: pointer; position: relative; z-index: 1; }
-  .open-player:hover:not(:disabled) { color: var(--color-text); background: #ffffff0d; }
+  .open-player { display: flex; align-items: center; justify-content: center; gap: 6px; width: calc(100% - 40px); margin: -6px 20px 14px; padding: 7px; border: 0; border-radius: var(--radius); background: transparent; color: var(--color-text-secondary); font-size: 12px; cursor: pointer; }
+  .open-player:hover:not(:disabled) { color: var(--color-text); background: var(--color-hover); }
   .site-controls { margin-top: 14px; }
   .site-controls .settings-btn { font-size: 12px; }
 
@@ -471,11 +439,9 @@
     left: 50%;
     transform: translateX(-50%);
     padding: 10px 16px;
-    background: rgba(239, 68, 68, 0.95);
-    backdrop-filter: blur(8px);
+    background: var(--color-danger);
     color: #fff;
-    border-radius: 4px;
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: var(--radius);
     font-size: 13px;
     font-weight: 500;
     z-index: 100;
