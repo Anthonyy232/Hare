@@ -28,7 +28,7 @@ A browser extension (WXT, Svelte, TypeScript, MV3) that controls video and audio
 
 ## Hare
 
-- Code is grouped by feature. A feature owns its messages and listeners; the background and content entry points only route, and the popup and options pages are views.
+- Put feature logic in its own folder and keep the entry points thin.
 - Run `npm run test:e2e` for anything that runs in pages, the popup or sync, and for toolchain changes.
 - Mozilla reviewers rebuild from the source archive by following the README's "Building from source" section. Keep the archive's contents and those instructions true.
 - `site/` is the project website. It is not part of the extension or the source archive.
