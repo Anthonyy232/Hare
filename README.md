@@ -100,4 +100,8 @@ Contributions are welcome. Changes are made with coding agents; point yours at [
 
 ## License
 
-[MIT](LICENSE). Inspired by [videospeed](https://github.com/igrigorik/videospeed) by Ilya Grigorik.
+Copyright (c) 2026 Anthony La.
+
+Hare is free software, licensed under the [GNU General Public License v3.0](LICENSE) only, and comes with no warranty. Versions up to 1.10.0 were released under the MIT License.
+
+Inspired by [videospeed](https://github.com/igrigorik/videospeed) by Ilya Grigorik.
