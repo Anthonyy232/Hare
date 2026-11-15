@@ -1,0 +1,24 @@
+name: Bug report
+description: Something in Hare doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: site
+    attributes:
+      label: Site
+      description: The page where it happens, if it is specific to one.
+      placeholder: https://
+  - type: input
+    id: version
+    attributes:
+      label: Hare version and browser
+      placeholder: Hare 1.10.0, Firefox 145
+    validations:
+      required: true
