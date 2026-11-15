@@ -1,6 +1,6 @@
 {
   "name": "hare",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "description": "A modern video speed controller",
   "license": "GPL-3.0-only",
   "type": "module",
