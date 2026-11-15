@@ -7,7 +7,8 @@ Generated images for [Hare](https://github.com/Anthonyy232/Hare), kept off `main
 | `lib.cjs` | Fonts and rendering shared by the scripts |
 | `fonts/` | Instrument Serif, under the SIL Open Font License (`OFL.txt`) |
 | `readme/capture.cjs` | Captures the popup, Sync Mode, settings and on-page controller from the built extension into `readme/inputs/` |
-| `readme/build.cjs` | Writes `.github/readme/*.png` and `site/img/*.png` in the checkout from `readme/inputs/` |
+| `readme/build.cjs` | Writes `.github/readme/*.png` and `site/img/*.png` in the checkout from `readme/inputs/`, and `social-preview.png` here |
+| `social-preview.png` | The 1280x640 GitHub social preview |
 | `releases/banner.cjs` | Writes `releases/v<version>.png` from `releases/banners.json` |
 
 ## Setup
@@ -30,7 +31,7 @@ node readme/build.cjs ../..
 
 The capture serves the e2e fixture page (`tests/e2e/server.mjs`) as `watch.example`, opens two tabs titled "Grand Prix replay: onboard camera" and "Grand Prix replay: live commentary", sets 1.5× from the popup, pairs both tabs in Sync Mode, and opens the settings page with the controller preview expanded. It runs in light and dark at 2x, in a throwaway profile. The on-page controller is saved as HTML and CSS (`controller.html`) so the build draws it sharp at any scale.
 
-Commit the new inputs here, and the changed images on `main`.
+Commit the new inputs and `social-preview.png` here, and the changed images on `main`. GitHub has no API for the social preview: upload `social-preview.png` in the repository settings under Social preview.
 
 ## Release banners
 

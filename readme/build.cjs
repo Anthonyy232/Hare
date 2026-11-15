@@ -40,13 +40,13 @@ const controllerScript = `<script>
   document.querySelector('#controller div').attachShadow({ mode: 'open' }).innerHTML = ${JSON.stringify(controller)};
 </script>`;
 
-const hero = dark => `${base(dark)}<style>
-  .card { height: 760px; text-align: center; }
-  .brand { display: inline-flex; align-items: center; gap: 10px; margin-top: 48px; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+const hero = (dark, h = 760) => `${base(dark)}<style>
+  .card { height: ${h}px;${h < 700 ? ' border-radius: 0;' : ''} text-align: center; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; margin-top: ${h < 700 ? 34 : 48}px; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
   .brand svg { width: 30px; height: 30px; }
-  h1 { margin: 30px 0 0; font-size: 116px; line-height: 0.98; }
+  h1 { margin: ${h < 700 ? 16 : 30}px 0 0; font-size: ${h < 700 ? 100 : 116}px; line-height: 0.98; }
   p { margin: 22px auto 0; max-width: 560px; text-wrap: balance; font-size: 20px; line-height: 1.45; color: var(--muted); }
-  .stage { position: absolute; left: 120px; right: 120px; top: 452px; height: 420px; border-radius: 24px 24px 0 0; }
+  .stage { position: absolute; left: 120px; right: 120px; top: ${h < 700 ? 380 : 452}px; height: 420px; border-radius: 24px 24px 0 0; }
   .video { left: 60px; top: 48px; width: 560px; height: 420px; }
   .shot.back { left: 520px; top: 70px; width: 330px; transform: rotate(-4deg); }
   .shot.front { left: 650px; top: 44px; width: 330px; }
@@ -109,5 +109,7 @@ const player = `${base(false)}<style>
     for (const name of ['popup', 'sync-setup', 'settings']) fs.copyFileSync(`${inputs}/${name}-${scheme}.png`, `${site}/${name}-${scheme}.png`);
   }
   await render(browser, player, `${site}/controller.png`, { width: 440, height: 280, scale: 2 });
+  // GitHub has no API for the social preview; it is uploaded by hand from this file.
+  await render(browser, hero(false, 640), path.join(__dirname, '../social-preview.png'), { width: 1280, height: 640 });
   await browser.close();
 })();
