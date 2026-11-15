@@ -112,6 +112,8 @@ header nav a:hover { color: var(--ink); }
 .feature p { margin-top: 20px; color: var(--muted); font-size: 1.125rem; }
 .feature .stage { display: flex; justify-content: center; align-items: flex-start; aspect-ratio: 1.12; padding-top: 9%; border-radius: 20px; }
 .feature .stage img { width: 58%; }
+.feature .stage.player { align-items: center; padding-top: 0; }
+.feature .stage.player img { width: 84%; }
 .feature .stage.wide { justify-content: flex-start; padding-left: 9%; }
 .feature .stage.wide img { width: 150%; max-width: none; }
 
