@@ -1,19 +1,17 @@
-// node banner.cjs [<version> "<highlight>"] : 1280x640 release banners in releases/
-// Run from a worktree inside a Hare checkout so Playwright resolves from its node_modules.
-const { chromium } = require('playwright');
+// node releases/banner.cjs <hare checkout> [<version> "<highlight>"] : 1280x640 release banners in releases/
 const fs = require('fs');
+const { chromium, fonts, logo, hareCheckout, render } = require('../lib.cjs');
 const dir = __dirname;
 const file = `${dir}/banners.json`;
 const banners = JSON.parse(fs.readFileSync(file, 'utf8'));
-const [version, highlight] = process.argv.slice(2);
+const [hare, version, highlight] = process.argv.slice(2);
+const mark = logo(hareCheckout(hare));
 if (version) {
   banners[version] = highlight;
   fs.writeFileSync(file, JSON.stringify(banners, null, 2) + '\n');
 }
-const mark = fs.readFileSync(`${dir}/logo.svg`, 'utf8').replace(/<title>.*?<\/title>/, '').replace('width="256" height="256"', '');
 
-const html = (v, text) => `<!doctype html><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+const html = (v, text) => `<!doctype html><meta charset="utf-8">${fonts}
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; width: 1280px; height: 640px; overflow: hidden; display: grid; grid-template-columns: 1fr 470px; background: #f5f3ee; color: #1c1b18; font-family: system-ui, sans-serif; }
@@ -41,12 +39,7 @@ const accent = text => text.replace(/(\S+)$/, '<i>$1</i>');
 (async () => {
   const browser = await chromium.launch();
   for (const [v, text] of version ? [[version, highlight]] : Object.entries(banners)) {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 640 } });
-    await page.setContent(html(v, accent(text)), { waitUntil: 'networkidle' });
-    await page.evaluate(() => document.fonts.ready);
-    if (!await page.evaluate(() => document.fonts.check("96px 'Instrument Serif'"))) throw new Error('Instrument Serif did not load');
-    await page.screenshot({ path: `${dir}/releases/v${v}.png` });
-    await page.close();
+    await render(browser, html(v, accent(text)), `${dir}/v${v}.png`, { width: 1280, height: 640 });
   }
   await browser.close();
 })();

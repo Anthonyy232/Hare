@@ -1,0 +1,8 @@
+{
+  "name": "hare-media",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "playwright": "1.65.1"
+  }
+}
