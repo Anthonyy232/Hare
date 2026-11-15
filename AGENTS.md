@@ -2,7 +2,7 @@
 
 Guidance for anyone changing this codebase, human or AI. These are defaults, not laws: follow them unless you have a good reason not to, and say what the reason was.
 
-Hare is a browser extension (WXT, Svelte 5, TypeScript, MV3) for Chrome and Firefox. See the [README](README.md) for features. `npm run dev` doesn't launch a browser: load the printed output folder unpacked in a separate profile.
+Hare is a browser extension (WXT, Svelte 5, TypeScript, MV3) for Chrome and Firefox. `npm run dev` doesn't launch a browser: load the printed output folder unpacked in a separate profile.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ Hare is a browser extension (WXT, Svelte 5, TypeScript, MV3) for Chrome and Fire
 - You have **reviewed your own diff against this file**: over-engineering, over-abstraction, defensive code, hand-rolled or duplicated code, low-signal tests, restating comments.
 - `npm run check` passes with **zero warnings**, and `npm run test:e2e` passes for anything that runs in pages, the popup or sync.
 - **Check the real case in a browser**, not just the tests.
-- The README still matches the code. Behaviour changes are deliberate and called out.
+- Behaviour changes are deliberate and called out.
 
 ## Git
 
