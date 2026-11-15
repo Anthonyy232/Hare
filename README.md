@@ -100,4 +100,4 @@ Contributions are welcome. Changes are made with coding agents; point yours at [
 
 ## License
 
-[MIT](LICENSE). Based on [videospeed](https://github.com/igrigorik/videospeed) by Ilya Grigorik.
+[MIT](LICENSE). Inspired by [videospeed](https://github.com/igrigorik/videospeed) by Ilya Grigorik.
