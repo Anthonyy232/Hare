@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hare: any video, at your speed</title>
+  <meta name="description" content="A browser extension for Firefox, Chrome and Edge that sets the speed of any video or audio, with keyboard shortcuts and two-tab sync.">
+  <meta property="og:title" content="Hare: any video, at your speed">
+  <meta property="og:description" content="Speed control, keyboard shortcuts and two-tab sync for every player on the web.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://anthonyy232.github.io/Hare/">
+  <meta name="theme-color" content="#f5f3ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#171614" media="(prefers-color-scheme: dark)">
+  <link rel="canonical" href="https://anthonyy232.github.io/Hare/">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/instrument-serif.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header>
+    <div class="wrap">
+      <a class="brand" href="./"><img src="logo.svg" alt="" width="30" height="30">Hare</a>
+      <nav aria-label="Site">
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a class="keep" href="https://github.com/Anthonyy232/Hare">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap">
+      <h1>any video,<br>at <em>your</em> speed</h1>
+      <p class="lede">Speed control, keyboard shortcuts and <span class="nowrap">two-tab</span> sync for every player on the web.</p>
+      <div class="actions">
+        <a class="button" href="https://addons.mozilla.org/firefox/addon/hare-video-controller/">Get Hare for Firefox</a>
+        <a class="button quiet" href="https://github.com/Anthonyy232/Hare/releases/latest">Download for Chrome and Edge</a>
+      </div>
+      <div class="stage">
+        <div class="video" aria-hidden="true">
+          <div class="controller">
+            <span>1.50x</span>
+            <svg viewBox="0 0 24 24"><path d="m11 17-5-5 5-5m7 10-5-5 5-5"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            <svg viewBox="0 0 24 24"><path d="m13 17 5-5-5-5M6 17l5-5-5-5"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="img/popup-dark.png">
+          <img class="shot" src="img/popup-light.png" width="720" height="732" alt="The Hare popup on watch.example at 1.50×, with presets from 0.75× to 2×, a stepper, Sync Mode and Open in video player.">
+        </picture>
+      </div>
+    </section>
+
+    <div id="features" class="wrap">
+      <section class="feature">
+        <div>
+          <div class="num">01</div>
+          <h2>Speed, <em>one key</em> away</h2>
+          <p>From 0.07× to 16× on any HTML5 video or audio. Use the keyboard, the popup, or the small controller that sits on the player.</p>
+          <ul class="keys">
+            <li><kbd>S</kbd> Slower by 0.1×</li>
+            <li><kbd>D</kbd> Faster by 0.1×</li>
+            <li><kbd>R</kbd> Reset to 1×</li>
+            <li><kbd>Z</kbd> Rewind 10 seconds</li>
+            <li><kbd>X</kbd> Advance 10 seconds</li>
+            <li><kbd>V</kbd> Show or hide the controller</li>
+          </ul>
+        </div>
+        <div class="stage">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="img/popup-dark.png">
+            <img class="shot" src="img/popup-light.png" width="720" height="732" loading="lazy" alt="The popup with a large 1.50× readout, five speed presets and a box for any other speed.">
+          </picture>
+        </div>
+      </section>
+
+      <section class="feature">
+        <div>
+          <div class="num">02</div>
+          <h2>Two tabs, <em>one</em> timeline</h2>
+          <p>Sync Mode pairs media in two tabs, or a tab and mpv. They play, pause, seek and change speed together, and keep the offset you set. It suits a second camera angle, a commentary track, or a reaction video next to its source.</p>
+        </div>
+        <div class="stage">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="img/sync-setup-dark.png">
+            <img class="shot" src="img/sync-setup-light.png" width="720" height="996" loading="lazy" alt="Sync Mode with two tabs selected as A and B, ready to start.">
+          </picture>
+        </div>
+      </section>
+
+      <section class="feature">
+        <div>
+          <div class="num">03</div>
+          <h2>Tuned <em>to you</em></h2>
+          <p>Rebind every shortcut and its amount, restyle the controller with a live preview, and exclude the sites where you would rather Hare stayed out of the way. Settings follow you across devices through your browser's sync.</p>
+        </div>
+        <div class="stage wide">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="img/settings-dark.png">
+            <img class="shot" src="img/settings-light.png" width="2080" height="1400" loading="lazy" alt="The Hare settings page with core settings and controller display options.">
+          </picture>
+        </div>
+      </section>
+    </div>
+
+    <section class="more wrap">
+      <div class="num">And</div>
+      <h2>the rest of <em>the kit</em></h2>
+      <ul>
+        <li>
+          <h3>Open in your video player</h3>
+          <p>One button hands the video you are watching to VLC, mpv or whichever player opens <code>.m3u</code> files, starting where you left off.</p>
+        </li>
+        <li>
+          <h3>Sync with mpv</h3>
+          <p>Drop <a href="https://github.com/Anthonyy232/Hare/blob/main/public/hare.lua">hare.lua</a> into mpv's scripts folder and any video you open in mpv can be paired with a tab.</p>
+        </li>
+        <li>
+          <h3>At home on the big sites</h3>
+          <p>Tuned handling for YouTube, Netflix, Prime Video, Disney+, Twitch and 10 more, and it works on everything else too.</p>
+        </li>
+      </ul>
+    </section>
+
+    <section id="install" class="install wrap">
+      <div class="num">Install</div>
+      <h2>Get <em>Hare</em></h2>
+      <div class="cols">
+        <div>
+          <h3>Firefox</h3>
+          <p>Install from Firefox Add-ons. Updates arrive on their own.</p>
+          <div class="actions"><a class="button" href="https://addons.mozilla.org/firefox/addon/hare-video-controller/">Get Hare for Firefox</a></div>
+        </div>
+        <div>
+          <h3>Chrome and Edge</h3>
+          <p>Hare isn't in the Chrome Web Store, so install it unpacked. Repeat these steps for a new version.</p>
+          <ol>
+            <li>Download <code>hare-&lt;version&gt;-chrome.zip</code> from the latest release and extract it.</li>
+            <li>Open <code>chrome://extensions</code> or <code>edge://extensions</code> and turn on Developer mode.</li>
+            <li>Click Load unpacked and select the extracted folder.</li>
+          </ol>
+          <div class="actions"><a class="button quiet" href="https://github.com/Anthonyy232/Hare/releases/latest">Download the latest release</a></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>© 2026 Anthony La. Free software under the <a href="https://github.com/Anthonyy232/Hare/blob/main/LICENSE">GPL-3.0</a>.</p>
+      <p><a href="https://github.com/Anthonyy232/Hare">Source</a></p>
+      <p><a href="https://github.com/Anthonyy232/Hare/releases">Releases</a></p>
+      <p><a href="https://github.com/Anthonyy232/Hare/issues">Report a bug</a></p>
+    </div>
+  </footer>
+</body>
+</html>
