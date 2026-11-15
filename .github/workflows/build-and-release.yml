@@ -70,4 +70,3 @@ jobs:
           files: artifacts/*.zip
           fail_on_unmatched_files: true
           draft: true
-          generate_release_notes: true

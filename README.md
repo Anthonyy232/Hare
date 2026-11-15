@@ -98,7 +98,7 @@ The extension is built to `.output/firefox-mv3/` and matches the submitted packa
 
 ## Contributing
 
-Contributions are welcome. Changes are made with coding agents; point yours at [AGENTS.md](AGENTS.md) and open a pull request.
+Contributions are welcome. Read [AGENTS.md](AGENTS.md) before opening a pull request.
 
 ## License
 

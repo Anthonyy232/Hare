@@ -29,7 +29,6 @@ A browser extension (WXT, Svelte 5, TypeScript, MV3) that controls video and aud
 ## Hare
 
 - `lib/` is grouped by feature. A feature owns its messages and listeners; `background.ts` and `content.ts` only route, and the popup and options pages are views.
-- Page messages and stored settings are the real boundaries; trust internal callers.
 - `npm run test:e2e` builds first and drives the built Chrome extension. Run it for anything that runs in pages, the popup or sync.
 - Mozilla reviewers rebuild from the source archive: `zip.includeSources` in `wxt.config.ts` lists what goes in it, and the README's "Building from source" section is their instructions. Keep both true.
 - `site/` is the GitHub Pages site, deployed by `.github/workflows/pages.yml`. It is not part of the extension or the source archive.
