@@ -1,7 +1,19 @@
-name: Extension checks
-on: workflow_call
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
 permissions:
   contents: read
+
+# Not github.workflow: when called from the release workflow that would share its group and cancel it.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
