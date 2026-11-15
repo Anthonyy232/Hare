@@ -107,7 +107,7 @@
           <span class="field-label" aria-hidden="true">Shortcut</span>
           <div class="key-cell">
             <button
-              class="key-btn"
+              class="key-btn field"
               class:listening={editingIndex === index}
               class:unbound={!binding.key && editingIndex !== index}
               onclick={() => startListening(index)}
@@ -128,7 +128,7 @@
           {#if ACTIONS[binding.action].value?.label}
             <label for={`binding-value-${index}`} class="field-label">{ACTIONS[binding.action].value?.label}</label>
             <div class="value-control">
-              <input id={`binding-value-${index}`} type="number" class="value-input"
+              <input id={`binding-value-${index}`} type="number" class="value-input field"
                 value={binding.value} step="0.01"
                 min={ACTIONS[binding.action].value?.min}
                 max={ACTIONS[binding.action].value?.max}
@@ -156,33 +156,32 @@
 </div>
 
 <style>
-  .keybind-editor { width: 100%; }
-  .intro, .help-text { font-size: 12px; color: var(--color-text-muted); line-height: 1.6; }
-  .intro { margin: 0 0 8px; }
-  .help-text { margin: 16px 0 0; padding: 12px; border-radius: var(--radius); background: var(--color-field); }
-  .help-text strong { color: #d8e0eb; font-weight: 600; }
+  .keybind-editor { min-width: 0; }
+  .intro, .help-text { margin: 0; font-size: 0.8125rem; color: var(--color-text-muted); }
+  .help-text { margin-top: 1rem; }
+  .help-text strong { color: var(--color-text); font-weight: 600; }
   .shortcut-list { list-style: none; padding: 0; margin: 0; }
-  .shortcut-row { display: grid; grid-template-columns: minmax(130px, 1fr) 150px 130px 174px; align-items: center; gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--color-divider); }
-  .shortcut-row:last-child { border-bottom: 0; padding-bottom: 0; }
-  h3 { margin: 0; font-size: 13px; font-weight: 600; color: #edf1f7; }
-  .shortcut-field { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
-  .field-label { font-size: 11px; color: var(--color-text-muted); }
-  .key-cell, .value-control { display: flex; align-items: center; gap: 6px; }
+  .shortcut-row { display: grid; grid-template-columns: minmax(130px, 1fr) 150px 130px 174px; align-items: end; gap: 18px; padding: 0.875rem 0; border-bottom: 1px solid var(--color-divider); }
+  h3 { margin: 0; padding-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; }
+  .shortcut-field { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; min-width: 0; }
+  .field-label { font-size: 0.6875rem; color: var(--color-text-muted); }
+  .key-cell, .value-control { display: flex; align-items: center; gap: 0.375rem; }
   .key-cell { width: 100%; max-width: 150px; }
-  .key-btn, .key-clear, .value-input { border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-field); color: var(--color-text); }
-  .key-btn { flex: 1; min-width: 0; min-height: 36px; padding: 7px 10px; font: 600 12px ui-monospace, 'SF Mono', Monaco, monospace; cursor: pointer; overflow-wrap: anywhere; }
-  .key-btn:hover { background: var(--color-accent-soft); border-color: var(--color-accent-line); }
-  .key-btn.listening { color: #fff; border-color: var(--color-accent-fill); background: var(--color-accent-fill); }
+  .key-btn, .value-input { min-height: 2.25rem; font: 600 0.8125rem var(--font-mono); }
+  /* A thicker bottom edge reads as a keycap. */
+  .key-btn { flex: 1; min-width: 0; padding: 0.375rem 0.625rem; border-bottom-width: 3px; overflow-wrap: anywhere; }
+  .key-btn:hover { border-color: var(--color-accent-line); }
+  .key-btn.listening { color: #fff; border-color: var(--color-accent-fill-hover); background: var(--color-accent-fill); }
   .key-btn.unbound { color: var(--color-text-muted); border-style: dashed; }
-  .key-clear { width: 30px; height: 36px; flex-shrink: 0; cursor: pointer; font-size: 18px; color: var(--color-text-muted); }
-  .key-clear:hover:not(:disabled) { color: var(--color-danger-text); border-color: var(--color-danger-text); background: #ef444410; }
-  .value-input { width: 82px; height: 36px; padding: 6px 8px; font: 600 13px ui-monospace, 'SF Mono', Monaco, monospace; font-variant-numeric: tabular-nums; }
-  .unit { font-size: 12px; color: var(--color-text-muted); }
-  .override-label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #b8c1cf; cursor: pointer; line-height: 1.4; }
-  input[type="checkbox"] { width: 18px; height: 18px; margin: 0; flex-shrink: 0; accent-color: var(--color-accent-strong); cursor: pointer; }
-  .binding-error { padding: 10px 12px; margin: 8px 0; background: #ef444410; border: 1px solid #fca5a54d; border-radius: var(--radius); color: var(--color-danger-text); font-size: 12px; line-height: 1.5; }
+  .key-clear { width: 1.75rem; height: 2.25rem; flex-shrink: 0; border: 0; border-radius: var(--radius); background: transparent; font-size: 1.125rem; color: var(--color-text-muted); }
+  .key-clear:hover:not(:disabled) { color: var(--color-danger-text); background: var(--color-danger-soft); }
+  .value-input { width: 5.125rem; padding: 0.375rem 0.5rem; font-variant-numeric: tabular-nums; }
+  .unit { font-size: 0.75rem; color: var(--color-text-muted); }
+  .override-label { display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.5rem; font-size: 0.8125rem; color: var(--color-text-secondary); cursor: pointer; }
+  input[type="checkbox"] { width: 1.125rem; height: 1.125rem; margin: 0; flex-shrink: 0; cursor: pointer; }
+  .binding-error { padding: 0.625rem 0.75rem; margin: 0.5rem 0; border-radius: var(--radius); background: var(--color-danger-soft); color: var(--color-danger-text); font-size: 0.8125rem; }
   @media (max-width: 800px) {
-    .shortcut-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 20px; padding: 18px 0; }
-    h3, .override-label { grid-column: 1 / -1; }
+    .shortcut-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 20px; }
+    h3, .override-label { grid-column: 1 / -1; padding-bottom: 0; }
   }
 </style>

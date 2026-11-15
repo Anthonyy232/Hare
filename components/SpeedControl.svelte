@@ -31,7 +31,7 @@
 
 <div class="speed-control-root" bind:this={root}>
 {#if !compact}
-  <div class="speed-presets" role="group" aria-label="Speed presets">
+  <div class="speed-presets field" role="group" aria-label="Speed presets">
     {#each PRESETS as preset}
       <button
         class="preset"
@@ -45,8 +45,9 @@
 {/if}
 
 <div class="speed-control">
+  <div class="stepper field">
   <button
-    class="btn"
+    class="step"
     onclick={() => onSpeedChange(speed - SPEED.STEP)}
     title="Decrease speed"
     aria-label="Decrease speed"
@@ -82,7 +83,7 @@
   />
 
   <button
-    class="btn"
+    class="step"
     onclick={() => onSpeedChange(speed + SPEED.STEP)}
     title="Increase speed"
     aria-label="Increase speed"
@@ -93,97 +94,63 @@
       <line x1="5" y1="12" x2="19" y2="12"></line>
     </svg>
   </button>
+  </div>
 
   <button
-    class="btn reset"
+    class="btn ghost"
     {disabled}
     onclick={() => onSpeedChange(SPEED.DEFAULT)}
     title="Reset to 1.0x"
     aria-label="Reset speed to 1.0x">Reset</button
   >
 </div>
-{#if !compact}<p class="input-hint">Custom speed: type a value and press Enter</p>{/if}
 </div>
 
 <style>
   .speed-control-root { display: contents; }
-  .speed-presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; width: 100%; margin-top: 6px; }
-  .preset { min-height: 36px; padding: 6px 0; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-field); color: var(--color-text-secondary); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
-  .preset span { margin-left: 1px; font-size: 11px; }
-  .preset:hover:not(:disabled) { background: var(--color-accent-soft); border-color: var(--color-accent-line); }
-  .preset[aria-pressed="true"] { background: var(--color-accent-fill); border-color: var(--color-accent-fill); color: #fff; }
-  .input-hint { color: var(--color-text-muted); font-size: 11px; margin: -4px 0 2px; }
 
-  .speed-control {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    --btn-size: 40px;
-  }
+  .speed-presets, .stepper { display: flex; }
+  /* Keeps the focus ring above the neighbouring segment. */
+  :is(.preset, .step, .speed-input):focus-visible { position: relative; z-index: 1; }
+  :is(.preset, .step):first-child { border-radius: var(--inner-radius) 0 0 var(--inner-radius); }
+  :is(.preset, .step):last-child { border-radius: 0 var(--inner-radius) var(--inner-radius) 0; }
 
-  .btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--btn-size);
-    height: var(--btn-size);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    background: var(--color-field);
-    color: var(--color-text);
-    font-size: 18px;
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+  .preset {
+    flex: 1;
+    min-height: 2.25rem;
+    padding: 0;
+    border: 0;
+    border-inline-start: 1px solid var(--color-divider);
+    background: transparent;
+    font: 500 0.8125rem var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
+  .preset:first-child { border-inline-start: 0; }
+  .preset span { color: var(--color-text-muted); }
+  .preset:hover:not(:disabled) { background: var(--color-hover); }
+  .preset[aria-pressed="true"] { background: var(--color-accent-fill); color: #fff; }
+  .preset[aria-pressed="true"] span { color: inherit; }
 
-  .btn:hover:not(:disabled) {
-    background: var(--color-accent-soft);
-    border-color: var(--color-accent-line);
-  }
+  .speed-control { display: flex; align-items: center; gap: 0.75rem; }
 
-  .btn.reset {
-    width: auto;
-    padding: 0 16px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+  .step {
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    min-height: 2.25rem;
+    border: 0;
+    background: transparent;
   }
+  .step:hover:not(:disabled) { background: var(--color-hover); }
 
   .speed-input {
-    width: 90px;
-    height: var(--btn-size);
-    padding: 0 12px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    background: var(--color-field);
-    color: var(--color-text);
-    font-size: 16px;
-    font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    width: 5rem;
+    padding: 0 0.5rem;
+    border: 0;
+    border-inline: 1px solid var(--color-divider);
+    background: transparent;
+    font: 600 0.9375rem var(--font-mono);
     font-variant-numeric: tabular-nums;
-    font-weight: 600;
     text-align: center;
-    transition: border-color 0.15s ease;
-  }
-
-  .speed-input:focus {
-    border-color: var(--color-accent-line);
-  }
-
-  .btn:focus-visible {
-    outline-offset: 2px;
-  }
-
-  .icon {
-    width: 18px;
-    height: 18px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2.5;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    pointer-events: none;
-    position: relative;
-    z-index: 1;
   }
 </style>

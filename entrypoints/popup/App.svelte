@@ -161,83 +161,64 @@
     return () => clearInterval(interval);
   });
 </script>
-
 <div class="popup">
   <header>
-    <div class="header-content">
-      <h1><img src={logo} alt="" width="22" height="22" />Hare</h1>
-      <button class="settings-link" onclick={openOptions} aria-label="Settings" title="Settings">
-        <svg viewBox="0 0 24 24" class="settings-icon" aria-hidden="true">
-          <path d="M4 7h16M4 17h16M8 4v6M16 14v6"></path>
-        </svg>
-        Settings
-      </button>
-    </div>
-    <div class="tab-context">
-      <span class="site-label" title={siteLabel}>{siteLabel}</span>
-      {#if status}
-        <div class="status-indicator">
-          <div class="status-dot"></div>
-          <span
-            >{status.videoCount} {status.videoCount === 1 ? 'player' : 'players'}</span
-          >
-        </div>
-      {/if}
-    </div>
+    <h1><img src={logo} alt="Hare" width="20" height="20" /></h1>
+    <span class="site-label" title={siteLabel}>{siteLabel}</span>
+    {#if status}
+      <span class="player-count">{status.videoCount} {status.videoCount === 1 ? 'player' : 'players'}</span>
+    {/if}
+    <button class="settings-link" onclick={openOptions} aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true">
+        <path d="M4 7h16M4 17h16M8 4v6M16 14v6"></path>
+      </svg>
+    </button>
   </header>
 
   <main class:compact={syncExpanded}>
     {#if loading}
-      <div class="loading" role="status">Connecting to this tab…</div>
+      <p class="hint" role="status">Connecting to this tab…</p>
     {:else if error}
-      <div class="no-videos">
-        <p>{error}</p>
-        <p class="hint">{hint}</p>
-        {#if !siteAction}
-          <button class="settings-btn" disabled={busy} onclick={loadStatus}>Try again</button>
-        {/if}
-      </div>
+      <p class="notice">{error}</p>
+      <p class="hint">{hint}</p>
+      {#if !siteAction}
+        <button class="btn primary" disabled={busy} onclick={loadStatus}>Try again</button>
+      {/if}
     {:else if status}
-      <div class="speed-section">
-        <div class="speed-label">Playback speed</div>
-
-        {#if !syncExpanded}
+      {#if !syncExpanded}
         <div class="speed-display" aria-live="polite">
-          {status.currentSpeed.toFixed(2)}<span class="speed-unit">x</span>
+          {status.currentSpeed.toFixed(2)}<span class="speed-unit">×</span>
         </div>
-        {/if}
+      {/if}
 
-        <SpeedControl
-          speed={status.currentSpeed}
-          mixedSpeeds={status.mixedSpeeds}
-          compact={syncExpanded}
-          disabled={busy}
-          onSpeedChange={setSpeed}
-        />
-        {#if status.mixedSpeeds}
-          <p class="hint">Media have different speeds. Changes apply to all media in this tab.</p>
-        {:else if status.videoCount > 1}
-          <p class="hint">Changes apply to all {status.videoCount} players in this tab.</p>
-        {/if}
-      </div>
+      <SpeedControl
+        speed={status.currentSpeed}
+        mixedSpeeds={status.mixedSpeeds}
+        compact={syncExpanded}
+        disabled={busy}
+        onSpeedChange={setSpeed}
+      />
+      {#if status.mixedSpeeds}
+        <p class="hint">Media have different speeds. Changes apply to all media in this tab.</p>
+      {:else if status.videoCount > 1}
+        <p class="hint">Changes apply to all {status.videoCount} players in this tab.</p>
+      {/if}
     {/if}
     {#if siteAction}
-      <div class="site-controls">
-        <button class="settings-btn" disabled={busy} onclick={changeSiteAccess}>
-          {siteAction === 'enable' ? 'Enable Hare' : siteAction === 'include' ? 'Use Hare on this site' : 'Edit site exclusions'}
-        </button>
-      </div>
+      <button class="btn primary" disabled={busy} onclick={changeSiteAccess}>
+        {siteAction === 'enable' ? 'Enable Hare' : siteAction === 'include' ? 'Use Hare on this site' : 'Edit site exclusions'}
+      </button>
     {/if}
   </main>
 
   <SyncMode onExpandedChange={(expanded) => { syncExpanded = expanded; }} />
 
   {#if status && !syncExpanded}
-    <button class="open-player" disabled={busy} onclick={openInPlayer}>
-      <svg viewBox="0 0 24 24" class="settings-icon" aria-hidden="true">
+    <button class="row-btn" disabled={busy} onclick={openInPlayer}>
+      Open in video player
+      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true">
         <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path>
       </svg>
-      Open in video player
     </button>
   {/if}
 
@@ -247,218 +228,71 @@
 </div>
 
 <style>
-  :global(body) {
-    margin: 0;
-    padding: 0;
-    background: var(--color-surface);
-    overflow: hidden;
-  }
+  :global(body) { overflow: hidden; }
 
   .popup {
     width: 360px;
     max-height: 600px;
     overflow-y: auto;
-    font-family:
-      system-ui,
-      -apple-system,
-      BlinkMacSystemFont,
-      "Segoe UI",
-      sans-serif;
-    color: var(--color-text);
     scrollbar-width: thin;
-    scrollbar-color: var(--color-border) transparent;
   }
 
   header {
-    padding: 16px 20px 12px;
-  }
-
-  .header-content {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 0.625rem;
+    padding: 0.75rem 0.75rem 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--color-divider);
   }
+
+  h1 { display: flex; margin: 0; }
+  .site-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8125rem; font-weight: 500; }
+  .player-count { flex-shrink: 0; font-size: 0.75rem; color: var(--color-text-muted); }
 
   .settings-link {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 8px;
-    margin-right: -8px;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
     border: 0;
     border-radius: var(--radius);
     background: transparent;
     color: var(--color-text-secondary);
-    font-size: 12px;
-    cursor: pointer;
   }
-
   .settings-link:hover { color: var(--color-text); background: var(--color-hover); }
-  .tab-context { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
-  .site-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary); font-size: 12px; }
-
-  h1 {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0;
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-
-  .status-indicator {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--color-text-muted);
-    flex-shrink: 0;
-    font-weight: 600;
-  }
-
-  .status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #10b981;
-  }
-
 
   main {
-    padding: 24px 20px 12px;
-    border-top: 1px solid var(--color-divider);
-  }
-
-  .loading {
-    text-align: center;
-    color: var(--color-text-muted);
-    padding: 32px 20px;
-    font-size: 14px;
-  }
-
-  .no-videos {
-    text-align: center;
-    padding: 32px 20px;
-  }
-
-  .no-videos p {
-    margin: 0 0 8px;
-    color: var(--color-text-muted);
-    font-size: 14px;
-  }
-
-  .hint {
-    font-size: 12px;
-    color: var(--color-text-muted);
-    line-height: 1.6;
-    margin: 0;
-  }
-
-  .speed-section {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    align-items: center;
+    gap: 0.875rem;
+    padding: 1.25rem;
   }
-
-  .speed-label {
-    font-size: 11px;
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-weight: 600;
-  }
+  main.compact { padding-block: 0.75rem; }
 
   .speed-display {
-    font-size: 48px;
-    font-weight: 700;
-    font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
+    font: 600 3.5rem/1 var(--font-mono);
     font-variant-numeric: tabular-nums;
-    color: var(--color-text);
-    line-height: 1;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.04em;
   }
+  .speed-unit { margin-left: 0.125em; font-size: 0.5em; font-weight: 400; letter-spacing: 0; color: var(--color-text-muted); }
 
-  .speed-unit {
-    font-size: 32px;
-    color: var(--color-text-muted);
-    margin-left: 4px;
-  }
+  .notice { margin: 0; font-weight: 600; text-wrap: balance; }
+  .hint { margin: 0; font-size: 0.75rem; color: var(--color-text-muted); }
 
-
-  .settings-btn {
-    width: 100%;
-    padding: 10px 16px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    background: var(--color-field);
-    color: var(--color-text);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition:
-      background 0.15s ease,
-      border-color 0.15s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-  }
-
-  .settings-btn:hover:not(:disabled) {
-    background: var(--color-accent-soft);
-    border-color: var(--color-accent-line);
-  }
-
-  .settings-btn:focus-visible {
-    outline-offset: 2px;
-  }
-
-  .settings-icon {
-    width: 16px;
-    height: 16px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  main.compact { padding-top: 12px; padding-bottom: 20px; }
-  .compact .speed-section { gap: 8px; }
-
-  .open-player { display: flex; align-items: center; justify-content: center; gap: 6px; width: calc(100% - 40px); margin: -6px 20px 14px; padding: 7px; border: 0; border-radius: var(--radius); background: transparent; color: var(--color-text-secondary); font-size: 12px; cursor: pointer; }
-  .open-player:hover:not(:disabled) { color: var(--color-text); background: var(--color-hover); }
-  .site-controls { margin-top: 14px; }
-  .site-controls .settings-btn { font-size: 12px; }
+  main > .btn { align-self: start; }
+  .row-btn { border-top: 1px solid var(--color-divider); }
 
   .toast {
     position: fixed;
-    bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 10px 16px;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: var(--radius);
     background: var(--color-danger);
     color: #fff;
-    border-radius: var(--radius);
-    font-size: 13px;
+    font-size: 0.8125rem;
     font-weight: 500;
     z-index: 100;
-    width: calc(100% - 32px);
-    box-sizing: border-box;
-    animation: toastSlideIn 0.2s ease;
   }
-
-  @keyframes toastSlideIn {
-    from {
-      opacity: 0;
-      transform: translateX(-50%) translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-  }
-
 </style>

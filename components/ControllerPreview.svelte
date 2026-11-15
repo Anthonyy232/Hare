@@ -27,7 +27,7 @@
 <div class="preview">
   <div class="preview-heading">
     <span>Preview</span>
-    <div class="preview-modes" role="group" aria-label="Controller preview state">
+    <div class="preview-modes field" role="group" aria-label="Controller preview state">
       <button aria-pressed={!expanded} onclick={() => { expanded = false; }}>At rest</button>
       <button aria-pressed={expanded} onclick={() => { expanded = true; }}>Expanded</button>
     </div>
@@ -39,12 +39,13 @@
 </div>
 
 <style>
-  .preview { margin-top: 16px; min-width: 0; }
-  .preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 12px; color: #bbc5d3; }
-  .preview-modes { display: flex; gap: 2px; padding: 3px; background: var(--color-field); border: 1px solid var(--color-divider); border-radius: var(--radius); }
-  button { padding: 4px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--color-text-muted); font-size: 11px; cursor: pointer; }
-  button[aria-pressed="true"] { background: var(--color-accent-soft); color: var(--color-accent); }
-  .preview-frame { min-height: 100px; display: flex; align-items: center; padding: 16px; overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--color-divider); background: radial-gradient(ellipse at 85% 90%, #34505f, transparent 75%), linear-gradient(135deg, #222e3c, #1a2732); }
+  .preview { min-width: 0; }
+  .preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.5rem; font-size: 0.8125rem; color: var(--color-text-muted); }
+  .preview-modes { display: flex; }
+  button { padding: 0.25rem 0.625rem; border: 0; border-radius: var(--inner-radius); background: transparent; color: var(--color-text-secondary); font-size: 0.75rem; }
+  button[aria-pressed="true"] { background: var(--color-accent-fill); color: #fff; }
+  /* Stands in for a video frame, so it stays dark in both themes. */
+  .preview-frame { min-height: 100px; display: flex; align-items: center; padding: 1rem; overflow-x: auto; border-radius: var(--radius); background: radial-gradient(ellipse at 85% 90%, #34505f, transparent 75%), linear-gradient(135deg, #222e3c, #1a2732); }
   .preview-overlay { min-width: 0; max-width: 100%; }
-  p { margin: 8px 0 0; font-size: 11px; line-height: 1.5; color: var(--color-text-muted); }
+  p { margin: 0.5rem 0 0; font-size: 0.75rem; color: var(--color-text-muted); }
 </style>

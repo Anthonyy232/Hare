@@ -154,8 +154,8 @@
   {#if active}
     <div class="sync-active">
       <div class="sync-header">
-        <div class="sync-badge">SYNC</div>
-        <button class="stop-btn" onclick={() => changeSync({ type: 'STOP_SYNC' })} disabled={loading}>Stop</button>
+        <div class="sync-badge">Syncing</div>
+        <button class="btn ghost danger" onclick={() => changeSync({ type: 'STOP_SYNC' })} disabled={loading}>Stop</button>
       </div>
 
       <div class="sync-tabs">
@@ -171,20 +171,20 @@
 
       <div class="offset-control">
         <div class="offset-readout">
-          <span class="offset-prefix">B is</span>
+          <span>B is</span>
           <span class="offset-magnitude">{offsetDisplay.magnitude}</span>
           {#if offsetDisplay.direction}
-            <span class="offset-direction">{offsetDisplay.direction} of A</span>
+            <span>{offsetDisplay.direction} of A</span>
           {/if}
         </div>
-        <div class="offset-controls">
+        <div class="offset-controls field">
           <button
             class="nudge-btn"
             disabled={loading}
             onclick={() => changeSync({ type: 'NUDGE_OFFSET', payload: -active.nudgeStep })}
             title="Shift B earlier by {formatStep(active.nudgeStep)}"
             aria-label="Shift B earlier"
-          >◀</button>
+          ><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></button>
           <select
             class="step-select"
             value={active.nudgeStep}
@@ -202,7 +202,7 @@
             onclick={() => changeSync({ type: 'NUDGE_OFFSET', payload: active.nudgeStep })}
             title="Shift B later by {formatStep(active.nudgeStep)}"
             aria-label="Shift B later"
-          >▶</button>
+          ><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button>
         </div>
       </div>
     </div>
@@ -211,8 +211,8 @@
       <div class="setup-header">
         <span>Select 2 tabs to sync</span>
         <span>
-          <button class="header-btn" onclick={loadCandidates} disabled={loading}>Refresh</button>
-          <button class="header-btn" onclick={cancelSetup} disabled={loading}>Cancel</button>
+          <button class="btn ghost" onclick={loadCandidates} disabled={loading}>Refresh</button>
+          <button class="btn ghost" onclick={cancelSetup} disabled={loading}>Cancel</button>
         </span>
       </div>
       <p class="setup-hint">Cue each video to the moment you want to pair. A sets the playback speed; B keeps its starting offset.</p>
@@ -223,7 +223,7 @@
         <div class="selection-status">
           <span role="status">{selectedTabs.length} of 2 selected</span>
           {#if selectedTabs.length === 2}
-            <button class="swap-btn" onclick={() => { selectedTabs = [selectedTabs[1], selectedTabs[0]]; }}>Swap A / B</button>
+            <button class="btn ghost" onclick={() => { selectedTabs = [selectedTabs[1], selectedTabs[0]]; }}>Swap A / B</button>
           {/if}
         </div>
         {#if selectedTabs.length === 2 && candidates.length > 2}
@@ -260,7 +260,7 @@
         </div>
 
         <button
-          class="start-btn"
+          class="btn primary"
           disabled={selectedTabs.length !== 2}
           onclick={startSync}
         >
@@ -274,7 +274,7 @@
             <li><a href={browser.runtime.getURL("/hare.lua")} download="hare.lua">Download hare.lua</a></li>
             <li>
               Move it to <code>{scriptsFolder}</code>
-              <button class="copy-btn" onclick={copyScriptsFolder}>{copied ? "Copied" : "Copy"}</button>
+              <button class="btn ghost" onclick={copyScriptsFolder}>{copied ? "Copied" : "Copy"}</button>
               <br />Create the folder if it doesn't exist.
             </li>
             <li>Open a video in mpv. It appears in the list above.</li>
@@ -283,336 +283,83 @@
       {/if}
     </div>
   {:else}
-    <button class="sync-mode-btn" onclick={openSetup}>
-      <svg viewBox="0 0 24 24" class="sync-icon">
-        <polyline points="23 4 23 10 17 10"></polyline>
-        <polyline points="1 20 1 14 7 14"></polyline>
-        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-      </svg>
+    <button class="row-btn" onclick={openSetup}>
       Sync Mode
+      <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </button>
     <p class="sync-description">Keep two video tabs playing together</p>
   {/if}
 </section>
 
 <style>
-  .selection-status { display: flex; justify-content: space-between; align-items: center; min-height: 32px; font-size: 11px; color: var(--color-accent); }
-  .swap-btn { background: var(--color-field); border: 1px solid var(--color-border); color: var(--color-text); padding: 6px 8px; border-radius: var(--radius); font-size: 11px; cursor: pointer; }
-  .selection-marker { display: grid; place-items: center; width: 24px; height: 24px; margin-right: 8px; border: 1px solid var(--color-border); border-radius: 50%; flex-shrink: 0; color: var(--color-text-muted); font-weight: 700; }
-  .selected .selection-marker { color: #fff; background: var(--color-accent-fill); border-color: var(--color-accent-fill); }
-  .sync-description { font-size: 11px; color: var(--color-text-muted); text-align: center; margin: 7px 0 0; }
-  .setup-hint { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; margin: 0; }
-  .mpv-setup { margin-top: 10px; font-size: 12px; color: var(--color-text-muted); line-height: 1.5; }
-  .mpv-setup summary { cursor: pointer; color: var(--color-text-secondary); }
-  .mpv-setup ol { margin: 6px 0 0; padding-left: 18px; }
-  .mpv-setup a { color: var(--color-accent); }
-  .mpv-setup code { color: var(--color-text-secondary); overflow-wrap: anywhere; }
-  .copy-btn { background: var(--color-field); border: 1px solid var(--color-border); color: var(--color-text); padding: 1px 6px; border-radius: var(--radius); font-size: 11px; cursor: pointer; }
-  .sync-section {
-    padding: 0 20px 18px;
-  }
+  .sync-section { border-top: 1px solid var(--color-divider); }
+  .row-btn { padding-bottom: 0.125rem; }
+  .sync-description { margin: 0; padding: 0 1.25rem 0.75rem; font-size: 0.75rem; color: var(--color-text-muted); }
 
-  .sync-mode-btn {
-    width: 100%;
-    padding: 10px 16px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    background: var(--color-field);
-    color: var(--color-text);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-  }
+  .sync-active, .sync-setup { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.875rem 1.25rem 1rem; }
+  .sync-error { padding: 0.75rem 1.25rem 0; font-size: 0.75rem; color: var(--color-danger-text); }
+  .sync-loading { padding: 0.75rem 0; font-size: 0.75rem; color: var(--color-text-muted); }
 
-  .sync-mode-btn:hover {
-    background: var(--color-accent-soft);
-    border-color: var(--color-accent-line);
-  }
+  .sync-header, .setup-header, .selection-status { display: flex; align-items: center; justify-content: space-between; }
+  .sync-badge { font-size: 0.8125rem; font-weight: 600; color: var(--color-ok); }
+  .setup-header { font-size: 0.8125rem; font-weight: 600; }
+  .selection-status { min-height: 2rem; font-size: 0.75rem; color: var(--color-text-muted); }
+  .setup-hint { margin: 0; font-size: 0.75rem; color: var(--color-text-muted); }
 
-  .sync-icon {
-    width: 16px;
-    height: 16px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
+  .sync-tabs, .candidate-list { display: flex; flex-direction: column; }
+  .candidate-list { max-height: 200px; overflow-y: auto; }
+  .sync-tab { display: flex; align-items: center; gap: 0.625rem; padding: 0.375rem 0; font-size: 0.8125rem; }
+  .sync-tab + .sync-tab, .candidate + .candidate { border-top: 1px solid var(--color-divider); }
+  .tab-label { flex-shrink: 0; font: 600 0.75rem var(--font-mono); color: var(--color-accent); }
+  .tab-title, .candidate-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .sync-active {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .sync-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .sync-badge {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: #10b981;
-    background: rgba(16, 185, 129, 0.15);
-    padding: 3px 8px;
-    border-radius: 999px;
-  }
-
-  .stop-btn {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-danger-text);
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: var(--radius);
-    padding: 3px 10px;
-    cursor: pointer;
-    transition: background 0.15s ease;
-  }
-
-  .stop-btn:hover {
-    background: rgba(239, 68, 68, 0.2);
-  }
-
-  .sync-tabs {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .sync-tab {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    background: var(--color-field);
-    border-radius: var(--radius);
-    font-size: 12px;
-  }
-
-  .tab-label {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--color-accent);
-    background: var(--color-accent-soft);
-    padding: 1px 6px;
-    border-radius: 999px;
-    flex-shrink: 0;
-  }
-
-  .tab-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--color-text-secondary);
-  }
-
-  .offset-control {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 12px;
-  }
-
-  .offset-readout {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    color: var(--color-text-secondary);
-  }
-
-  .offset-prefix,
-  .offset-direction {
-    color: var(--color-text-muted);
-    font-size: 11px;
-  }
-
-  .offset-magnitude {
-    font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
-    font-variant-numeric: tabular-nums;
-    color: var(--color-text);
-    font-weight: 600;
-    font-size: 13px;
-  }
-
-  .offset-controls {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .nudge-btn {
-    width: 28px;
-    height: 26px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    background: var(--color-field);
-    color: var(--color-text);
-    font-size: 12px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s ease;
-    flex-shrink: 0;
-  }
-
-  .nudge-btn:hover {
-    background: var(--color-accent-soft);
-    border-color: var(--color-accent-line);
-  }
-
-  .step-select {
-    flex: 1;
-    font-size: 11px;
-    padding: 4px 6px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    background: var(--color-field);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    text-align: center;
-    text-align-last: center;
-  }
-
-  .sync-setup {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .setup-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-text-secondary);
-  }
-
-  .header-btn {
-    font-size: 11px;
-    color: var(--color-text-muted);
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 2px 6px;
-  }
-
-  .header-btn:hover {
-    color: var(--color-text);
-  }
-
-  .sync-loading,
-  .sync-error {
-    text-align: center;
-    font-size: 12px;
-    color: var(--color-text-muted);
-    padding: 12px 0;
-  }
-
-  .sync-error {
-    color: var(--color-danger);
-  }
-
-  .candidate-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    max-height: 200px;
-    overflow-y: auto;
-  }
+  .offset-control { display: flex; flex-direction: column; gap: 0.375rem; font-size: 0.75rem; }
+  .offset-readout { display: flex; align-items: baseline; gap: 0.375rem; color: var(--color-text-muted); }
+  .offset-magnitude { font-size: 0.875rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--color-text); }
+  .offset-controls { display: flex; }
+  .nudge-btn, .step-select { min-height: 2rem; border: 0; background: transparent; }
+  /* Keeps the focus ring above the neighbouring segment. */
+  :is(.nudge-btn, .step-select):focus-visible { position: relative; z-index: 1; }
+  .nudge-btn { display: grid; place-items: center; width: 2.5rem; flex-shrink: 0; padding: 0; }
+  .nudge-btn:first-child { border-radius: var(--inner-radius) 0 0 var(--inner-radius); }
+  .nudge-btn:last-child { border-radius: 0 var(--inner-radius) var(--inner-radius) 0; }
+  .nudge-btn:hover:not(:disabled) { background: var(--color-hover); }
+  .step-select { flex: 1; padding: 0 0.375rem; border-inline: 1px solid var(--color-divider); font-size: 0.8125rem; text-align: center; text-align-last: center; cursor: pointer; }
 
   .candidate {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 8px 10px;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius);
-    background: var(--color-field);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
-    text-align: left;
+    gap: 0.5rem;
     width: 100%;
-    font-size: 12px;
+    padding: 0.5rem 0.25rem;
+    border: 0;
+    background: transparent;
+    font-size: 0.8125rem;
+    text-align: start;
   }
-
-  .candidate:hover {
-    background: var(--color-hover);
-  }
-
-  .candidate.selected {
-    border-color: var(--color-accent-line);
-    background: var(--color-accent-soft);
-  }
-
-  .candidate-icon {
+  .candidate:hover:not(:disabled) { background: var(--color-hover); }
+  .candidate:focus-visible { outline-offset: -2px; }
+  .selection-marker {
     display: grid;
     place-items: center;
-    width: 20px;
-    height: 20px;
-    margin-right: 8px;
+    width: 1.5rem;
+    height: 1.5rem;
     flex-shrink: 0;
-    border-radius: 6px;
-    background: var(--color-hover);
-    color: var(--color-text-muted);
-    font-size: 10px;
-    font-weight: 700;
-    overflow: hidden;
-  }
-
-  .candidate-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    overflow: hidden;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .candidate-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: 500;
-  }
-
-  .candidate-domain {
-    font-size: 10px;
-    color: var(--color-text-muted);
-  }
-
-  .candidate-videos {
-    font-size: 10px;
-    color: var(--color-text-muted);
-    flex-shrink: 0;
-    margin-left: 8px;
-  }
-
-  .start-btn {
-    width: 100%;
-    padding: 8px 16px;
-    border: 0;
+    border: 1px solid var(--color-border);
     border-radius: var(--radius);
-    background: var(--color-accent-fill);
-    color: #fff;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease;
+    font: 600 0.75rem var(--font-mono);
+    color: var(--color-text-muted);
   }
+  .selected .selection-marker { border-color: var(--color-accent-fill); background: var(--color-accent-fill); color: #fff; }
+  .candidate-icon { display: grid; place-items: center; width: 1rem; height: 1rem; flex-shrink: 0; overflow: hidden; font-size: 0.625rem; font-weight: 700; color: var(--color-text-muted); }
+  .candidate-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .candidate-title { font-weight: 500; }
+  .candidate-domain, .candidate-videos { font-size: 0.6875rem; color: var(--color-text-muted); }
+  .candidate-videos { flex-shrink: 0; }
 
-  .start-btn:hover:not(:disabled) {
-    background: var(--color-accent-fill-hover);
-  }
+  .mpv-setup { font-size: 0.75rem; color: var(--color-text-muted); }
+  .mpv-setup summary { cursor: pointer; color: var(--color-text-secondary); }
+  .mpv-setup ol { margin: 0.375rem 0 0; padding-left: 1.125rem; }
+  .mpv-setup a { color: var(--color-accent); }
+  .mpv-setup code { color: var(--color-text); overflow-wrap: anywhere; }
 </style>
