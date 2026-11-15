@@ -1,6 +1,6 @@
 # Working on Hare
 
-A browser extension (WXT, Svelte 5, TypeScript, MV3) that controls video and audio speed in Chrome and Firefox. `npm run dev` doesn't launch a browser: load the printed output folder unpacked in a separate profile.
+A browser extension (WXT, Svelte, TypeScript, MV3) that controls video and audio speed in Chrome and Firefox. `npm run dev` doesn't launch a browser: load the printed output folder unpacked in a separate profile.
 
 ## Code
 
@@ -28,10 +28,10 @@ A browser extension (WXT, Svelte 5, TypeScript, MV3) that controls video and aud
 
 ## Hare
 
-- `lib/` is grouped by feature. A feature owns its messages and listeners; `background.ts` and `content.ts` only route, and the popup and options pages are views.
-- `npm run test:e2e` builds first and drives the built Chrome extension. Run it for anything that runs in pages, the popup or sync.
-- Mozilla reviewers rebuild from the source archive: `zip.includeSources` in `wxt.config.ts` lists what goes in it, and the README's "Building from source" section is their instructions. Keep both true.
-- `site/` is the GitHub Pages site, deployed by `.github/workflows/pages.yml`. It is not part of the extension or the source archive.
+- Code is grouped by feature. A feature owns its messages and listeners; the background and content entry points only route, and the popup and options pages are views.
+- Run `npm run test:e2e` for anything that runs in pages, the popup or sync, and for toolchain changes.
+- Mozilla reviewers rebuild from the source archive by following the README's "Building from source" section. Keep the archive's contents and those instructions true.
+- `site/` is the project website. It is not part of the extension or the source archive.
 
 ## Done means
 
@@ -64,7 +64,7 @@ A browser extension (WXT, Svelte 5, TypeScript, MV3) that controls video and aud
 - Bump commit `chore: release vX.Y.Z`; tag `vX.Y.Z`, which must match `package.json`.
 - Title `Hare X.Y.Z`.
 - Notes: banner image first, then `### New`, `### Improved`, `### Fixed` (only those that apply). One line per change, written for users; no internals, dependency lists or test counts. End with the install link(s) and the full changelog link.
-- Banner: on the orphan `media` branch, `node banner.cjs <version> "<highlight>"` writes `releases/v<version>.png`; reference its raw URL. The branch's README has the steps.
+- Banner: generated and hosted on the orphan `media` branch; its README has the steps.
 - Pushing the tag makes CI build the ZIPs and open a draft release. Firefox Add-ons is submitted by hand with the Firefox and sources ZIPs.
 
 ## Agents
