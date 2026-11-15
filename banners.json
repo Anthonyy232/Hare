@@ -1,0 +1,11 @@
+{
+  "1.7.0": "Sync that recovers on its own",
+  "1.7.1": "Leaner, with small refinements",
+  "1.8.0": "Sync a tab with mpv",
+  "1.9.0": "Open videos in your desktop player",
+  "1.9.1": "Patreon videos in VLC and mpv",
+  "1.9.2": "Streams that survive an update",
+  "1.9.3": "Tighter sync with mpv",
+  "1.9.4": "Housekeeping under the hood",
+  "1.10.0": "A new look, in light and dark"
+}
