@@ -15,7 +15,7 @@
     "test": "vitest",
     "test:e2e": "playwright test",
     "pretest:e2e": "npm run build",
-    "type-check": "svelte-check --tsconfig ./tsconfig.json",
+    "type-check": "svelte-check --tsconfig ./tsconfig.json --tsgo",
     "test:unit": "vitest run",
     "check": "npm run type-check && npm run test:unit && npm run build && npm run build:firefox"
   },
@@ -23,11 +23,12 @@
     "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.65.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "@wxt-dev/module-svelte": "^2.0.5",
     "happy-dom": "^21.0.4",
     "svelte": "^5.57.3",
     "svelte-check": "^4.7.8",
-    "typescript": "6.0.3",
+    "typescript": "^6.0.3",
     "vite": "^8.3.8",
     "vitest": "^5.1.0",
     "wxt": "^0.21.5"

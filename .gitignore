@@ -3,6 +3,7 @@ node_modules/
 
 # WXT outputs
 .wxt/
+.svelte-check/
 .output/
 dist/
 
