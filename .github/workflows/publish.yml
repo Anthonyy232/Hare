@@ -1,0 +1,122 @@
+name: Publish to stores
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to submit, e.g. v1.11.0
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.event.release.tag_name }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  firefox:
+    name: Submit to Firefox Add-ons
+    runs-on: ubuntu-latest
+    env:
+      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+      API: https://addons.mozilla.org/api/v5/addons
+      ADDON: hare@anthonyy232.github.io
+    steps:
+      - id: creds
+        run: |
+          if [[ -z "$AMO_JWT_ISSUER" || -z "$AMO_JWT_SECRET" ]]; then
+            echo "::notice::AMO_JWT_ISSUER or AMO_JWT_SECRET is not set; skipping Firefox Add-ons"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.creds.outputs.ready
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*-firefox.zip' --pattern '*-sources.zip'
+      - if: steps.creds.outputs.ready
+        name: Upload, create the listed version and set its notes
+        run: |
+          version=${TAG#v}
+          # Tokens last at most five minutes, so one per request
+          jwt() {
+            node -e '
+              const c = require("crypto"), t = Math.floor(Date.now() / 1000);
+              const b = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+              const d = b({ alg: "HS256", typ: "JWT" }) + "." + b({ iss: process.env.AMO_JWT_ISSUER, jti: c.randomUUID(), iat: t, exp: t + 60 });
+              console.log(d + "." + c.createHmac("sha256", process.env.AMO_JWT_SECRET).update(d).digest("base64url"));
+            '
+          }
+          amo() { curl --fail-with-body -sS -H "Authorization: JWT $(jwt)" "$@"; }
+
+          uuid=$(amo -F "upload=@hare-$version-firefox.zip" --form-string channel=listed "$API/upload/" | jq -r .uuid)
+          for _ in $(seq 60); do
+            upload=$(amo "$API/upload/$uuid/")
+            [[ $(jq .processed <<< "$upload") == true ]] && break
+            sleep 10
+          done
+          if [[ $(jq .valid <<< "$upload") != true ]]; then
+            jq .validation <<< "$upload"
+            echo "::error::AMO validation did not pass"
+            exit 1
+          fi
+
+          # Source has to be multipart and release notes JSON, so two requests
+          id=$(amo --form-string "upload=$uuid" -F "source=@hare-$version-sources.zip" "$API/addon/$ADDON/versions/" | jq .id)
+          # Plain text: no banner, links or bold install and changelog lines
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body \
+            | sed -E '/^!\[/d; /^\*\*/d; s/^#+ //; s/\[([^]]*)\]\([^)]*\)/\1/g' \
+            | jq -Rs '{release_notes: {"en-US": trim}}' \
+            | amo -X PATCH -H 'Content-Type: application/json' --data @- "$API/addon/$ADDON/versions/$id/" > /dev/null
+          echo "::notice::Hare $version submitted to Firefox Add-ons for review"
+
+  chrome:
+    name: Submit to Chrome Web Store
+    runs-on: ubuntu-latest
+    env:
+      CHROME_SERVICE_ACCOUNT_JSON: ${{ secrets.CHROME_SERVICE_ACCOUNT_JSON }}
+      ITEM: https://chromewebstore.googleapis.com/v2/publishers/36dc15b9-f1cf-4dd0-9369-b7e01ec23cb3/items/ammjljaajbbpfeiiecicidpjnlagamkn
+      UPLOAD: https://chromewebstore.googleapis.com/upload/v2/publishers/36dc15b9-f1cf-4dd0-9369-b7e01ec23cb3/items/ammjljaajbbpfeiiecicidpjnlagamkn:upload
+    steps:
+      - id: creds
+        run: |
+          if [[ -z "$CHROME_SERVICE_ACCOUNT_JSON" ]]; then
+            echo "::notice::CHROME_SERVICE_ACCOUNT_JSON is not set; skipping Chrome Web Store"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.creds.outputs.ready
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*-chrome.zip'
+      - if: steps.creds.outputs.ready
+        name: Upload and submit for review
+        run: |
+          version=${TAG#v}
+          assertion=$(node -e '
+            const c = require("crypto"), k = JSON.parse(process.env.CHROME_SERVICE_ACCOUNT_JSON), t = Math.floor(Date.now() / 1000);
+            const b = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+            const d = b({ alg: "RS256", typ: "JWT" }) + "." + b({ iss: k.client_email, scope: "https://www.googleapis.com/auth/chromewebstore", aud: "https://oauth2.googleapis.com/token", iat: t, exp: t + 3600 });
+            console.log(d + "." + c.sign("sha256", Buffer.from(d), k.private_key).toString("base64url"));
+          ')
+          token=$(curl --fail-with-body -sS https://oauth2.googleapis.com/token \
+            --data-urlencode grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer --data-urlencode "assertion=$assertion" | jq -r .access_token)
+          echo "::add-mask::$token"
+          cws() { curl --fail-with-body -sS -H "Authorization: Bearer $token" "$@"; }
+
+          state=$(cws -X POST -T "hare-$version-chrome.zip" "$UPLOAD" | jq -r .uploadState)
+          for _ in $(seq 60); do
+            [[ $state != *IN_PROGRESS ]] && break
+            sleep 10
+            state=$(cws "$ITEM:fetchStatus" | jq -r .lastAsyncUploadState)
+          done
+          if [[ $state != SUCCEEDED ]]; then
+            echo "::error::Chrome Web Store upload ended in state $state"
+            exit 1
+          fi
+
+          cws -X POST -H 'Content-Type: application/json' -d '{}' "$ITEM:publish" | jq .
+          echo "::notice::Hare $version submitted to the Chrome Web Store for review"
