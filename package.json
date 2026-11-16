@@ -1,7 +1,7 @@
 {
   "name": "hare",
   "version": "1.10.0",
-  "description": "A modern video speed controller",
+  "description": "Control the speed of any video or audio, with keyboard shortcuts and two-tab sync",
   "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {

@@ -45,7 +45,6 @@ A browser extension (WXT, Svelte, TypeScript, MV3) that controls video and audio
 - README is for users: what it does, how to get it, how to use it. No internals, no agent instructions.
 - This file is for agents: only what can't be found quickly in the code.
 - No meta docs in the repo (notes, audits, plans, reports).
-- README and site images and release banners are built from the orphan `media` branch; its README has the steps.
 
 ## Git
 
@@ -65,7 +64,8 @@ A browser extension (WXT, Svelte, TypeScript, MV3) that controls video and audio
 - Bump commit `chore: release vX.Y.Z`; tag `vX.Y.Z`, which must match `package.json`.
 - Title `Hare X.Y.Z`.
 - Notes: banner image first, then `### New`, `### Improved`, `### Fixed` (only those that apply). One line per change, written for users; no internals, dependency lists or test counts. End with the install link(s) and the full changelog link.
-- Banner: built and hosted on the `media` branch.
+- Banner: built and hosted on the orphan `media` branch.
+- Generated images (README panels, `site/img`, the banners) are built from the `media` branch; its README has the steps.
 - Pushing the tag makes CI build the ZIPs and open a draft release. Firefox Add-ons is submitted by hand with the Firefox and sources ZIPs.
 
 ## Agents
