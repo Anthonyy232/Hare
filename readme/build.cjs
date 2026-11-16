@@ -7,6 +7,7 @@ const hare = hareCheckout(process.argv[2]);
 const inputs = path.join(__dirname, 'inputs');
 const readme = path.join(hare, '.github/readme');
 const site = path.join(hare, 'site/img');
+const store = path.join(__dirname, '../store');
 const b64 = file => 'data:image/png;base64,' + fs.readFileSync(path.join(inputs, file)).toString('base64');
 const mark = logo(hare);
 // Drawn as if hovered: full opacity, buttons shown.
@@ -99,8 +100,19 @@ const player = `${base(false)}<style>
 </style>
 <div class="video"><div class="bar"></div><div id="controller"><div></div></div></div>${controllerScript}`;
 
+// Chrome Web Store: 1280x800 screenshots and the 440x280 promo tile, opaque with square corners.
+const storeShot = html => html + '<style>.card { height: 800px; border-radius: 0; } .stage .shot { translate: 0 120px; }</style>';
+const promo = `${base(false)}<style>
+  body { width: 440px; height: 280px; display: grid; place-content: center; justify-items: center; background: var(--wash); }
+  .brand { display: flex; align-items: center; gap: 12px; font-size: 44px; font-weight: 700; letter-spacing: -0.02em; }
+  .brand svg { width: 56px; height: 56px; }
+  .serif { margin-top: 12px; font-size: 34px; }
+</style>
+<div class="brand">${mark}Hare</div><div class="serif">any video, at <i>your</i> speed</div>`;
+
 (async () => {
   const browser = await chromium.launch();
+  fs.mkdirSync(store, { recursive: true });
   for (const scheme of ['light', 'dark']) {
     await render(browser, hero(scheme === 'dark'), `${readme}/hero-${scheme}.png`, { width: 1280, height: 760, scale: 1.6, transparent: true });
     for (const [name, html] of Object.entries(features(scheme))) {
@@ -111,5 +123,8 @@ const player = `${base(false)}<style>
   await render(browser, player, `${site}/controller.png`, { width: 440, height: 280, scale: 2 });
   // GitHub has no API for the social preview; it is uploaded by hand from this file.
   await render(browser, hero(false, 640), path.join(__dirname, '../social-preview.png'), { width: 1280, height: 640 });
+  const shots = [hero(false, 800) + '<style>.card { border-radius: 0; }</style>', ...Object.values(features('light')).map(storeShot)];
+  for (const [i, html] of shots.entries()) await render(browser, html, `${store}/screenshot-${i + 1}.png`, { width: 1280, height: 800 });
+  await render(browser, promo, `${store}/promo-small.png`, { width: 440, height: 280 });
   await browser.close();
 })();

@@ -7,7 +7,7 @@ Generated images for [Hare](https://github.com/Anthonyy232/Hare), kept off `main
 | `lib.cjs` | Fonts and rendering shared by the scripts |
 | `fonts/` | Instrument Serif, under the SIL Open Font License (`OFL.txt`) |
 | `readme/capture.cjs` | Captures the popup, Sync Mode, settings and on-page controller from the built extension into `readme/inputs/` |
-| `readme/build.cjs` | Writes `.github/readme/*.png` and `site/img/*.png` in the checkout from `readme/inputs/`, and `social-preview.png` here |
+| `readme/build.cjs` | Writes `.github/readme/*.png` and `site/img/*.png` in the checkout from `readme/inputs/`, and `social-preview.png` here, and the Chrome Web Store screenshots (1280x800) and promo tile (440x280) in `store/` |
 | `social-preview.png` | The 1280x640 GitHub social preview |
 | `releases/banner.cjs` | Writes `releases/v<version>.png` from `releases/banners.json` |
 
