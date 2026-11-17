@@ -23,6 +23,14 @@ export default defineConfig({
         {
             name: 'chromium',
             use: { ...devices['Desktop Chrome'] },
+            testIgnore: 'mpv.spec.ts',
+        },
+        // A running mpv is a sync candidate in every browser, so it must not overlap other tests.
+        {
+            name: 'mpv',
+            use: { ...devices['Desktop Chrome'] },
+            testMatch: 'mpv.spec.ts',
+            dependencies: ['chromium'],
         },
     ],
 });
