@@ -1,5 +1,3 @@
-import { isHarePage } from '../hostname';
-
 /**
  * HLS and DASH manifests. Players built on MediaSource only expose blob URLs,
  * so the manifests they request are the links a desktop player can open.
@@ -20,7 +18,7 @@ export function describeStream(media: HTMLMediaElement): StreamInfo | null {
   // Calls and screen shares have no link to hand over.
   if (media.srcObject instanceof MediaStream) return null;
   return {
-    src: isHarePage(media.currentSrc) ? media.currentSrc : null,
+    src: /^(https?|file):/.test(media.currentSrc) ? media.currentSrc : null,
     page: location.href,
     encrypted: media.mediaKeys !== null,
     time: Number.isFinite(media.duration) ? media.currentTime : 0,
