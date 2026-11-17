@@ -20,7 +20,6 @@ export default defineConfig({
   },
   manifest: {
     name: 'Hare',
-    description: 'Control the speed of any video or audio, with keyboard shortcuts and two-tab sync',
     permissions: ['storage', 'webNavigation', 'webRequest'],
     optional_permissions: ['downloads', 'downloads.open'],
     host_permissions: HARE_MATCHES,
