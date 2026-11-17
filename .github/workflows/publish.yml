@@ -30,17 +30,8 @@ jobs:
       API: https://addons.mozilla.org/api/v5/addons
       ADDON: hare@anthonyy232.github.io
     steps:
-      - id: creds
-        run: |
-          if [[ -z "$AMO_JWT_ISSUER" || -z "$AMO_JWT_SECRET" ]]; then
-            echo "::notice::AMO_JWT_ISSUER or AMO_JWT_SECRET is not set; skipping Firefox Add-ons"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.creds.outputs.ready
-        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*-firefox.zip' --pattern '*-sources.zip'
-      - if: steps.creds.outputs.ready
-        name: Upload, create the listed version and set its notes
+      - run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*-firefox.zip' --pattern '*-sources.zip'
+      - name: Upload, create the listed version and set its notes
         run: |
           version=${TAG#v}
           # Tokens last at most five minutes, so one per request
@@ -83,17 +74,8 @@ jobs:
       ITEM: https://chromewebstore.googleapis.com/v2/publishers/36dc15b9-f1cf-4dd0-9369-b7e01ec23cb3/items/ammjljaajbbpfeiiecicidpjnlagamkn
       UPLOAD: https://chromewebstore.googleapis.com/upload/v2/publishers/36dc15b9-f1cf-4dd0-9369-b7e01ec23cb3/items/ammjljaajbbpfeiiecicidpjnlagamkn:upload
     steps:
-      - id: creds
-        run: |
-          if [[ -z "$CHROME_SERVICE_ACCOUNT_JSON" ]]; then
-            echo "::notice::CHROME_SERVICE_ACCOUNT_JSON is not set; skipping Chrome Web Store"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.creds.outputs.ready
-        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*-chrome.zip'
-      - if: steps.creds.outputs.ready
-        name: Upload and submit for review
+      - run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*-chrome.zip'
+      - name: Upload and submit for review
         run: |
           version=${TAG#v}
           assertion=$(node -e '

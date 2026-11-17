@@ -65,7 +65,7 @@ A browser extension (WXT, Svelte, TypeScript, MV3) that controls video and audio
 - Title `Hare X.Y.Z`.
 - Notes: banner image first, then `### New`, `### Improved`, `### Fixed` (only those that apply). One line per change, written for users; no internals, dependency lists or test counts. End with the install link(s) and the full changelog link.
 - Generated images (README panels, `site/img`, the release banners) are built from the orphan `media` branch, which also hosts the banners; its README has the steps.
-- Pushing the tag makes CI build the ZIPs and open a draft release. Publishing it runs `publish.yml`: the Firefox ZIP with the sources ZIP goes to Firefox Add-ons (`AMO_JWT_ISSUER`, `AMO_JWT_SECRET`), with the notes as plain text, and the Chrome ZIP to the Chrome Web Store (`CHROME_SERVICE_ACCOUNT_JSON`), both for review. A store without its secrets is skipped. Re-run for a tag from the Actions tab.
+- Pushing the tag makes CI build the ZIPs and open a draft release. Publishing it runs `publish.yml`: the Firefox ZIP with the sources ZIP goes to Firefox Add-ons (`AMO_JWT_ISSUER`, `AMO_JWT_SECRET`), with the notes as plain text, and the Chrome ZIP to the Chrome Web Store (`CHROME_SERVICE_ACCOUNT_JSON`), both for review. Re-run for a tag from the Actions tab.
 
 ## Agents
 
