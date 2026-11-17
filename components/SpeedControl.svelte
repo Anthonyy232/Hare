@@ -31,7 +31,7 @@
 
 <div class="speed-control-root" bind:this={root}>
 {#if !compact}
-  <div class="speed-presets field" role="group" aria-label="Speed presets">
+  <div class="field segmented" role="group" aria-label="Speed presets">
     {#each PRESETS as preset}
       <button
         class="preset"
@@ -45,7 +45,7 @@
 {/if}
 
 <div class="speed-control">
-  <div class="stepper field">
+  <div class="field segmented">
   <button
     class="step"
     onclick={() => onSpeedChange(speed - SPEED.STEP)}
@@ -108,12 +108,6 @@
 
 <style>
   .speed-control-root { display: contents; }
-
-  .speed-presets, .stepper { display: flex; }
-  /* Keeps the focus ring above the neighbouring segment. */
-  :is(.preset, .step, .speed-input):focus-visible { position: relative; z-index: 1; }
-  :is(.preset, .step):first-child { border-radius: var(--inner-radius) 0 0 var(--inner-radius); }
-  :is(.preset, .step):last-child { border-radius: 0 var(--inner-radius) var(--inner-radius) 0; }
 
   .preset {
     flex: 1;

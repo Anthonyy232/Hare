@@ -177,7 +177,7 @@
             <span>{offsetDisplay.direction} of A</span>
           {/if}
         </div>
-        <div class="offset-controls field">
+        <div class="field segmented">
           <button
             class="nudge-btn"
             disabled={loading}
@@ -316,13 +316,8 @@
   .offset-control { display: flex; flex-direction: column; gap: 0.375rem; font-size: 0.75rem; }
   .offset-readout { display: flex; align-items: baseline; gap: 0.375rem; color: var(--color-text-muted); }
   .offset-magnitude { font-size: 0.875rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--color-text); }
-  .offset-controls { display: flex; }
   .nudge-btn, .step-select { min-height: 2rem; border: 0; background: transparent; }
-  /* Keeps the focus ring above the neighbouring segment. */
-  :is(.nudge-btn, .step-select):focus-visible { position: relative; z-index: 1; }
   .nudge-btn { display: grid; place-items: center; width: 2.5rem; flex-shrink: 0; padding: 0; }
-  .nudge-btn:first-child { border-radius: var(--inner-radius) 0 0 var(--inner-radius); }
-  .nudge-btn:last-child { border-radius: 0 var(--inner-radius) var(--inner-radius) 0; }
   .nudge-btn:hover:not(:disabled) { background: var(--color-hover); }
   .step-select { flex: 1; padding: 0 0.375rem; border-inline: 1px solid var(--color-divider); font-size: 0.8125rem; text-align: center; text-align-last: center; cursor: pointer; }
 

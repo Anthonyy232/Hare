@@ -61,6 +61,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   border-radius: var(--radius);
   background-color: var(--color-field);
 }
+.segmented { display: flex; }
+/* Keeps the focus ring above the neighbouring segment. */
+.segmented > :focus-visible { position: relative; z-index: 1; }
+.segmented > :first-child { border-radius: var(--inner-radius) 0 0 var(--inner-radius); }
+.segmented > :last-child { border-radius: 0 var(--inner-radius) var(--inner-radius) 0; }
 .btn {
   padding: 0.5rem 0.875rem;
   border: 1px solid transparent;
