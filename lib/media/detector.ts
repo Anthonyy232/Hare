@@ -24,22 +24,21 @@ export function scanMediaTree(
   onShadow?: (shadow: ShadowRoot) => void,
 ): HTMLMediaElement[] {
   const media: HTMLMediaElement[] = [];
-  const stack: Node[] = [root];
-  while (stack.length) {
-    const node = stack.pop()!;
-    if (node instanceof Element) {
-      if (node.localName === CONTROLLER_TAG) continue;
-      if (node instanceof HTMLVideoElement || (includeAudio && node instanceof HTMLAudioElement)) media.push(node);
-      const shadow = getShadowRoot(node);
-      if (shadow) {
-        onShadow?.(shadow);
-        stack.push(shadow);
-      }
+  const roots: Node[] = [root];
+  const visit = (element: Element): void => {
+    if (element.localName === CONTROLLER_TAG) return;
+    if (element instanceof HTMLVideoElement || (includeAudio && element instanceof HTMLAudioElement)) media.push(element);
+    const shadow = getShadowRoot(element);
+    if (shadow) {
+      onShadow?.(shadow);
+      roots.push(shadow);
     }
-    for (let i = node.childNodes.length - 1; i >= 0; i--) {
-      const child = node.childNodes[i];
-      if (child instanceof Element) stack.push(child);
-    }
+  };
+  while (roots.length) {
+    const current = roots.pop()!;
+    if (current instanceof Element) visit(current);
+    // text and comment nodes can't be queried
+    if ('querySelectorAll' in current) (current as ParentNode).querySelectorAll('*').forEach(visit);
   }
   return media;
 }

@@ -2,30 +2,21 @@ import { getShadowRoot, scanMediaTree } from './detector';
 
 const IDLE_TIMEOUT_MS = 100;
 
-type MediaCallback = (media: HTMLMediaElement) => void;
-
 export class ObserverPool {
   private observers = new Map<Document | ShadowRoot, MutationObserver>();
   private pendingMutations: MutationRecord[] = [];
   private flushId: number | null = null;
-  private trackedMedia = new WeakSet<HTMLMediaElement>();
 
+  /** Media may be reported again; after `onNodesRemoved` some of it may be gone. */
   constructor(
-    private onMediaFound: MediaCallback,
-    private onMediaRemoved: MediaCallback,
+    private onMediaFound: (media: HTMLMediaElement) => void,
+    private onNodesRemoved: () => void,
     private includeAudio = false,
   ) {}
 
-  /** Reports every media element in the document, including ones already reported. */
   scan(): void {
     this.attach(document);
-    const found = new Set<HTMLMediaElement>();
-    this.collect(document, found, true);
-    for (const media of found) {
-      if (!media.isConnected) continue;
-      this.trackedMedia.add(media);
-      this.onMediaFound(media);
-    }
+    this.report(document);
   }
 
   private attach(root: Document | ShadowRoot): void {
@@ -39,18 +30,11 @@ export class ObserverPool {
     this.observers.set(root, observer);
   }
 
-  private collect(root: Node, media: Set<HTMLMediaElement>, observeShadows: boolean): void {
-    for (const element of scanMediaTree(root, this.includeAudio, shadow => {
-      if (observeShadows && shadow.host.isConnected) this.attach(shadow);
-    })) media.add(element);
-  }
-
-  private reportFound(found: Set<HTMLMediaElement>): void {
-    for (const media of found) {
-      if (media.isConnected && !this.trackedMedia.has(media)) {
-        this.trackedMedia.add(media);
-        this.onMediaFound(media);
-      }
+  private report(root: Node): void {
+    for (const media of scanMediaTree(root, this.includeAudio, shadow => {
+      if (shadow.host.isConnected) this.attach(shadow);
+    })) {
+      if (media.isConnected) this.onMediaFound(media);
     }
   }
 
@@ -58,40 +42,32 @@ export class ObserverPool {
     this.flushId = null;
     const mutations = this.pendingMutations;
     this.pendingMutations = [];
-    const found = new Set<HTMLMediaElement>();
-    const removed = new Set<HTMLMediaElement>();
+    if (mutations.some(mutation => mutation.removedNodes.length)) {
+      this.onNodesRemoved();
+      for (const [root, observer] of this.observers) {
+        if (root instanceof ShadowRoot && !root.host.isConnected) {
+          observer.disconnect();
+          this.observers.delete(root);
+        }
+      }
+    }
     for (const mutation of mutations) {
       // attachShadow itself has no mutation record; a later host mutation can reveal it.
       if (mutation.target instanceof Element) {
         const shadow = getShadowRoot(mutation.target);
         if (shadow && !this.observers.has(shadow)) {
           this.attach(shadow);
-          this.collect(shadow, found, true);
+          this.report(shadow);
         }
       }
-      for (const node of mutation.removedNodes) this.collect(node, removed, false);
-      for (const node of mutation.addedNodes) this.collect(node, found, true);
+      for (const node of mutation.addedNodes) this.report(node);
     }
-    for (const media of removed) {
-      if (!media.isConnected && this.trackedMedia.has(media)) {
-        this.trackedMedia.delete(media);
-        this.onMediaRemoved(media);
-      }
-    }
-    for (const [root, observer] of this.observers) {
-      if (root instanceof ShadowRoot && !root.host.isConnected) {
-        observer.disconnect();
-        this.observers.delete(root);
-      }
-    }
-    this.reportFound(found);
   }
 
   disconnect(): void {
     if (this.flushId !== null) cancelIdleCallback(this.flushId);
     for (const observer of this.observers.values()) observer.disconnect();
     this.observers.clear();
-    this.trackedMedia = new WeakSet();
     this.pendingMutations = [];
     this.flushId = null;
   }

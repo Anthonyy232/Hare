@@ -56,6 +56,22 @@ describe('media lifecycle', () => {
     expect(invalidated).toHaveBeenCalledWith(document.querySelector('audio'));
   });
 
+  it('drops a controller removed with its parent and keeps one that is reparented', async () => {
+    vi.useRealTimers();
+    registry = new MediaRegistry(structuredClone(DEFAULT_SETTINGS), handler, invalidated);
+    const [controller] = registry.connectedControllers();
+    const parent = document.createElement('section');
+    document.body.append(parent);
+    parent.append(controller.media);
+    const added = document.createElement('video');
+    document.body.append(added);
+    await vi.waitFor(() => expect(registry.connectedControllers().map(c => c.media)).toEqual([controller.media, added]));
+    expect(registry.connectedControllers()[0]).toBe(controller);
+    parent.remove();
+    await vi.waitFor(() => expect(invalidated).toHaveBeenCalledWith(controller.media));
+    expect(registry.connectedControllers().map(c => c.media)).toEqual([added]);
+  });
+
   it('releases ignored players when their detached subtree is cleaned up', async () => {
     const video = document.querySelector('video')!;
     video.dataset.eligible = 'false';
