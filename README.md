@@ -6,7 +6,7 @@
 <p align="center">
   <a href="https://addons.mozilla.org/firefox/addon/hare-video-controller/"><b>Get Hare for Firefox</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/Anthonyy232/Hare/releases/latest"><b>Download for Chrome and Edge</b></a>
+  <a href="https://chromewebstore.google.com/detail/hare/ammjljaajbbpfeiiecicidpjnlagamkn"><b>Get Hare for Chrome and Edge</b></a>
   &nbsp;·&nbsp;
   <a href="https://anthonyy232.github.io/Hare/"><b>Website</b></a>
 </p>
@@ -72,14 +72,7 @@ Video calls and screen shares can't be opened. The first use asks for permission
 
 **Firefox:** install from [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/hare-video-controller/).
 
-**Chrome and Edge:** Hare isn't in the Chrome Web Store, so install it unpacked. It won't update itself; repeat these steps for a new version.
-
-1. Download `hare-<version>-chrome.zip` from the [latest release](https://github.com/Anthonyy232/Hare/releases/latest).
-2. Extract the ZIP file.
-3. Open `chrome://extensions/` (or `edge://extensions/`).
-4. Enable "Developer mode".
-5. Click "Load unpacked".
-6. Select the extracted folder.
+**Chrome and Edge:** install from the [Chrome Web Store](https://chromewebstore.google.com/detail/hare/ammjljaajbbpfeiiecicidpjnlagamkn). Edge asks you to allow extensions from other stores first.
 
 Reload pages that were already open. Browser settings pages and some protected pages can't run extensions. For local files, allow file access in the extension's details.
 

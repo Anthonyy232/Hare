@@ -127,8 +127,7 @@ kbd { display: grid; place-items: center; flex: none; width: 40px; height: 40px;
 
 .install { padding-block: clamp(48px, 8vw, 96px); border-top: 1px solid var(--line); }
 .install .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px clamp(28px, 6vw, 72px); margin-top: 40px; }
-.install p, .install ol { margin-top: 10px; color: var(--muted); }
-.install ol { padding-left: 1.2em; }
+.install p { margin-top: 10px; color: var(--muted); }
 .install .actions { margin-top: 20px; }
 
 footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9375rem; }
