@@ -21,11 +21,7 @@ export class MediaRegistry {
   ) {
     this.observer = this.createObserver();
     this.observer.scan();
-    this.cleanupInterval = setInterval(() => {
-      for (const media of this.entries.keys()) {
-        if (!media.isConnected) this.remove(media);
-      }
-    }, STALE_CHECK_INTERVAL_MS);
+    this.cleanupInterval = setInterval(() => this.removeDisconnected(), STALE_CHECK_INTERVAL_MS);
   }
 
   connectedControllers(): VideoController[] {
@@ -61,7 +57,13 @@ export class MediaRegistry {
   }
 
   private createObserver(): ObserverPool {
-    return new ObserverPool(media => this.consider(media), media => this.remove(media), this.settings.enableAudio);
+    return new ObserverPool(media => this.consider(media), () => this.removeDisconnected(), this.settings.enableAudio);
+  }
+
+  private removeDisconnected(): void {
+    for (const media of this.entries.keys()) {
+      if (!media.isConnected) this.remove(media);
+    }
   }
 
   private consider(media: HTMLMediaElement): void {

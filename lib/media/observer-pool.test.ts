@@ -7,18 +7,20 @@ describe('ObserverPool', () => {
     document.body.innerHTML = '';
   });
 
-  it('observes pre-existing nested shadow roots and reports media removed with their host', async () => {
-    const found: HTMLMediaElement[] = [], removed: HTMLMediaElement[] = [];
+  it('observes pre-existing nested shadow roots and signals removals', async () => {
+    const found: HTMLMediaElement[] = [];
+    const onNodesRemoved = vi.fn();
     const host = document.createElement('div'); document.body.append(host);
     const outer = host.attachShadow({ mode: 'open' });
     const innerHost = document.createElement('div'); outer.append(innerHost);
     const inner = innerHost.attachShadow({ mode: 'open' });
-    pool = new ObserverPool(media => found.push(media), media => removed.push(media));
+    pool = new ObserverPool(media => found.push(media), onNodesRemoved);
     pool.scan();
     const video = document.createElement('video'); inner.append(video);
     await vi.waitFor(() => expect(found).toEqual([video]));
+    expect(onNodesRemoved).not.toHaveBeenCalled();
     host.remove();
-    await vi.waitFor(() => expect(removed).toEqual([video]));
+    await vi.waitFor(() => expect(onNodesRemoved).toHaveBeenCalledOnce());
     const survivor = document.createElement('video'); document.body.append(survivor);
     await vi.waitFor(() => expect(found).toEqual([video, survivor]));
   });
@@ -30,27 +32,5 @@ describe('ObserverPool', () => {
     const video = document.createElement('video'); document.body.append(video); video.remove();
     const survivor = document.createElement('video'); document.body.append(survivor);
     await vi.waitFor(() => expect(found).toEqual([survivor]));
-  });
-
-  it('does not report a removed media element when it is reparented', async () => {
-    const found: HTMLMediaElement[] = [];
-    const removed: HTMLMediaElement[] = [];
-    pool = new ObserverPool(
-      media => found.push(media),
-      media => removed.push(media),
-    );
-    const firstParent = document.createElement('div');
-    const secondParent = document.createElement('div');
-    document.body.append(firstParent, secondParent);
-
-    pool.scan();
-    const video = document.createElement('video');
-    firstParent.appendChild(video);
-    await vi.waitFor(() => expect(found).toEqual([video]));
-
-    secondParent.appendChild(video);
-    const survivor = document.createElement('video'); secondParent.append(survivor);
-    await vi.waitFor(() => expect(found).toEqual([video, survivor]));
-    expect(removed).toEqual([]);
   });
 });
