@@ -79,7 +79,7 @@ jobs:
         run: |
           version=${TAG#v}
           assertion=$(node -e '
-            const c = require("crypto"), k = JSON.parse(process.env.CHROME_SERVICE_ACCOUNT_JSON), t = Math.floor(Date.now() / 1000);
+            const c = require("crypto"), k = JSON.parse(process.env.CHROME_SERVICE_ACCOUNT_JSON.replace(/^﻿/, "")), t = Math.floor(Date.now() / 1000);
             const b = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
             const d = b({ alg: "RS256", typ: "JWT" }) + "." + b({ iss: k.client_email, scope: "https://www.googleapis.com/auth/chromewebstore", aud: "https://oauth2.googleapis.com/token", iat: t, exp: t + 3600 });
             console.log(d + "." + c.sign("sha256", Buffer.from(d), k.private_key).toString("base64url"));
