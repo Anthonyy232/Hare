@@ -1,4 +1,4 @@
-// node releases/banner.cjs <hare checkout> [<version> "<highlight>"] : 1280x640 release banners in releases/
+// node releases/banner.cjs <hare checkout> [<version> "<highlight>"] : release banners, 1280x640 at 2x, in releases/
 const fs = require('fs');
 const { chromium, fonts, logo, hareCheckout, render } = require('../lib.cjs');
 const dir = __dirname;
@@ -39,7 +39,7 @@ const accent = text => text.replace(/(\S+)$/, '<i>$1</i>');
 (async () => {
   const browser = await chromium.launch();
   for (const [v, text] of version ? [[version, highlight]] : Object.entries(banners)) {
-    await render(browser, html(v, accent(text)), `${dir}/v${v}.png`, { width: 1280, height: 640 });
+    await render(browser, html(v, accent(text)), `${dir}/v${v}.png`, { width: 1280, height: 640, scale: 2 });
   }
   await browser.close();
 })();

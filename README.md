@@ -39,6 +39,6 @@ Commit the new inputs and `social-preview.png` here, and the changed images on `
 node releases/banner.cjs ../.. 1.11.0 "One short highlight"
 ```
 
-That records the highlight in `releases/banners.json` and writes `releases/v1.11.0.png` (1280x640). Without a version it redraws every banner. Commit, push, and use the raw URL in the release notes:
+That records the highlight in `releases/banners.json` and writes `releases/v1.11.0.png` (1280x640 at 2x). Without a version it redraws every banner. Commit, push, and use the raw URL in the release notes:
 
 `https://raw.githubusercontent.com/Anthonyy232/Hare/media/releases/v1.11.0.png`
