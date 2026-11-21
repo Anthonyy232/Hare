@@ -64,7 +64,7 @@ test('sync offset controls work in both directions and preserve the selected ste
   await expect.poll(() => popup.evaluate(() => (globalThis as any).syncStatusFailed)).toBe(true);
   await expect(popup.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
   await popup.getByRole('button', { name: 'Stop', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Sync Mode', exact: true })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Sync Mode' })).toBeVisible();
   await popup.evaluate(() => (globalThis as any).restoreSyncStatus());
   const stoppedStatus = await rpc(popup, 'GET_SYNC_STATUS');
   expect(stoppedStatus.active).toBe(false);
@@ -212,7 +212,7 @@ test('shortcut capture rejects duplicates and modifiers, clears keys, and suppor
 test('sync candidates recover from missing tabs and setup can be cancelled', async ({ extension }) => {
   const a = await openVideo(extension.context, '?candidate-a');
   const popup = await openUI(extension, 'popup', a);
-  await popup.getByRole('button', { name: 'Sync Mode', exact: true }).click();
+  await popup.getByRole('button', { name: 'Sync Mode' }).click();
   await expect(popup.getByRole('alert')).toContainText('at least 2');
   const b = await openVideo(extension.context, '?candidate-b');
   await popup.getByRole('button', { name: 'Refresh', exact: true }).click();
@@ -224,7 +224,7 @@ test('sync candidates recover from missing tabs and setup can be cancelled', asy
   await expect(popup.locator('.candidate')).toHaveCount(1);
   await expect(popup.getByRole('button', { name: 'Start Sync', exact: true })).toBeDisabled();
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Sync Mode', exact: true })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Sync Mode' })).toBeVisible();
   expect((await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(false);
 });
 

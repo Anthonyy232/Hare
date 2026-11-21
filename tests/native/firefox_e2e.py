@@ -246,7 +246,7 @@ class FirefoxFlows(unittest.TestCase):
         b = self.video("?sync-b")
         self.media("v.currentTime=15")
         popup = self.popup(a)
-        self.button("Sync Mode").click()
+        self.css(".sync-section .row-btn").click()
         self.until(lambda: len(self.d.find_elements(By.CSS_SELECTOR, ".candidate")) == 2)
         for item in self.d.find_elements(By.CSS_SELECTOR, ".candidate"):
             item.click()

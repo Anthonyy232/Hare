@@ -261,7 +261,7 @@ test('sync selection preserves a pair, permits swapping roles, and explains dese
   await openVideo(extension.context, '?b');
   await openVideo(extension.context, '?c');
   const popup = await openUI(extension, 'popup', a);
-  await popup.getByRole('button', { name: 'Sync Mode', exact: true }).click();
+  await popup.getByRole('button', { name: 'Sync Mode' }).click();
   const candidates = popup.locator('.candidate');
   await expect(candidates).toHaveCount(3);
   await candidates.nth(0).click();
@@ -535,7 +535,7 @@ test('failed sync startup stays in setup with an actionable error', async ({ ext
   const a = await openVideo(extension.context, '?a');
   const b = await openVideo(extension.context, '?b');
   const popup = await openUI(extension, 'popup', a);
-  await popup.getByRole('button', { name: 'Sync Mode', exact: true }).click();
+  await popup.getByRole('button', { name: 'Sync Mode' }).click();
   await expect(popup.locator('.candidate')).toHaveCount(2);
   await popup.locator('.candidate').nth(0).click();
   await popup.locator('.candidate').nth(1).click();

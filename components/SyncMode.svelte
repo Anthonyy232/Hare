@@ -284,17 +284,19 @@
     </div>
   {:else}
     <button class="row-btn" onclick={openSetup}>
-      Sync Mode
+      <span class="sync-entry">
+        Sync Mode
+        <span class="sync-description">Keep two video tabs playing together</span>
+      </span>
       <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
     </button>
-    <p class="sync-description">Keep two video tabs playing together</p>
   {/if}
 </section>
 
 <style>
   .sync-section { border-top: 1px solid var(--color-divider); }
-  .row-btn { padding-bottom: 0.125rem; }
-  .sync-description { margin: 0; padding: 0 1.25rem 0.75rem; font-size: 0.75rem; color: var(--color-text-muted); }
+  .sync-entry { display: flex; flex-direction: column; gap: 0.125rem; }
+  .sync-description { font-size: 0.75rem; font-weight: 400; color: var(--color-text-muted); }
 
   .sync-active, .sync-setup { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.875rem 1.25rem 1rem; }
   .sync-error { padding: 0.75rem 1.25rem 0; font-size: 0.75rem; color: var(--color-danger-text); }
