@@ -48,8 +48,7 @@
   }
 
   async function save() {
-    if (!settings || saving || validationErrors.length) return;
-
+    if (!settings) return;
     saving = true;
     error = null;
     try {
@@ -63,7 +62,6 @@
   }
 
   async function reset() {
-    if (saving) return;
     if (confirm('Reset all settings to defaults?')) {
       saving = true;
       error = null;

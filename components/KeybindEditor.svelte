@@ -101,8 +101,9 @@
   {/if}
   <ul class="shortcut-list" aria-label="Keyboard shortcuts">
     {#each bindings as binding, index}
+      {@const action = ACTIONS[binding.action]}
       <li class="shortcut-row">
-        <h3>{ACTIONS[binding.action].label}</h3>
+        <h3>{action.label}</h3>
         <div class="shortcut-field">
           <span class="field-label" aria-hidden="true">Shortcut</span>
           <div class="key-cell">
@@ -112,7 +113,7 @@
               class:unbound={!binding.key && editingIndex !== index}
               onclick={() => startListening(index)}
               onblur={() => { editingIndex = null; }}
-              aria-label={`Change shortcut for ${ACTIONS[binding.action].label}`}
+              aria-label={`Change shortcut for ${action.label}`}
               aria-pressed={editingIndex === index}
             >
               {#if editingIndex === index}Press a key…
@@ -120,19 +121,19 @@
               {:else}Unbound{/if}
             </button>
             <button type="button" class="key-clear" title="Clear shortcut"
-              aria-label={`Clear shortcut for ${ACTIONS[binding.action].label}`}
+              aria-label={`Clear shortcut for ${action.label}`}
               disabled={!binding.key} onclick={() => { editingIndex = null; patch(index, { key: '' }); }}>×</button>
           </div>
         </div>
         <div class="shortcut-field">
-          {#if ACTIONS[binding.action].value?.label}
-            <label for={`binding-value-${index}`} class="field-label">{ACTIONS[binding.action].value?.label}</label>
+          {#if action.value}
+            <label for={`binding-value-${index}`} class="field-label">{action.value.label}</label>
             <div class="value-control">
               <input id={`binding-value-${index}`} type="number" class="value-input field"
                 value={binding.value} step="0.01"
-                min={ACTIONS[binding.action].value?.min}
-                max={ACTIONS[binding.action].value?.max}
-                aria-label={`${ACTIONS[binding.action].label} ${ACTIONS[binding.action].value?.label}`}
+                min={action.value.min}
+                max={action.value.max}
+                aria-label={`${action.label} ${action.value.label}`}
                 onkeydown={(event) => {
                   if (event.key !== 'Enter' && event.key !== 'Escape') return;
                   event.preventDefault();
@@ -140,13 +141,13 @@
                   event.currentTarget.blur();
                 }}
                 oninput={() => onDraftChange(true)} onblur={(e) => handleBlur(index, e)} />
-              <span class="unit" aria-hidden="true">{ACTIONS[binding.action].value?.unit}</span>
+              <span class="unit" aria-hidden="true">{action.value.unit}</span>
             </div>
           {/if}
         </div>
         <label class="override-label">
           <input type="checkbox" checked={binding.force} onchange={() => toggleForce(index)}
-            aria-label={`Override site shortcut for ${ACTIONS[binding.action].label}`} />
+            aria-label={`Override site shortcut for ${action.label}`} />
           <span>Override site shortcut</span>
         </label>
       </li>

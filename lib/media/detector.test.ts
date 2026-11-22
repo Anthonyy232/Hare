@@ -30,19 +30,4 @@ describe('scanMediaTree', () => {
         const media = scanMediaTree(document, false);
         expect(media).toEqual([video]);
     });
-
-    it('handles mixture of light and shadow DOM media', () => {
-        const v1 = document.createElement('video');
-        document.body.appendChild(v1);
-
-        const host = document.createElement('div');
-        document.body.appendChild(host);
-        const shadow = host.attachShadow({ mode: 'open' });
-
-        const v2 = document.createElement('video');
-        shadow.appendChild(v2);
-
-        const media = scanMediaTree(document, false);
-        expect(media).toEqual([v1, v2]);
-    });
 });

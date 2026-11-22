@@ -5,7 +5,6 @@ vi.mock('../media/safe-media', () => ({
     getCurrentTime: (media: HTMLMediaElement) => media.currentTime,
     setCurrentTime: (media: HTMLMediaElement, value: number) => { media.currentTime = value; },
     getPlaybackRate: (media: HTMLMediaElement) => media.playbackRate,
-    setPlaybackRate: (media: HTMLMediaElement, value: number) => { media.playbackRate = value; },
     play: (media: HTMLMediaElement) => {
       (media as any)._paused = false;
       return Promise.resolve<void>(undefined);
@@ -165,7 +164,6 @@ describe('SyncAgent', () => {
   });
 
   describe('coordinator-issued play buffering behavior', () => {
-
     it('reports real buffering during coordinator-initiated play', () => {
       agent.play();
       video.dispatchEvent(new Event('play'));
@@ -195,12 +193,9 @@ describe('SyncAgent', () => {
       expect(sendEvent.mock.calls.map(([event]) => event.action)).toEqual(['buffering_start', 'buffering_end']);
     });
 
-
     it('ignores waiting after a remote pause', () => {
       agent.play();
-
       agent.pause(undefined, false);
-
       video.dispatchEvent(new Event('pause'));
       video.dispatchEvent(new Event('waiting'));
       expect(sendEvent).not.toHaveBeenCalled();

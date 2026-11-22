@@ -208,7 +208,7 @@ export class VideoController implements PointerTarget {
   }
 
   private seek(seconds: number): void {
-    if (this.destroyed || !Number.isFinite(seconds) || this.media.readyState < HTMLMediaElement.HAVE_METADATA) return;
+    if (this.destroyed || this.media.readyState < HTMLMediaElement.HAVE_METADATA) return;
     safeMedia.setCurrentTime(this.media, safeMedia.getCurrentTime(this.media) + seconds);
   }
 
