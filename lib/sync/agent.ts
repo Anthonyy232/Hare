@@ -175,7 +175,6 @@ export class SyncAgent implements SyncPlayer {
   }
 
   correctRate(rateFactor: number, durationMs: number): void {
-    if (!Number.isFinite(rateFactor) || !Number.isFinite(durationMs) || durationMs < 0) return;
     this.correction.apply(rateFactor, durationMs);
   }
 

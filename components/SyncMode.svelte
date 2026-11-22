@@ -79,7 +79,6 @@
   }
 
   async function startSync() {
-    if (selectedTabs.length !== 2) return;
     starting = true;
     const started = await changeSync(
       { type: "START_SYNC", payload: { tabIdA: selectedTabs[0], tabIdB: selectedTabs[1] } },
@@ -97,7 +96,6 @@
     message: Extract<HareMessage, { type: 'START_SYNC' | 'STOP_SYNC' | 'NUDGE_OFFSET' | 'SET_NUDGE_STEP' }>,
     failure = 'Could not update sync. Try again.',
   ): Promise<boolean> {
-    if (loading) return false;
     loading = true;
     error = null;
     try {

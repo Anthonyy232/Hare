@@ -275,8 +275,7 @@ export class SyncCoordinator {
   }
 
   private async realignB(): Promise<void> {
-    const session = this.session;
-    if (!session) return;
+    const session = this.session!;
     const generation = session.generation;
     const positionA = await this.requestPosition('A');
     if (!positionA || this.session !== session || session.generation !== generation) return;
@@ -302,7 +301,8 @@ export class SyncCoordinator {
   }
 
   private isBuffering(side: Side): boolean {
-    return this.session?.bufferingSide === side || this.session?.bufferingSide === 'both';
+    const { bufferingSide } = this.session!;
+    return bufferingSide === side || bufferingSide === 'both';
   }
 
   private clearBufferTimers(): void {
@@ -311,8 +311,7 @@ export class SyncCoordinator {
   }
 
   private async handleBufferingStart(side: Side, position: number): Promise<void> {
-    const session = this.session;
-    if (!session) return;
+    const session = this.session!;
     clearTimeout(this.bufferStableTimers.get(side));
     this.bufferStableTimers.delete(side);
     if (this.isBuffering(side)) return;
@@ -384,8 +383,6 @@ export class SyncCoordinator {
           : { method: 'seek', position: behind === 'B' ? expectedB : expectedA },
       });
       logger.debug('Drift correction applied', { driftMs: Math.round(drift * 1000), method: byRate ? 'rate' : 'seek', side: behind });
-    } catch (error) {
-      logger.error('Drift check failed:', error);
     } finally {
       this.driftCheckRunning = false;
     }
@@ -423,9 +420,7 @@ export class SyncCoordinator {
   }
 
   private persistSession(): Promise<void> {
-    const session = this.session;
-    if (!session) return Promise.resolve();
-    const snapshot = structuredClone(session);
+    const snapshot = structuredClone(this.session!);
     this.storageWrites = this.storageWrites
       .then(() => browser.storage.session.set({ [STORAGE_KEY]: snapshot }))
       .catch(error => logger.error('Failed to persist sync session:', error));

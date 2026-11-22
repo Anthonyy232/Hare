@@ -26,7 +26,6 @@ export function createControllerView() {
   controllerEl.className = 'hare-controller';
   const speedDisplay = document.createElement('span');
   speedDisplay.className = 'hare-speed';
-  speedDisplay.textContent = '1.00x';
   speedDisplay.setAttribute('role', 'status');
   speedDisplay.setAttribute('aria-live', 'polite');
   speedDisplay.setAttribute('aria-label', 'Current playback speed');

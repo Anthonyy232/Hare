@@ -113,7 +113,6 @@ export function bridgeCrossFramePointers(getControllers: () => PointerTarget[]):
   return () => {
     if (publishInterval !== null) clearInterval(publishInterval);
     if (isChildFrame && lastPublishedJson !== '[]') publish([]);
-    lastPublishedJson = '[]';
     listeners.abort();
     childHitmaps.clear();
   };

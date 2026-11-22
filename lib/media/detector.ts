@@ -3,7 +3,7 @@ import { logger } from '../logger';
 import { CONTROLLER_TAG } from './controller-view';
 
 export function getShadowRoot(element: Element): ShadowRoot | null {
-  if (browser?.dom?.openOrClosedShadowRoot && element instanceof HTMLElement) {
+  if (browser.dom?.openOrClosedShadowRoot && element instanceof HTMLElement) {
     try {
       return browser.dom.openOrClosedShadowRoot(element);
     } catch (error) {

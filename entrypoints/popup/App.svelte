@@ -123,7 +123,6 @@
   function openOptions() { void browser.runtime.openOptionsPage(); }
 
   async function changeSiteAccess() {
-    if (busy || !siteAction) return;
     const action = siteAction;
     const actionUrl = tabUrl;
     if (action === 'settings') { openOptions(); return; }
