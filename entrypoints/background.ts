@@ -13,7 +13,10 @@ export default defineBackground(() => {
       switch (message.type) {
         case 'GET_PAGE_CONTEXT': return { hostname: sender.tab?.url ? new URL(sender.tab.url).hostname : '' };
         case 'FIND_MANIFEST': return { url: await findManifest(message.payload.tabId, message.payload.manifests) };
-        default: return await sync.handle(message, sender) ?? { success: false, error: 'Unknown message type' };
+        default: {
+          const reply = await sync.handle(message, sender);
+          return reply === undefined ? { success: false, error: 'Unknown message type' } : reply;
+        }
       }
     };
     void handle().then(sendResponse, error => {

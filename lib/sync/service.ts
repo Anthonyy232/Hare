@@ -28,8 +28,8 @@ export function startSyncService() {
     void coordinator.ready.then(() => coordinator.handleTabRemoved(tabId));
   });
 
-  /** Replies to sync's messages; null for messages that aren't sync's. */
-  async function handle(message: HareMessage, sender: Browser.runtime.MessageSender): Promise<Replies[keyof Replies] | null> {
+  /** Replies to sync's messages; undefined for messages that aren't sync's, since null is a real reply. */
+  async function handle(message: HareMessage, sender: Browser.runtime.MessageSender): Promise<Replies[keyof Replies] | undefined> {
     await coordinator.ready;
     switch (message.type) {
       case 'SYNC_EVENT':
@@ -54,7 +54,7 @@ export function startSyncService() {
         coordinator.nudgeOffset(message.payload);
         return { success: true };
       case 'GET_SYNC_STATUS': return coordinator.getStatus();
-      default: return null;
+      default: return undefined;
     }
   }
 

@@ -214,6 +214,8 @@ test('sync candidates recover from missing tabs and setup can be cancelled', asy
   const popup = await openUI(extension, 'popup', a);
   await popup.getByRole('button', { name: 'Sync Mode' }).click();
   await expect(popup.getByRole('alert')).toContainText('at least 2');
+  // Setup polls for mpv and lists whatever it gets back.
+  expect(await rpc(popup, 'GET_MPV_CANDIDATE')).toBeNull();
   const b = await openVideo(extension.context, '?candidate-b');
   await popup.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(popup.locator('.candidate')).toHaveCount(2);
