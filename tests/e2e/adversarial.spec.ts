@@ -282,7 +282,7 @@ test('forced shortcuts override page listeners but never intercept typing or com
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
   expect(await page.evaluate(() => (globalThis as any).siteKeys)).toBe(1);
   await setSettings(extension.worker, { keyBindings: DEFAULT_SETTINGS.keyBindings.map(binding => ({ ...binding, force: true })) });
-  // Wait for the storage listener rather than assuming a write synchronously updates content.
+  // Settings reach the page asynchronously.
   await expect.poll(async () => {
     await page.keyboard.press('r');
     return rate(page);
@@ -349,7 +349,6 @@ test('buffering signals pause the partner and recovery never overrides a deliber
   expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({ success: true });
   await a.locator('video').evaluate((v: HTMLVideoElement) => v.play());
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
-  // Deterministic media-event fault injection; does not claim a real network stall.
   await a.locator('video').evaluate(v => v.dispatchEvent(new Event('waiting')));
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   await a.locator('video').evaluate(v => v.dispatchEvent(new Event('playing')));
