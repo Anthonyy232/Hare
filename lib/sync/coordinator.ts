@@ -70,7 +70,7 @@ export class SyncCoordinator {
   }
 
   async start(tabIdA: number, tabIdB: number): Promise<void> {
-    if (this.starting) throw new Error('Sync is already starting. Please wait.');
+    if (this.starting) throw new Error('Sync is already starting.');
     if (![tabIdA, tabIdB].every(isEndpointId) || tabIdA === tabIdB) {
       throw new Error('Select two different tabs.');
     }

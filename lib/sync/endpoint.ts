@@ -46,7 +46,7 @@ export class SyncEndpoint {
   private activate(controllers: VideoController[]): Replies['SYNC_ACTIVATE'] {
     this.deactivate(false);
     const controller = primaryMedia(controllers.filter(({ media }) => media.isConnected && media.readyState >= HTMLMediaElement.HAVE_METADATA));
-    if (!controller) return { success: false, error: 'No video found' };
+    if (!controller) return { success: false, error: 'This tab has no media.' };
     this.agent = new SyncAgent(controller, event => { sendToBackground({ type: 'SYNC_EVENT', payload: event }).catch(() => {}); });
     this.startKeepAlive();
     // Report the user's chosen speed: the media may be mid drift correction.
