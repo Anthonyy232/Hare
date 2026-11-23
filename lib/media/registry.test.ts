@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
-import { MediaRegistry } from './registry';
 import { DEFAULT_SETTINGS } from '../settings/schema';
+import { MediaRegistry } from './registry';
 import type { SiteHandler } from './site-handlers';
 
 let registry: MediaRegistry;
@@ -65,7 +65,9 @@ describe('media lifecycle', () => {
     parent.append(controller.media);
     const added = document.createElement('video');
     document.body.append(added);
-    await vi.waitFor(() => expect(registry.connectedControllers().map(c => c.media)).toEqual([controller.media, added]));
+    await vi.waitFor(() =>
+      expect(registry.connectedControllers().map(c => c.media)).toEqual([controller.media, added]),
+    );
     expect(registry.connectedControllers()[0]).toBe(controller);
     parent.remove();
     await vi.waitFor(() => expect(invalidated).toHaveBeenCalledWith(controller.media));

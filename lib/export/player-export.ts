@@ -34,15 +34,23 @@ export async function exportToPlayer(tabId: number): Promise<'opened' | 'saved'>
   const media = (await askEveryFrame(tabId, { type: 'GET_STREAM' })).find(({ reply }) => reply)?.reply;
   if (!media) throw new Error('This tab has no video that can play outside the browser.');
   // Desktop players cannot decrypt protected streams; site resolvers can still use the page URL.
-  const manifest = !media.src && !media.encrypted
-    ? (await sendToBackground({ type: 'FIND_MANIFEST', payload: { tabId, manifests: media.manifests } })).url
-    : null;
+  const manifest =
+    !media.src && !media.encrypted
+      ? (await sendToBackground({ type: 'FIND_MANIFEST', payload: { tabId, manifests: media.manifests } })).url
+      : null;
   const url = media.src ?? manifest ?? media.page;
   const { title = '' } = await browser.tabs.get(tabId);
-  const file = URL.createObjectURL(new Blob([playlist(url, title, media.time, media.page)], { type: 'audio/x-mpegurl' }));
+  const file = URL.createObjectURL(
+    new Blob([playlist(url, title, media.time, media.page)], { type: 'audio/x-mpegurl' }),
+  );
   try {
     // hare.lua recognizes playlists by this name to apply their options in mpv.
-    const id = await browser.downloads.download({ url: file, filename: 'hare.m3u', conflictAction: 'overwrite', saveAs: false });
+    const id = await browser.downloads.download({
+      url: file,
+      filename: 'hare.m3u',
+      conflictAction: 'overwrite',
+      saveAs: false,
+    });
     await waitForDownload(id);
     try {
       await browser.downloads.open(id);
@@ -51,5 +59,7 @@ export async function exportToPlayer(tabId: number): Promise<'opened' | 'saved'>
       // Firefox requires the original user gesture to open a download; the saved file is usable.
       return 'saved';
     }
-  } finally { URL.revokeObjectURL(file); }
+  } finally {
+    URL.revokeObjectURL(file);
+  }
 }

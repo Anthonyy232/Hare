@@ -22,30 +22,49 @@ const RULES: readonly SiteRule[] = [
   {
     domains: ['youtube.com', 'youtu.be'],
     containers: ['.html5-video-player', '.html5-video-container'],
-    ignore: '.ytp-ad-player-overlay, .ytp-ad-module, ytd-shorts, ytd-reel-video-renderer, ytmusic-player-bar, .ytmusic-player-bar, #channel-header-container, #video-preview, ytd-video-preview',
-    minWidth: 100, minHeight: 100,
+    ignore:
+      '.ytp-ad-player-overlay, .ytp-ad-module, ytd-shorts, ytd-reel-video-renderer, ytmusic-player-bar, .ytmusic-player-bar, #channel-header-container, #video-preview, ytd-video-preview',
+    minWidth: 100,
+    minHeight: 100,
     fallback: video => video.parentElement?.parentElement ?? null,
   },
   {
     domains: ['netflix.com'],
     containers: ['.watch-video--player-view', '.NFPlayer'],
-    ignore: '.billboard-row, .jawBone, [data-uia="billboard"], [data-uia="hero-billboard"], video.preview-video, .moreLikeThis, [data-uia="more-like-this"], .title-card, .slider-item',
+    ignore:
+      '.billboard-row, .jawBone, [data-uia="billboard"], [data-uia="hero-billboard"], video.preview-video, .moreLikeThis, [data-uia="more-like-this"], .title-card, .slider-item',
     ...STREAMING,
   },
   {
     domains: [
-      'primevideo.com', 'amazon.com', 'amazon.co.uk', 'amazon.de',
-      'amazon.fr', 'amazon.es', 'amazon.it', 'amazon.co.jp',
-      'amazon.in', 'amazon.com.br', 'amazon.com.mx', 'amazon.com.au',
-      'amazon.nl', 'amazon.se', 'amazon.pl', 'amazon.sg',
-      'amazon.ae', 'amazon.sa', 'amazon.eg', 'amazon.ca',
+      'primevideo.com',
+      'amazon.com',
+      'amazon.co.uk',
+      'amazon.de',
+      'amazon.fr',
+      'amazon.es',
+      'amazon.it',
+      'amazon.co.jp',
+      'amazon.in',
+      'amazon.com.br',
+      'amazon.com.mx',
+      'amazon.com.au',
+      'amazon.nl',
+      'amazon.se',
+      'amazon.pl',
+      'amazon.sg',
+      'amazon.ae',
+      'amazon.sa',
+      'amazon.eg',
+      'amazon.ca',
     ],
     containers: [],
     ignore: '.a-image-wrapper, .imageBlock',
-    minWidth: 200, minHeight: 100,
+    minWidth: 200,
+    minHeight: 100,
     // `.vjs-tech` marks the video itself, so its parent is the player.
-    fallback: video => video.closest('.vjs-tech')?.parentElement
-      ?? video.closest('.webPlayerContainer') ?? video.parentElement,
+    fallback: video =>
+      video.closest('.vjs-tech')?.parentElement ?? video.closest('.webPlayerContainer') ?? video.parentElement,
   },
   {
     domains: ['disneyplus.com', 'hulu.com', 'hotstar.com'],
@@ -53,7 +72,8 @@ const RULES: readonly SiteRule[] = [
       '[data-testid="btm-media-client-wrapper"]', // Disney+
       '.Player__container', // Hulu
       '.player-base', // Hotstar
-      '[class*="player"]', '[class*="Player"]',
+      '[class*="player"]',
+      '[class*="Player"]',
     ],
     ignore: '[data-testid="preview-player"], .background-video, [class*="background"]',
     ...SOCIAL,
@@ -92,14 +112,22 @@ const RULES: readonly SiteRule[] = [
     domains: ['reddit.com', 'redd.it'],
     containers: ['[data-testid="video-player"]', 'shreddit-player', '.reddit-video-player-root'],
     ignore: '[data-collapsed="true"], [data-testid="award-animations"]',
-    minWidth: 300, minHeight: 200,
+    minWidth: 300,
+    minHeight: 200,
     ignoreIf: video => video.muted && video.offsetWidth < 400,
   },
   {
     domains: ['facebook.com', 'fb.com', 'fb.watch'],
-    containers: ['[data-pagelet="WatchPermalinkVideo"]', '[data-video-id]', '[data-pagelet*="Reels"]', '[role="presentation"]'],
-    ignore: '[data-pagelet="Stories"], [aria-label*="Stories"], [data-pagelet="ProfilePhoto"], [data-ad-preview], [data-pagelet*="AdPreferences"]',
-    minWidth: 100, minHeight: 100,
+    containers: [
+      '[data-pagelet="WatchPermalinkVideo"]',
+      '[data-video-id]',
+      '[data-pagelet*="Reels"]',
+      '[role="presentation"]',
+    ],
+    ignore:
+      '[data-pagelet="Stories"], [aria-label*="Stories"], [data-pagelet="ProfilePhoto"], [data-ad-preview], [data-pagelet*="AdPreferences"]',
+    minWidth: 100,
+    minHeight: 100,
     // Small, often muted feed previews.
     ignoreIf: video => video.muted && video.offsetWidth < 300,
   },
@@ -107,15 +135,18 @@ const RULES: readonly SiteRule[] = [
     domains: ['twitter.com', 'x.com'],
     containers: ['[data-testid="videoPlayer"]', '[data-testid="tweetPhoto"]', '[data-testid="videoComponent"]'],
     ignore: '[data-testid="UserProfileHeader_Items"]',
-    minWidth: 150, minHeight: 100,
-    ignoreIf: video => (video.muted && video.offsetWidth < 300)
-      || (!!video.closest('[data-testid="placementTracking"]') && video.offsetWidth < 400),
+    minWidth: 150,
+    minHeight: 100,
+    ignoreIf: video =>
+      (video.muted && video.offsetWidth < 300) ||
+      (!!video.closest('[data-testid="placementTracking"]') && video.offsetWidth < 400),
   },
   {
     domains: ['tiktok.com'],
     containers: ['[data-e2e="video-player"]', '[data-e2e="browse-video"]', '.tiktok-player'],
     ignore: '[data-e2e="recommend-list-item"], [data-e2e="user-card"]',
-    minWidth: 200, minHeight: 300,
+    minWidth: 200,
+    minHeight: 300,
     ignoreIf: video => video.muted && video.loop && video.offsetHeight < 400,
   },
 ];
@@ -130,9 +161,12 @@ function fromRule(rule: SiteRule): SiteHandler {
       return rule.fallback ? rule.fallback(video) : video.parentElement;
     },
     shouldIgnoreVideo(video) {
-      return (!!rule.ignore && !!video.closest(rule.ignore))
-        || video.offsetWidth < rule.minWidth || video.offsetHeight < rule.minHeight
-        || !!rule.ignoreIf?.(video);
+      return (
+        (!!rule.ignore && !!video.closest(rule.ignore)) ||
+        video.offsetWidth < rule.minWidth ||
+        video.offsetHeight < rule.minHeight ||
+        !!rule.ignoreIf?.(video)
+      );
     },
   };
 }
@@ -141,10 +175,10 @@ const genericHandler: SiteHandler = {
   findContainer(video) {
     const container = video.closest(
       '.video-js, .vjs-tech, .plyr, .mejs-container,' +
-      '.flowplayer, .jw-wrapper, .jwplayer, .theoplayer-container,' +
-      '.bitmovinplayer-container, .video-container, .player-container,' +
-      '.player-wrapper, .video-player, .html5-video-player,' +
-      '[data-player], [data-testid*="player"], [data-testid*="video"]'
+        '.flowplayer, .jw-wrapper, .jwplayer, .theoplayer-container,' +
+        '.bitmovinplayer-container, .video-container, .player-container,' +
+        '.player-wrapper, .video-player, .html5-video-player,' +
+        '[data-player], [data-testid*="player"], [data-testid*="video"]',
     );
     if (container) return container;
     const parent = video.parentElement;

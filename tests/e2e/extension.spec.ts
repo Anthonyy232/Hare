@@ -1,13 +1,16 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { test, expect, fixture, openVideo, openUI, rate, setSettings, rpc, tabId } from './fixtures/extension';
+import { expect, fixture, openUI, openVideo, rate, rpc, setSettings, tabId, test } from './fixtures/extension';
+
 test('keyboard speed, seeking boundaries, and reset', async ({ extension }) => {
   const page = await openVideo(extension.context);
   await page.keyboard.press('d');
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
   await page.keyboard.press('s');
   await expect.poll(() => rate(page)).toBeCloseTo(1);
-  await page.locator('video').evaluate((video: HTMLVideoElement) => { video.currentTime = 5; });
+  await page.locator('video').evaluate((video: HTMLVideoElement) => {
+    video.currentTime = 5;
+  });
   await page.keyboard.press('z');
   await expect.poll(() => page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBe(0);
   await page.keyboard.press('x');
@@ -115,7 +118,8 @@ test('controller buttons expand on keyboard focus and hidden display can be rest
   await expect(page.locator('.hare-speed')).toBeVisible();
 });
 
-const masterPlaylist = '#EXTM3U\n#EXTINF:-1,Video Test\n#EXTVLCOPT:http-referrer=http://127.0.0.1:41739/\nhttp://127.0.0.1:41739/master.m3u8\n';
+const masterPlaylist =
+  '#EXTM3U\n#EXTINF:-1,Video Test\n#EXTVLCOPT:http-referrer=http://127.0.0.1:41739/\nhttp://127.0.0.1:41739/master.m3u8\n';
 
 async function openInPlayer(popup: Page): Promise<string> {
   // The downloads permission prompt can't be accepted in automation.
@@ -124,9 +128,14 @@ async function openInPlayer(popup: Page): Promise<string> {
     api.permissions.request = async () => true;
     api.downloads = {
       onChanged: { addListener() {}, removeListener() {} },
-      download: async ({ url }: { url: string }) => { (globalThis as any).playlist = await (await fetch(url)).text(); return 7; },
+      download: async ({ url }: { url: string }) => {
+        (globalThis as any).playlist = await (await fetch(url)).text();
+        return 7;
+      },
       search: async () => [{ state: 'complete' }],
-      open: async (id: number) => { (globalThis as any).opened = id; },
+      open: async (id: number) => {
+        (globalThis as any).opened = id;
+      },
     };
   });
   await popup.getByRole('button', { name: 'Open in video player' }).click();
@@ -136,19 +145,23 @@ async function openInPlayer(popup: Page): Promise<string> {
 
 test('popup opens the master playlist loaded by a player worker in the default player', async ({ extension }) => {
   const page = await extension.context.newPage();
-  await page.goto(fixture + '?hls=worker');
+  await page.goto(`${fixture}?hls=worker`);
   await expect(page.locator('hare-controller')).toHaveCount(1);
   expect(await openInPlayer(await openUI(extension, 'popup', page))).toBe(masterPlaylist);
 });
 
 test('popup finds a playlist the page loaded before Hare started watching', async ({ extension }) => {
   const page = await extension.context.newPage();
-  await page.goto(fixture + '?hls');
+  await page.goto(`${fixture}?hls`);
   await expect(page.locator('hare-controller')).toHaveCount(1);
   const popup = await openUI(extension, 'popup', page);
   // Forget what the background saw, as when Hare is installed after the page loads.
   const key = `manifests-${await tabId(popup, page)}`;
-  await expect.poll(() => popup.evaluate(async key => (await (globalThis as any).chrome.storage.local.get(key))[key]?.length, key)).toBe(2);
+  await expect
+    .poll(() =>
+      popup.evaluate(async key => (await (globalThis as any).chrome.storage.local.get(key))[key]?.length, key),
+    )
+    .toBe(2);
   await popup.evaluate(key => (globalThis as any).chrome.storage.local.remove(key), key);
   expect(await openInPlayer(popup)).toBe(masterPlaylist);
 });
@@ -182,7 +195,9 @@ test('popup distinguishes empty and disabled states', async ({ extension }) => {
   await expect(popup.getByText('Hare is turned off', { exact: true })).toBeVisible();
 });
 
-test('speed presets reflect actual rates and take precedence over an unfinished custom value', async ({ extension }) => {
+test('speed presets reflect actual rates and take precedence over an unfinished custom value', async ({
+  extension,
+}) => {
   const video = await openVideo(extension.context);
   const popup = await openUI(extension, 'popup', video);
   const preset = popup.getByRole('button', { name: 'Set speed to 1.5×', exact: true });
@@ -198,7 +213,9 @@ test('speed presets reflect actual rates and take precedence over an unfinished 
   // Reset releases Hare's intentional non-default rate enforcement.
   await popup.getByRole('button', { name: 'Set speed to 1×', exact: true }).click();
   await expect.poll(() => rate(video)).toBe(1);
-  await video.locator('video').evaluate((v: HTMLVideoElement) => { v.playbackRate = 1.35; });
+  await video.locator('video').evaluate((v: HTMLVideoElement) => {
+    v.playbackRate = 1.35;
+  });
   await expect(popup.locator('.preset[aria-pressed="true"]')).toHaveCount(0);
   await video.evaluate(() => {
     const container = document.createElement('div');
@@ -209,11 +226,15 @@ test('speed presets reflect actual rates and take precedence over an unfinished 
   await expect(popup.getByText(/Media have different speeds/)).toBeVisible();
   await expect(popup.locator('.preset[aria-pressed="true"]')).toHaveCount(0);
   await preset.click();
-  await expect.poll(() => video.locator('video').evaluateAll(videos => videos.map(v => (v as HTMLVideoElement).playbackRate))).toEqual([1.5, 1.5]);
+  await expect
+    .poll(() => video.locator('video').evaluateAll(videos => videos.map(v => (v as HTMLVideoElement).playbackRate)))
+    .toEqual([1.5, 1.5]);
   await expect(preset).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('appearance preview follows drafts and shortcut controls fit narrow settings windows', async ({ extension }, testInfo) => {
+test('appearance preview follows drafts and shortcut controls fit narrow settings windows', async ({
+  extension,
+}, testInfo) => {
   const video = await openVideo(extension.context);
   const options = await openUI(extension, 'options');
   const opacity = options.getByRole('slider', { name: 'Controller opacity' });
@@ -232,7 +253,11 @@ test('appearance preview follows drafts and shortcut controls fit narrow setting
   await options.setViewportSize({ width: 390, height: 844 });
   const override = options.getByRole('checkbox', { name: 'Override site shortcut for Reset speed', exact: true });
   await override.check();
-  await expect.poll(() => options.locator('.shortcut-row').evaluateAll(rows => rows.every(row => row.scrollWidth <= row.clientWidth))).toBe(true);
+  await expect
+    .poll(() =>
+      options.locator('.shortcut-row').evaluateAll(rows => rows.every(row => row.scrollWidth <= row.clientWidth)),
+    )
+    .toBe(true);
   await expect.poll(() => options.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await options.locator('.keybind-editor').screenshot({ path: testInfo.outputPath('shortcuts-mobile.png') });
   const results = await new AxeBuilder({ page: options }).analyze();
@@ -241,7 +266,11 @@ test('appearance preview follows drafts and shortcut controls fit narrow setting
   const shortcut = options.getByRole('button', { name: 'Change shortcut for Decrease speed', exact: true });
   await shortcut.click();
   await expect(shortcut).toHaveText('Press a key…');
-  await expect.poll(() => options.locator('.shortcut-row').evaluateAll(rows => rows.every(row => row.scrollWidth <= row.clientWidth))).toBe(true);
+  await expect
+    .poll(() =>
+      options.locator('.shortcut-row').evaluateAll(rows => rows.every(row => row.scrollWidth <= row.clientWidth)),
+    )
+    .toBe(true);
   await expect.poll(() => options.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await shortcut.press('k');
   await expect(shortcut).toHaveText('K');
@@ -250,7 +279,9 @@ test('appearance preview follows drafts and shortcut controls fit narrow setting
   await expect(shortcut).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('sync selection preserves a pair, permits swapping roles, and explains deselection', async ({ extension }, testInfo) => {
+test('sync selection preserves a pair, permits swapping roles, and explains deselection', async ({
+  extension,
+}, testInfo) => {
   const a = await openVideo(extension.context, '?a');
   await openVideo(extension.context, '?b');
   await openVideo(extension.context, '?c');
@@ -304,7 +335,10 @@ test('settings save failure keeps the draft editable and retry succeeds', async 
   await page.evaluate(() => {
     const api = (globalThis as any).chrome.storage.sync;
     const original = api.set.bind(api);
-    api.set = () => { api.set = original; return Promise.reject(new Error('Storage temporarily unavailable')); };
+    api.set = () => {
+      api.set = original;
+      return Promise.reject(new Error('Storage temporarily unavailable'));
+    };
   });
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByRole('alert')).toContainText('Storage temporarily unavailable');
@@ -314,7 +348,9 @@ test('settings save failure keeps the draft editable and retry succeeds', async 
   await expect(page.getByText('Settings saved', { exact: true })).toBeVisible();
 });
 
-test('popup restores an excluded site and its embedded media while preserving other settings', async ({ extension }, testInfo) => {
+test('popup restores an excluded site and its embedded media while preserving other settings', async ({
+  extension,
+}, testInfo) => {
   const video = await openVideo(extension.context, '?frame');
   const media = video.frameLocator('iframe').locator('hare-controller');
   await expect(media).toHaveCount(1);
@@ -327,7 +363,9 @@ test('popup restores an excluded site and its embedded media while preserving ot
   await popup.getByRole('button', { name: 'Use Hare on this site', exact: true }).click();
   await expect(media).toHaveCount(1);
   await expect(popup.locator('.speed-display')).toBeVisible();
-  const stored = await extension.worker.evaluate(async () => (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings']);
+  const stored = await extension.worker.evaluate(
+    async () => (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings'],
+  );
   expect(stored.blacklist.trim()).toBe('example.com');
   expect(stored.controllerOpacity).toBe(0.7);
 });
@@ -343,7 +381,10 @@ test('popup preserves regex exclusions, recovers failed site saves, and can enab
   await popup.evaluate(() => {
     const api = (globalThis as any).chrome.storage.sync;
     const original = api.set.bind(api);
-    api.set = () => { api.set = original; return Promise.reject(new Error('Storage temporarily unavailable')); };
+    api.set = () => {
+      api.set = original;
+      return Promise.reject(new Error('Storage temporarily unavailable'));
+    };
   });
   await popup.getByRole('button', { name: 'Use Hare on this site', exact: true }).click();
   await expect(popup.getByRole('alert')).toContainText('Storage temporarily unavailable');
@@ -364,7 +405,10 @@ test('popup follows navigation in its target tab before restoring a site', async
   await video.goto(fixture.replace('127.0.0.1', 'localhost'));
   await expect(popup.getByText('localhost', { exact: true })).toBeVisible();
   await popup.getByRole('button', { name: 'Use Hare on this site', exact: true }).click();
-  const blacklist = () => extension.worker.evaluate(async () => (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings'].blacklist.split('\n'));
+  const blacklist = () =>
+    extension.worker.evaluate(async () =>
+      (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings'].blacklist.split('\n'),
+    );
   await expect.poll(blacklist).not.toContain('localhost');
   expect(await blacklist()).toContain('127.0.0.1');
 });
@@ -388,7 +432,8 @@ test('dragging stays under the pointer and inside scaled, bordered players', asy
   const page = await openVideo(extension.context);
   for (const scale of [0.75, 1.25]) {
     await page.locator('#player').evaluate((player, scale) => {
-      (player as HTMLElement).style.cssText = `position:relative;width:640px;height:360px;padding:24px;border:7px solid gray;transform:scale(${scale});transform-origin:top left`;
+      (player as HTMLElement).style.cssText =
+        `position:relative;width:640px;height:360px;padding:24px;border:7px solid gray;transform:scale(${scale});transform-origin:top left`;
     }, scale);
     const handle = page.locator('.hare-speed');
     await handle.focus();
@@ -447,10 +492,15 @@ test('dragging ends when pointer capture is lost and the controller can be remov
 test('sync pairs two tabs, relays play/pause/rate/seek, and stops on close', async ({ extension }) => {
   const a = await openVideo(extension.context, '?a');
   const b = await openVideo(extension.context, '?b');
-  await a.locator('video').evaluate((v: HTMLVideoElement) => { v.currentTime = 10; });
-  await b.locator('video').evaluate((v: HTMLVideoElement) => { v.currentTime = 15; });
+  await a.locator('video').evaluate((v: HTMLVideoElement) => {
+    v.currentTime = 10;
+  });
+  await b.locator('video').evaluate((v: HTMLVideoElement) => {
+    v.currentTime = 15;
+  });
   const popup = await openUI(extension, 'popup', a);
-  const tabIdA = await tabId(popup, a), tabIdB = await tabId(popup, b);
+  const tabIdA = await tabId(popup, a),
+    tabIdB = await tabId(popup, b);
   expect(await rpc(popup, 'START_SYNC', { tabIdA, tabIdB })).toEqual({ success: true });
   expect((await rpc(popup, 'GET_SYNC_STATUS')).offset).toBeCloseTo(5);
   await a.locator('video').evaluate((v: HTMLVideoElement) => v.play());
@@ -459,7 +509,9 @@ test('sync pairs two tabs, relays play/pause/rate/seek, and stops on close', asy
   await expect.poll(() => rate(b)).toBeCloseTo(1.1);
   await a.locator('video').evaluate((v: HTMLVideoElement) => v.pause());
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
-  await a.locator('video').evaluate((v: HTMLVideoElement) => { v.currentTime = 20; });
+  await a.locator('video').evaluate((v: HTMLVideoElement) => {
+    v.currentTime = 20;
+  });
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeCloseTo(25, 1);
   await b.close();
   await expect.poll(async () => (await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(false);
@@ -470,7 +522,9 @@ test('replacing a sync session does not deactivate the newly paired agents', asy
   const b = await openVideo(extension.context, '?b');
   const c = await openVideo(extension.context, '?c');
   const popup = await openUI(extension, 'popup', a);
-  const tabIdA = await tabId(popup, a), tabIdB = await tabId(popup, b), tabIdC = await tabId(popup, c);
+  const tabIdA = await tabId(popup, a),
+    tabIdB = await tabId(popup, b),
+    tabIdC = await tabId(popup, c);
   expect((await rpc(popup, 'START_SYNC', { tabIdA, tabIdB })).success).toBe(true);
   expect((await rpc(popup, 'START_SYNC', { tabIdA, tabIdB: tabIdC })).success).toBe(true);
   await a.keyboard.press('d');
@@ -486,7 +540,7 @@ test('cached page lifecycle restores a single working controller', async ({ exte
   await expect(page.locator('hare-controller')).toHaveCount(1);
   await page.keyboard.press('d');
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
-  await page.goto(fixture + '?empty');
+  await page.goto(`${fixture}?empty`);
   await page.goBack({ waitUntil: 'commit' });
   await expect(page.locator('hare-controller')).toHaveCount(1);
 });
@@ -504,10 +558,24 @@ test('a forwarded iframe button targets only its own media', async ({ extension 
   await expect(controllers).toHaveCount(2);
   const controllerId = await controllers.nth(1).getAttribute('id');
   await page.evaluate(controllerId => {
-    document.querySelector('iframe')!.contentWindow!.postMessage({ __hareAction: true, controllerId, action: 'faster', value: 0.25 }, '*');
+    document
+      .querySelector('iframe')!
+      .contentWindow!.postMessage({ __hareAction: true, controllerId, action: 'faster', value: 0.25 }, '*');
   }, controllerId);
-  await expect.poll(() => frame.locator('video').nth(1).evaluate((v: HTMLVideoElement) => v.playbackRate)).toBe(1.1);
-  expect(await frame.locator('video').first().evaluate((v: HTMLVideoElement) => v.playbackRate)).toBe(1);
+  await expect
+    .poll(() =>
+      frame
+        .locator('video')
+        .nth(1)
+        .evaluate((v: HTMLVideoElement) => v.playbackRate),
+    )
+    .toBe(1.1);
+  expect(
+    await frame
+      .locator('video')
+      .first()
+      .evaluate((v: HTMLVideoElement) => v.playbackRate),
+  ).toBe(1);
 });
 
 test('controller stays visible in a fullscreen player and restores its mount', async ({ extension }, testInfo) => {
@@ -542,8 +610,11 @@ test('replacing a paired media source ends the old sync session', async ({ exten
   const a = await openVideo(extension.context, '?a');
   const b = await openVideo(extension.context, '?b');
   const popup = await openUI(extension, 'popup', a);
-  const tabIdA = await tabId(popup, a), tabIdB = await tabId(popup, b);
+  const tabIdA = await tabId(popup, a),
+    tabIdB = await tabId(popup, b);
   expect((await rpc(popup, 'START_SYNC', { tabIdA, tabIdB })).success).toBe(true);
-  await a.locator('video').evaluate((video: HTMLVideoElement) => { video.src = '/media.wav?next'; });
+  await a.locator('video').evaluate((video: HTMLVideoElement) => {
+    video.src = '/media.wav?next';
+  });
   await expect.poll(async () => (await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(false);
 });

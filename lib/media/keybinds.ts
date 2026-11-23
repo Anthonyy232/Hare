@@ -3,15 +3,16 @@ import type { ActionTarget } from './controller-contracts';
 import { dispatchAction } from './frame-actions';
 
 function isInputElement(element: Element): boolean {
-  return element.matches('input, textarea, select')
-    || (element as HTMLElement).isContentEditable
-    || !!element.closest('[contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="searchbox"], [role="combobox"]');
+  return (
+    element.matches('input, textarea, select') ||
+    (element as HTMLElement).isContentEditable ||
+    !!element.closest(
+      '[contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="searchbox"], [role="combobox"]',
+    )
+  );
 }
 
-export function listenForShortcuts(
-  getControllers: () => ActionTarget[],
-  getBindings: () => KeyBinding[],
-): () => void {
+export function listenForShortcuts(getControllers: () => ActionTarget[], getBindings: () => KeyBinding[]): () => void {
   const handleKeyDown = (event: KeyboardEvent): void => {
     // 229 is the keyCode some browsers report for keys an input method is still composing.
     if (!isShortcutKey(event) || event.keyCode === 229 || document.designMode === 'on') return;

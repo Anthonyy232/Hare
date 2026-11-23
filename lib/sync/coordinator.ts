@@ -7,8 +7,8 @@ import {
   MPV_TAB_ID,
   NUDGE_STEPS,
   positionAt,
-  type SyncedEndpoint,
   type SyncEventPayload,
+  type SyncedEndpoint,
   type SyncPositionResponse,
   type SyncSession,
   type SyncStatusResponse,
@@ -28,7 +28,7 @@ const BUFFERING_STABLE_MS = 50;
 const MAX_SEND_FAILURES = 5;
 
 type Side = 'A' | 'B';
-const opposite = (side: Side): Side => side === 'A' ? 'B' : 'A';
+const opposite = (side: Side): Side => (side === 'A' ? 'B' : 'A');
 
 function isEndpointId(id: number): boolean {
   return id === MPV_TAB_ID || (Number.isInteger(id) && id >= 0);
@@ -44,11 +44,17 @@ function isValidReply(message: HareMessage, result: unknown): boolean {
   if (result == null || typeof result !== 'object') return false;
   const reply = result as Record<string, unknown>;
   if (message.type !== 'SYNC_GET_POSITION') return reply.success === true;
-  const isFinite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-  return isFinite(reply.currentTime) && reply.currentTime >= 0
-    && typeof reply.paused === 'boolean' && typeof reply.buffering === 'boolean'
-    && isFinite(reply.playbackRate) && reply.playbackRate > 0
-    && isFinite(reply.timestamp) && reply.timestamp >= 0;
+  const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+  return (
+    isFiniteNumber(reply.currentTime) &&
+    reply.currentTime >= 0 &&
+    typeof reply.paused === 'boolean' &&
+    typeof reply.buffering === 'boolean' &&
+    isFiniteNumber(reply.playbackRate) &&
+    reply.playbackRate > 0 &&
+    isFiniteNumber(reply.timestamp) &&
+    reply.timestamp >= 0
+  );
 }
 
 /** Owns the sync session: starting and stopping it, relaying player events, and correcting drift. */
@@ -75,8 +81,11 @@ export class SyncCoordinator {
       throw new Error('Select two different tabs.');
     }
     this.starting = this.activatePair(tabIdA, tabIdB);
-    try { await this.starting; }
-    finally { this.starting = null; }
+    try {
+      await this.starting;
+    } finally {
+      this.starting = null;
+    }
   }
 
   /** Ends the session, and cancels a startup in progress. */
@@ -127,7 +136,8 @@ export class SyncCoordinator {
   async handleSyncEvent(fromTabId: number, event: SyncEventPayload, fromFrameId?: number): Promise<void> {
     await this.ready;
     const session = this.session;
-    if (!session || !event || ![event.position, event.timestamp, event.rate].every(Number.isFinite) || event.rate <= 0) return;
+    if (!session || !event || ![event.position, event.timestamp, event.rate].every(Number.isFinite) || event.rate <= 0)
+      return;
     const side = this.sideOf(fromTabId, fromFrameId);
     if (!side) return;
     const target = opposite(side);
@@ -142,7 +152,10 @@ export class SyncCoordinator {
         break;
       case 'play':
         this.bump();
-        await this.sendTo(target, { type: 'SYNC_PLAY', payload: { from: { position, rate: event.rate, timestamp: event.timestamp } } });
+        await this.sendTo(target, {
+          type: 'SYNC_PLAY',
+          payload: { from: { position, rate: event.rate, timestamp: event.timestamp } },
+        });
         break;
       case 'seek':
         this.bump();
@@ -195,7 +208,9 @@ export class SyncCoordinator {
           try {
             const result = await this.transport.send(tabId, { type: 'SYNC_ACTIVATE' }, frameId);
             if (result.success) return { ...result, frameId };
-          } catch { /* Try the next frame. Every attempted frame is deactivated if startup fails. */ }
+          } catch {
+            /* Try the next frame. Every attempted frame is deactivated if startup fails. */
+          }
         }
         throw new Error('A selected tab has no available media. Reload it and refresh the tab list.');
       };
@@ -208,25 +223,43 @@ export class SyncCoordinator {
         throw new Error('A selected player has no valid position. Reload it and try again.');
       }
 
-      const rateReply = await this.transport.send(tabIdB, { type: 'SYNC_RATE', payload: { rate: a.playbackRate } }, b.frameId);
+      const rateReply = await this.transport.send(
+        tabIdB,
+        { type: 'SYNC_RATE', payload: { rate: a.playbackRate } },
+        b.frameId,
+      );
       if (!rateReply.success) throw new Error('The second player could not match the playback speed.');
       if (a.paused !== b.paused) {
-        const stateReply = await this.transport.send(tabIdB, a.paused
-          ? { type: 'SYNC_PAUSE', payload: {} }
-          : { type: 'SYNC_PLAY', payload: {} }, b.frameId);
+        const stateReply = await this.transport.send(
+          tabIdB,
+          a.paused ? { type: 'SYNC_PAUSE', payload: {} } : { type: 'SYNC_PLAY', payload: {} },
+          b.frameId,
+        );
         if (!stateReply.success) throw new Error('Press play in both tabs, then try starting sync again.');
       }
       ensureCurrent();
       const [titleA, titleB] = await Promise.all([this.transport.title(tabIdA), this.transport.title(tabIdB)]);
       ensureCurrent();
-      this.begin({ tabId: tabIdA, frameId: a.frameId, title: titleA }, a, { tabId: tabIdB, frameId: b.frameId, title: titleB }, b);
+      this.begin(
+        { tabId: tabIdA, frameId: a.frameId, title: titleA },
+        a,
+        { tabId: tabIdB, frameId: b.frameId, title: titleB },
+        b,
+      );
     } catch (error) {
-      await Promise.allSettled(attempted.map(({ tabId, frameId }) => this.transport.send(tabId, { type: 'SYNC_DEACTIVATE' }, frameId)));
+      await Promise.allSettled(
+        attempted.map(({ tabId, frameId }) => this.transport.send(tabId, { type: 'SYNC_DEACTIVATE' }, frameId)),
+      );
       throw error;
     }
   }
 
-  private begin(videoA: SyncedEndpoint, a: SyncPositionResponse, videoB: SyncedEndpoint, b: SyncPositionResponse): void {
+  private begin(
+    videoA: SyncedEndpoint,
+    a: SyncPositionResponse,
+    videoB: SyncedEndpoint,
+    b: SyncPositionResponse,
+  ): void {
     // The two positions were read at different moments; compare them at the later one.
     const refTime = Math.max(a.timestamp, b.timestamp);
     const positionA = extrapolate(a, refTime);
@@ -293,8 +326,8 @@ export class SyncCoordinator {
 
   private sideOf(tabId: number, frameId?: number): Side | null {
     if (!this.session) return null;
-    const matches = (endpoint: SyncedEndpoint) => endpoint.tabId === tabId
-      && (frameId == null || endpoint.frameId === frameId);
+    const matches = (endpoint: SyncedEndpoint) =>
+      endpoint.tabId === tabId && (frameId == null || endpoint.frameId === frameId);
     if (matches(this.session.videoA)) return 'A';
     if (matches(this.session.videoB)) return 'B';
     return null;
@@ -330,15 +363,18 @@ export class SyncCoordinator {
   private handleBufferingEnd(side: Side): void {
     if (!this.isBuffering(side) || this.bufferStableTimers.has(side)) return;
     const session = this.session!;
-    this.bufferStableTimers.set(side, setTimeout(() => {
-      this.bufferStableTimers.delete(side);
-      if (this.session !== session || !this.isBuffering(side)) return;
-      session.bufferingSide = session.bufferingSide === 'both' ? opposite(side) : null;
-      this.bump();
-      if (session.bufferingSide !== null) return;
-      void this.sendTo('A', { type: 'SYNC_PLAY', payload: {} });
-      void this.sendTo('B', { type: 'SYNC_PLAY', payload: {} });
-    }, BUFFERING_STABLE_MS));
+    this.bufferStableTimers.set(
+      side,
+      setTimeout(() => {
+        this.bufferStableTimers.delete(side);
+        if (this.session !== session || !this.isBuffering(side)) return;
+        session.bufferingSide = session.bufferingSide === 'both' ? opposite(side) : null;
+        this.bump();
+        if (session.bufferingSide !== null) return;
+        void this.sendTo('A', { type: 'SYNC_PLAY', payload: {} });
+        void this.sendTo('B', { type: 'SYNC_PLAY', payload: {} });
+      }, BUFFERING_STABLE_MS),
+    );
   }
 
   private startDriftCorrection(): void {
@@ -356,7 +392,10 @@ export class SyncCoordinator {
       if (!positionA || !positionB) return;
       if (this.session !== session || session.generation !== generation) return;
       // Keep checking during buffering: recovery events can be lost during worker restart.
-      for (const [side, position] of [['A', positionA], ['B', positionB]] as const) {
+      for (const [side, position] of [
+        ['A', positionA],
+        ['B', positionB],
+      ] as const) {
         if (position.buffering) void this.handleBufferingStart(side, position.currentTime);
         else this.handleBufferingEnd(side);
       }
@@ -382,7 +421,11 @@ export class SyncCoordinator {
           ? { method: 'rate', rateFactor: RATE_ADJUST_FACTOR, durationMs: RATE_ADJUST_DURATION_MS }
           : { method: 'seek', position: behind === 'B' ? expectedB : expectedA },
       });
-      logger.debug('Drift correction applied', { driftMs: Math.round(drift * 1000), method: byRate ? 'rate' : 'seek', side: behind });
+      logger.debug('Drift correction applied', {
+        driftMs: Math.round(drift * 1000),
+        method: byRate ? 'rate' : 'seek',
+        side: behind,
+      });
     } finally {
       this.driftCheckRunning = false;
     }

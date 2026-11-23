@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
-  import { ACTIONS, clampBindingValue, isShortcutKey, type KeyBinding } from "../lib/settings/key-actions";
+  import { onDestroy } from 'svelte';
+  import { ACTIONS, clampBindingValue, isShortcutKey, type KeyBinding } from '../lib/settings/key-actions';
 
   interface Props {
     bindings: KeyBinding[];
@@ -15,7 +15,7 @@
   let errorTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function formatKey(key: string): string {
-    if (key.startsWith("Key")) return key.slice(3);
+    if (key.startsWith('Key')) return key.slice(3);
     return key;
   }
 
@@ -46,19 +46,19 @@
     }
     errorMessage = null;
 
-    if (event.code === "Escape") {
+    if (event.code === 'Escape') {
       editingIndex = null;
       return;
     }
 
-    if (event.code === "Backspace" || event.code === "Delete") {
-      patch(editingIndex, { key: "" });
+    if (event.code === 'Backspace' || event.code === 'Delete') {
+      patch(editingIndex, { key: '' });
       editingIndex = null;
       return;
     }
 
     const isDuplicate = bindings.some(
-      (b, i) => i !== editingIndex && b.key === event.code && b.key !== "",
+      (b, i) => i !== editingIndex && b.key === event.code && b.key !== '',
     );
 
     if (isDuplicate) {
@@ -120,7 +120,7 @@
               {:else if binding.key}{formatKey(binding.key)}
               {:else}Unbound{/if}
             </button>
-            <button type="button" class="key-clear" title="Clear shortcut"
+            <button class="key-clear" title="Clear shortcut"
               aria-label={`Clear shortcut for ${action.label}`}
               disabled={!binding.key} onclick={() => { editingIndex = null; patch(index, { key: '' }); }}
             ><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>

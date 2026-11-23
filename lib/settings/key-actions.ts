@@ -1,5 +1,5 @@
-import { SPEED } from '../speed';
 import { clamp } from '../math';
+import { SPEED } from '../speed';
 
 interface ActionDefinition {
   label: string;
@@ -10,11 +10,41 @@ interface ActionDefinition {
 }
 
 export const ACTIONS = {
-  slower: { label: 'Decrease speed', defaultKey: 'KeyS', defaultValue: SPEED.STEP, repeat: true, value: { label: 'Speed step', unit: '×', min: 0.01, max: SPEED.MAX } },
-  faster: { label: 'Increase speed', defaultKey: 'KeyD', defaultValue: SPEED.STEP, repeat: true, value: { label: 'Speed step', unit: '×', min: 0.01, max: SPEED.MAX } },
-  rewind: { label: 'Rewind', defaultKey: 'KeyZ', defaultValue: 10, repeat: true, value: { label: 'Time step', unit: 'sec', min: 0.01, max: 86400 } },
-  advance: { label: 'Advance', defaultKey: 'KeyX', defaultValue: 10, repeat: true, value: { label: 'Time step', unit: 'sec', min: 0.01, max: 86400 } },
-  reset: { label: 'Reset speed', defaultKey: 'KeyR', defaultValue: SPEED.DEFAULT, repeat: false, value: { label: 'Target speed', unit: '×', min: SPEED.MIN, max: SPEED.MAX } },
+  slower: {
+    label: 'Decrease speed',
+    defaultKey: 'KeyS',
+    defaultValue: SPEED.STEP,
+    repeat: true,
+    value: { label: 'Speed step', unit: '×', min: 0.01, max: SPEED.MAX },
+  },
+  faster: {
+    label: 'Increase speed',
+    defaultKey: 'KeyD',
+    defaultValue: SPEED.STEP,
+    repeat: true,
+    value: { label: 'Speed step', unit: '×', min: 0.01, max: SPEED.MAX },
+  },
+  rewind: {
+    label: 'Rewind',
+    defaultKey: 'KeyZ',
+    defaultValue: 10,
+    repeat: true,
+    value: { label: 'Time step', unit: 'sec', min: 0.01, max: 86400 },
+  },
+  advance: {
+    label: 'Advance',
+    defaultKey: 'KeyX',
+    defaultValue: 10,
+    repeat: true,
+    value: { label: 'Time step', unit: 'sec', min: 0.01, max: 86400 },
+  },
+  reset: {
+    label: 'Reset speed',
+    defaultKey: 'KeyR',
+    defaultValue: SPEED.DEFAULT,
+    repeat: false,
+    value: { label: 'Target speed', unit: '×', min: SPEED.MIN, max: SPEED.MAX },
+  },
   display: { label: 'Show/hide controller', defaultKey: 'KeyV', defaultValue: 0, repeat: false, value: null },
 } satisfies Record<string, ActionDefinition>;
 
@@ -43,5 +73,10 @@ export function clampBindingValue(action: KeyAction, value: number): number {
 }
 
 export function defaultKeyBindings(): KeyBinding[] {
-  return KEY_ACTIONS.map(action => ({ action, key: ACTIONS[action].defaultKey, value: ACTIONS[action].defaultValue, force: false }));
+  return KEY_ACTIONS.map(action => ({
+    action,
+    key: ACTIONS[action].defaultKey,
+    value: ACTIONS[action].defaultValue,
+    force: false,
+  }));
 }

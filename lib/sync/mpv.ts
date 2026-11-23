@@ -11,7 +11,14 @@ const REQUEST_TIMEOUT_MS = 2000;
 const EVENTS_TIMEOUT_MS = 30_000;
 const EVENTS_RETRY_MS = 1000;
 
-interface MpvState { file: string; time: number; paused: boolean; buffering: boolean; speed: number; title: string }
+interface MpvState {
+  file: string;
+  time: number;
+  paused: boolean;
+  buffering: boolean;
+  speed: number;
+  title: string;
+}
 interface MpvEvents {
   file: string | null;
   seq: number;
@@ -25,10 +32,12 @@ export class MpvClient implements SyncPlayer {
   private correction: RateCorrection | null = null;
   private listener: AbortController | null = null;
 
-  constructor(private readonly callbacks: {
-    onEvent: (event: SyncEventPayload) => void;
-    onFileChanged: () => void;
-  }) {}
+  constructor(
+    private readonly callbacks: {
+      onEvent: (event: SyncEventPayload) => void;
+      onFileChanged: () => void;
+    },
+  ) {}
 
   async candidate(): Promise<SyncCandidate | null> {
     try {
@@ -48,13 +57,21 @@ export class MpvClient implements SyncPlayer {
   async handle(message: HareMessage): Promise<unknown> {
     switch (message.type) {
       case 'SYNC_ACTIVATE': {
-        try { await this.correction?.restore(); } finally { this.stop(); }
+        try {
+          await this.correction?.restore();
+        } finally {
+          this.stop();
+        }
         const position = await this.state();
         this.listen();
         return { success: true, ...position };
       }
       case 'SYNC_DEACTIVATE':
-        try { await this.correction?.restore(); } finally { this.stop(); }
+        try {
+          await this.correction?.restore();
+        } finally {
+          this.stop();
+        }
         return { success: true };
       case 'SYNC_GET_POSITION':
         // Restarts the event stream after the background worker restarts.
@@ -140,7 +157,8 @@ export class MpvClient implements SyncPlayer {
 
   private listen(): void {
     if (this.listener) return;
-    const listener = this.listener = new AbortController();
+    const listener = new AbortController();
+    this.listener = listener;
     void (async () => {
       let after = -1; // The first reply only reports where mpv's event list is.
       while (!listener.signal.aborted) {

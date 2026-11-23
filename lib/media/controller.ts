@@ -1,13 +1,13 @@
-import { SPEED, clampRate, clampSpeed, formatSpeed, sameSpeed } from '../speed';
-import { clamp } from '../math';
-import type { Settings } from '../settings/schema';
-import type { KeyAction } from '../settings/key-actions';
-import type { HitmapButton, PointerTarget } from './controller-contracts';
-import type { SiteHandler } from './site-handlers';
 import controllerCSS from '../../assets/controller.css?raw';
 import { logger } from '../logger';
+import { clamp } from '../math';
+import type { KeyAction } from '../settings/key-actions';
+import type { Settings } from '../settings/schema';
+import { clampRate, clampSpeed, formatSpeed, SPEED, sameSpeed } from '../speed';
+import type { HitmapButton, PointerTarget } from './controller-contracts';
+import { applyAppearance, CONTROLLER_TAG, createControllerView } from './controller-view';
 import { safeMedia } from './safe-media';
-import { CONTROLLER_TAG, applyAppearance, createControllerView } from './controller-view';
+import type { SiteHandler } from './site-handlers';
 
 let sharedStyleSheet: CSSStyleSheet | null = null;
 
@@ -49,7 +49,10 @@ export class VideoController implements PointerTarget {
     clearTimeout(this.resizeDebounceTimeout);
     this.resizeDebounceTimeout = setTimeout(() => this.clampPosition(), RESIZE_DEBOUNCE_MS);
   });
-  private readonly positionCheckInterval = setInterval(() => this.verifyAndRepairPosition(), POSITION_CHECK_INTERVAL_MS);
+  private readonly positionCheckInterval = setInterval(
+    () => this.verifyAndRepairPosition(),
+    POSITION_CHECK_INTERVAL_MS,
+  );
   private resizeDebounceTimeout?: ReturnType<typeof setTimeout>;
   private osdTimeout?: ReturnType<typeof setTimeout>;
 
@@ -96,11 +99,15 @@ export class VideoController implements PointerTarget {
     this.updateSpeedDisplay();
 
     for (const [action, button] of this.buttons) {
-      button.addEventListener('click', event => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.press(action);
-      }, { signal });
+      button.addEventListener(
+        'click',
+        event => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.press(action);
+        },
+        { signal },
+      );
     }
     this.controllerEl.addEventListener('mouseenter', () => this.clampPosition(), { signal });
     this.controllerEl.addEventListener('focusin', () => this.clampPosition(), { signal });
@@ -115,10 +122,14 @@ export class VideoController implements PointerTarget {
     for (const type of SOURCE_CHANGE_EVENTS) {
       media.addEventListener(type, () => this.updateSpeedDisplay(), { signal });
     }
-    document.addEventListener('fullscreenchange', () => {
-      this.insertController();
-      this.clampPosition();
-    }, { signal });
+    document.addEventListener(
+      'fullscreenchange',
+      () => {
+        this.insertController();
+        this.clampPosition();
+      },
+      { signal },
+    );
     window.addEventListener('blur', this.handleDragEnd, { signal });
 
     this.insertController();
@@ -165,9 +176,9 @@ export class VideoController implements PointerTarget {
       if (this.destroyed || request !== this.speedRequest) return;
       const actualSpeed = this.speed;
       if (sameSpeed(actualSpeed, roundedSpeed)) return;
-      this.showOSD(sameSpeed(actualSpeed, previousSpeed)
-        ? SPEED_BLOCKED
-        : `Speed limited to ${formatSpeed(actualSpeed)}`);
+      this.showOSD(
+        sameSpeed(actualSpeed, previousSpeed) ? SPEED_BLOCKED : `Speed limited to ${formatSpeed(actualSpeed)}`,
+      );
     });
     return true;
   }
@@ -177,8 +188,12 @@ export class VideoController implements PointerTarget {
     const clampedSpeed = clampRate(speed);
     if (this.speed !== clampedSpeed) {
       this.suppressRateEnforcementCount++;
-      try { safeMedia.setPlaybackRate(this.media, clampedSpeed); }
-      catch (error) { this.suppressRateEnforcementCount--; throw error; }
+      try {
+        safeMedia.setPlaybackRate(this.media, clampedSpeed);
+      } catch (error) {
+        this.suppressRateEnforcementCount--;
+        throw error;
+      }
     }
     this.updateSpeedDisplay();
   }
@@ -193,11 +208,18 @@ export class VideoController implements PointerTarget {
 
   private executeAction(action: KeyAction, value: number): boolean {
     switch (action) {
-      case 'slower': return this.setSpeed(this.speed - value);
-      case 'faster': return this.setSpeed(this.speed + value);
-      case 'reset': return this.setSpeed(value);
-      case 'rewind': this.seek(-value); return false;
-      case 'advance': this.seek(value); return false;
+      case 'slower':
+        return this.setSpeed(this.speed - value);
+      case 'faster':
+        return this.setSpeed(this.speed + value);
+      case 'reset':
+        return this.setSpeed(value);
+      case 'rewind':
+        this.seek(-value);
+        return false;
+      case 'advance':
+        this.seek(value);
+        return false;
       case 'display':
         this.hidden = !this.hidden;
         this.renderVisibility();
@@ -339,7 +361,11 @@ export class VideoController implements PointerTarget {
     }
     if (getComputedStyle(parent).position !== 'static') return;
     if (!this.positionedParent) {
-      positionedParents.set(parent, { count: 1, value: parent.style.getPropertyValue('position'), priority: parent.style.getPropertyPriority('position') });
+      positionedParents.set(parent, {
+        count: 1,
+        value: parent.style.getPropertyValue('position'),
+        priority: parent.style.getPropertyPriority('position'),
+      });
       this.positionedParent = parent;
     }
     parent.style.position = 'relative';
@@ -359,13 +385,16 @@ export class VideoController implements PointerTarget {
   }
 
   private getPositionGeometry() {
-    const parent = this.wrapper.offsetParent instanceof HTMLElement ? this.wrapper.offsetParent : this.wrapper.parentElement;
+    const parent =
+      this.wrapper.offsetParent instanceof HTMLElement ? this.wrapper.offsetParent : this.wrapper.parentElement;
     if (!parent) return null;
     const rect = parent.getBoundingClientRect();
     const scaleX = parent.offsetWidth && rect.width ? rect.width / parent.offsetWidth : 1;
     const scaleY = parent.offsetHeight && rect.height ? rect.height / parent.offsetHeight : 1;
     return {
-      parent, scaleX, scaleY,
+      parent,
+      scaleX,
+      scaleY,
       left: rect.left + (parent.clientLeft - parent.scrollLeft) * scaleX,
       top: rect.top + (parent.clientTop - parent.scrollTop) * scaleY,
     };
@@ -438,8 +467,16 @@ export class VideoController implements PointerTarget {
     event.preventDefault();
     const geometry = this.getPositionGeometry();
     if (!geometry || !drag.bounds) return;
-    this.positionX = clamp((event.clientX - geometry.left) / geometry.scaleX - drag.offsetX, drag.bounds.minX, drag.bounds.maxX);
-    this.positionY = clamp((event.clientY - geometry.top) / geometry.scaleY - drag.offsetY, drag.bounds.minY, drag.bounds.maxY);
+    this.positionX = clamp(
+      (event.clientX - geometry.left) / geometry.scaleX - drag.offsetX,
+      drag.bounds.minX,
+      drag.bounds.maxX,
+    );
+    this.positionY = clamp(
+      (event.clientY - geometry.top) / geometry.scaleY - drag.offsetY,
+      drag.bounds.minY,
+      drag.bounds.maxY,
+    );
     this.applyPosition();
   };
 

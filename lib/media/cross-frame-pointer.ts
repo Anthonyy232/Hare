@@ -1,5 +1,5 @@
-import type { HitmapButton, PointerTarget } from './controller-contracts';
 import { isKeyAction } from '../settings/key-actions';
+import type { HitmapButton, PointerTarget } from './controller-contracts';
 import { postFrameAction } from './frame-actions';
 
 // Host overlays can intercept clicks above cross-origin players. Child frames publish
@@ -27,8 +27,10 @@ function isHareHitmapMessage(data: unknown): data is HareHitmapMessage {
       typeof btn.w !== 'number' ||
       typeof btn.h !== 'number' ||
       ![btn.x, btn.y, btn.w, btn.h].every(Number.isFinite) ||
-      btn.w < 0 || btn.h < 0
-    ) return false;
+      btn.w < 0 ||
+      btn.h < 0
+    )
+      return false;
   }
   return true;
 }
@@ -74,13 +76,26 @@ export function bridgeCrossFramePointers(getControllers: () => PointerTarget[]):
         continue;
       }
       const rect = iframe.getBoundingClientRect();
-      if (!rect.width || !rect.height || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) continue;
+      if (
+        !rect.width ||
+        !rect.height ||
+        clientX < rect.left ||
+        clientX > rect.right ||
+        clientY < rect.top ||
+        clientY > rect.bottom
+      )
+        continue;
       const scaleX = rect.width / (iframe.offsetWidth || rect.width);
       const scaleY = rect.height / (iframe.offsetHeight || rect.height);
       for (const button of buttons) {
         const left = rect.left + (iframe.clientLeft + button.x) * scaleX;
         const top = rect.top + (iframe.clientTop + button.y) * scaleY;
-        if (clientX >= left && clientX <= left + button.w * scaleX && clientY >= top && clientY <= top + button.h * scaleY) {
+        if (
+          clientX >= left &&
+          clientX <= left + button.w * scaleX &&
+          clientY >= top &&
+          clientY <= top + button.h * scaleY
+        ) {
           return { source, button };
         }
       }

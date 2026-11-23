@@ -25,10 +25,14 @@
   --radius: 6px;
   /* Fits inside a 1px-bordered .field. */
   --inner-radius: calc(var(--radius) - 1px);
-  --font-mono: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  --font-mono: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
   accent-color: var(--color-accent-fill);
 }
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 body {
   margin: 0;
   background: var(--color-surface);
@@ -36,15 +40,37 @@ body {
   font-family: system-ui, sans-serif;
   line-height: 1.5;
 }
-button, input, select, textarea { font: inherit; color: inherit; }
-button { cursor: pointer; touch-action: manipulation; }
-button:disabled { cursor: not-allowed; opacity: .5; }
-button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, a:focus-visible {
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+a:focus-visible {
   outline: 2px solid var(--color-focus) !important;
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 .icon {
   width: 1rem;
@@ -61,11 +87,20 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   border-radius: var(--radius);
   background-color: var(--color-field);
 }
-.segmented { display: flex; }
+.segmented {
+  display: flex;
+}
 /* Keeps the focus ring above the neighbouring segment. */
-.segmented > :focus-visible { position: relative; z-index: 1; }
-.segmented > :first-child { border-radius: var(--inner-radius) 0 0 var(--inner-radius); }
-.segmented > :last-child { border-radius: 0 var(--inner-radius) var(--inner-radius) 0; }
+.segmented > :focus-visible {
+  position: relative;
+  z-index: 1;
+}
+.segmented > :first-child {
+  border-radius: var(--inner-radius) 0 0 var(--inner-radius);
+}
+.segmented > :last-child {
+  border-radius: 0 var(--inner-radius) var(--inner-radius) 0;
+}
 .btn {
   padding: 0.5rem 0.875rem;
   border: 1px solid transparent;
@@ -74,14 +109,33 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   font-size: 0.8125rem;
   font-weight: 600;
 }
-.btn.primary { background: var(--color-accent-fill); color: #fff; }
-.btn.primary:hover:not(:disabled) { background: var(--color-accent-fill-hover); }
-.btn.secondary { border-color: var(--color-border); }
-.btn.secondary:hover:not(:disabled) { background: var(--color-hover); }
-.btn.ghost { padding: 0.25rem 0.5rem; color: var(--color-accent); font-weight: 500; }
-.btn.ghost:hover:not(:disabled) { background: var(--color-accent-soft); }
-.btn.ghost.danger { color: var(--color-danger-text); }
-.btn.ghost.danger:hover:not(:disabled) { background: var(--color-danger-soft); }
+.btn.primary {
+  background: var(--color-accent-fill);
+  color: #fff;
+}
+.btn.primary:hover:not(:disabled) {
+  background: var(--color-accent-fill-hover);
+}
+.btn.secondary {
+  border-color: var(--color-border);
+}
+.btn.secondary:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+.btn.ghost {
+  padding: 0.25rem 0.5rem;
+  color: var(--color-accent);
+  font-weight: 500;
+}
+.btn.ghost:hover:not(:disabled) {
+  background: var(--color-accent-soft);
+}
+.btn.ghost.danger {
+  color: var(--color-danger-text);
+}
+.btn.ghost.danger:hover:not(:disabled) {
+  background: var(--color-danger-soft);
+}
 .row-btn {
   display: flex;
   align-items: center;
@@ -95,6 +149,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   font-weight: 500;
   text-align: start;
 }
-.row-btn:hover:not(:disabled) { background: var(--color-hover); }
-.row-btn:focus-visible { outline-offset: -2px; }
-.row-btn .icon { color: var(--color-text-muted); }
+.row-btn:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+.row-btn:focus-visible {
+  outline-offset: -2px;
+}
+.row-btn .icon {
+  color: var(--color-text-muted);
+}

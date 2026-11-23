@@ -2,7 +2,7 @@
   import controllerCSS from '../assets/controller.css?raw';
   import { applyAppearance, createControllerView } from '../lib/media/controller-view';
   import { ACTIONS } from '../lib/settings/key-actions';
-  import { SPEED, formatSpeed } from '../lib/speed';
+  import { formatSpeed, SPEED } from '../lib/speed';
 
   let { opacity, size, startHidden }: { opacity: number; size: number; startHidden: boolean } = $props();
   let expanded = $state(false);
@@ -10,7 +10,7 @@
   function preview(node: HTMLDivElement, values: { opacity: number; size: number; expanded: boolean }) {
     const shadow = node.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
-    style.textContent = controllerCSS + `
+    style.textContent = `${controllerCSS}
       :host { position: static; z-index: auto; pointer-events: none !important; max-width: 100%; --hare-max-width: 100%; }
       .hare-controller:hover, .hare-controller:focus-within { opacity: var(--hare-opacity); }
       .hare-controls { display: var(--preview-controls) !important; }

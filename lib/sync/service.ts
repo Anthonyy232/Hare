@@ -1,4 +1,4 @@
-import { browser, type Browser } from 'wxt/browser';
+import { type Browser, browser } from 'wxt/browser';
 import type { HareMessage, Replies } from '../messages';
 import { SyncCoordinator } from './coordinator';
 import { MpvClient } from './mpv';
@@ -11,8 +11,12 @@ import { KEEPALIVE_PORT, MPV_TAB_ID } from './types';
  */
 export function startSyncService() {
   const mpv = new MpvClient({
-    onEvent: event => { void coordinator.handleSyncEvent(MPV_TAB_ID, event); },
-    onFileChanged: () => { void coordinator.stop('mpv opened another file'); },
+    onEvent: event => {
+      void coordinator.handleSyncEvent(MPV_TAB_ID, event);
+    },
+    onFileChanged: () => {
+      void coordinator.stop('mpv opened another file');
+    },
   });
   const coordinator = new SyncCoordinator(createTransport(mpv));
 
@@ -21,7 +25,9 @@ export function startSyncService() {
     // The open port is what keeps the worker alive; its pings need no reply. Reading lastError
     // marks a disconnect as handled so Chrome doesn't log it.
     port.onMessage.addListener(() => {});
-    port.onDisconnect.addListener(() => { void browser.runtime.lastError; });
+    port.onDisconnect.addListener(() => {
+      void browser.runtime.lastError;
+    });
   });
 
   browser.tabs.onRemoved.addListener(tabId => {
@@ -29,21 +35,27 @@ export function startSyncService() {
   });
 
   /** Replies to sync's messages; undefined for messages that aren't sync's, since null is a real reply. */
-  async function handle(message: HareMessage, sender: Browser.runtime.MessageSender): Promise<Replies[keyof Replies] | undefined> {
+  async function handle(
+    message: HareMessage,
+    sender: Browser.runtime.MessageSender,
+  ): Promise<Replies[keyof Replies] | undefined> {
     await coordinator.ready;
     switch (message.type) {
       case 'SYNC_EVENT':
         if (sender.tab?.id != null) await coordinator.handleSyncEvent(sender.tab.id, message.payload, sender.frameId);
         return { success: true };
-      case 'GET_SYNC_CANDIDATES': return syncCandidates(mpv);
-      case 'GET_MPV_CANDIDATE': return mpv.candidate();
+      case 'GET_SYNC_CANDIDATES':
+        return syncCandidates(mpv);
+      case 'GET_MPV_CANDIDATE':
+        return mpv.candidate();
       case 'START_SYNC':
         await coordinator.start(message.payload.tabIdA, message.payload.tabIdB);
         return { success: true };
       case 'STOP_SYNC': {
         // A late stop from a removed or nonparticipating content frame must not end a new pair.
         const fromExtensionPage = sender.url?.startsWith(browser.runtime.getURL('/')) === true;
-        if (!fromExtensionPage && sender.tab?.id != null && !coordinator.hasEndpoint(sender.tab.id, sender.frameId)) return { success: true };
+        if (!fromExtensionPage && sender.tab?.id != null && !coordinator.hasEndpoint(sender.tab.id, sender.frameId))
+          return { success: true };
         await coordinator.stop('stop requested');
         return { success: true };
       }
@@ -53,8 +65,10 @@ export function startSyncService() {
       case 'NUDGE_OFFSET':
         coordinator.nudgeOffset(message.payload);
         return { success: true };
-      case 'GET_SYNC_STATUS': return coordinator.getStatus();
-      default: return undefined;
+      case 'GET_SYNC_STATUS':
+        return coordinator.getStatus();
+      default:
+        return undefined;
     }
   }
 

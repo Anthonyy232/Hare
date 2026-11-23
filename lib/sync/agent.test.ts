@@ -1,9 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../media/safe-media', () => ({
   safeMedia: {
     getCurrentTime: (media: HTMLMediaElement) => media.currentTime,
-    setCurrentTime: (media: HTMLMediaElement, value: number) => { media.currentTime = value; },
+    setCurrentTime: (media: HTMLMediaElement, value: number) => {
+      media.currentTime = value;
+    },
     getPlaybackRate: (media: HTMLMediaElement) => media.playbackRate,
     play: (media: HTMLMediaElement) => {
       (media as any)._paused = false;
@@ -16,9 +18,9 @@ vi.mock('../media/safe-media', () => ({
 }));
 
 import { safeMedia } from '../media/safe-media';
+import { clampSpeed } from '../speed';
 import { SyncAgent, type SyncedController } from './agent';
 import type { SyncEventPayload } from './types';
-import { clampSpeed } from '../speed';
 
 // Happy DOM omits these native HTMLMediaElement constants.
 Object.assign(HTMLMediaElement, { HAVE_CURRENT_DATA: 2, HAVE_FUTURE_DATA: 3, HAVE_ENOUGH_DATA: 4 });
@@ -32,7 +34,9 @@ function createMockVideo(currentTime = 0, paused = true): HTMLVideoElement {
   Object.defineProperty(video, 'readyState', { value: HTMLMediaElement.HAVE_ENOUGH_DATA, configurable: true });
   Object.defineProperty(video, 'currentTime', {
     get: () => _currentTime,
-    set: (v: number) => { _currentTime = v; },
+    set: (v: number) => {
+      _currentTime = v;
+    },
     configurable: true,
   });
   Object.defineProperty(video, 'paused', {
@@ -41,7 +45,9 @@ function createMockVideo(currentTime = 0, paused = true): HTMLVideoElement {
   });
   Object.defineProperty(video, 'playbackRate', {
     get: () => _playbackRate,
-    set: (v: number) => { _playbackRate = v; },
+    set: (v: number) => {
+      _playbackRate = v;
+    },
     configurable: true,
   });
   return video;
@@ -51,10 +57,20 @@ function createController(video: HTMLVideoElement, speed = 1): SyncedController 
   let listener: ((speed: number) => void) | null = null;
   return {
     media: video,
-    get intendedSpeed() { return speed; },
-    setSpeed(next) { speed = clampSpeed(next); video.playbackRate = speed; listener?.(speed); },
-    applyTransientRate(rate) { video.playbackRate = rate; },
-    setIntendedSpeedListener(next) { listener = next; },
+    get intendedSpeed() {
+      return speed;
+    },
+    setSpeed(next) {
+      speed = clampSpeed(next);
+      video.playbackRate = speed;
+      listener?.(speed);
+    },
+    applyTransientRate(rate) {
+      video.playbackRate = rate;
+    },
+    setIntendedSpeedListener(next) {
+      listener = next;
+    },
   };
 }
 
@@ -133,7 +149,9 @@ describe('SyncAgent', () => {
   });
 
   it('reports an actual play rejection and leaves later user play observable', async () => {
-    const play = vi.spyOn(safeMedia, 'play').mockRejectedValueOnce(new DOMException('Autoplay blocked', 'NotAllowedError'));
+    const play = vi
+      .spyOn(safeMedia, 'play')
+      .mockRejectedValueOnce(new DOMException('Autoplay blocked', 'NotAllowedError'));
     expect(await agent.play()).toBe(false);
     video.dispatchEvent(new Event('play'));
     expect(sendEvent.mock.calls.map(([event]) => event.action)).toEqual(['pause', 'play']);
@@ -169,14 +187,10 @@ describe('SyncAgent', () => {
       video.dispatchEvent(new Event('play'));
 
       video.dispatchEvent(new Event('waiting'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'buffering_start' })
-      );
+      expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'buffering_start' }));
 
       video.dispatchEvent(new Event('playing'));
-      expect(sendEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'buffering_end' })
-      );
+      expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'buffering_end' }));
     });
 
     it('reports a peer-requested seek as buffering until it lands', () => {
@@ -224,9 +238,7 @@ describe('SyncAgent', () => {
     vi.advanceTimersByTime(60);
 
     expect(sendEvent).toHaveBeenCalledTimes(1);
-    expect(sendEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'seek' })
-    );
+    expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'seek' }));
   });
 
   it('does not let a no-op coordinator seek swallow the next user seek', () => {
@@ -249,9 +261,7 @@ describe('SyncAgent', () => {
   it('emitted events carry the source rate', () => {
     video.playbackRate = 1.25;
     video.dispatchEvent(new Event('pause'));
-    expect(sendEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'pause', rate: 1.25 })
-    );
+    expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'pause', rate: 1.25 }));
   });
 
   describe('rate propagation', () => {
@@ -262,7 +272,10 @@ describe('SyncAgent', () => {
       expect(video.playbackRate).toBeCloseTo(1.52, 5);
     });
 
-    it.each([[1.5, 1.5], [0.875, 0.88]])('does not echo a speed of %s that sync applied', (rate, shown) => {
+    it.each([
+      [1.5, 1.5],
+      [0.875, 0.88],
+    ])('does not echo a speed of %s that sync applied', (rate, shown) => {
       expect(agent.setRate(rate)).toBe(true);
       expect(video.playbackRate).toBe(shown);
       expect(sendEvent).not.toHaveBeenCalled();

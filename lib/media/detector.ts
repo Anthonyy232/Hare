@@ -27,7 +27,8 @@ export function scanMediaTree(
   const roots: Node[] = [root];
   const visit = (element: Element): void => {
     if (element.localName === CONTROLLER_TAG) return;
-    if (element instanceof HTMLVideoElement || (includeAudio && element instanceof HTMLAudioElement)) media.push(element);
+    if (element instanceof HTMLVideoElement || (includeAudio && element instanceof HTMLAudioElement))
+      media.push(element);
     const shadow = getShadowRoot(element);
     if (shadow) {
       onShadow?.(shadow);

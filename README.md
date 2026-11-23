@@ -18,13 +18,13 @@ Hare is a browser extension that sets the playback speed of any HTML5 video or a
   <img src=".github/readme/feature-speed-light.png" alt="01. Speed, one key away. The Hare popup at 1.50× with presets from 0.75× to 2×, a stepper, Sync mode and Open in video player.">
 </picture>
 
-| Key | Action |
-| :-: | --- |
-| `S` | Slower by 0.1× |
-| `D` | Faster by 0.1× |
-| `R` | Reset to 1× |
-| `Z` | Rewind 10 seconds |
-| `X` | Advance 10 seconds |
+| Key | Action                      |
+| :-: | --------------------------- |
+| `S` | Slower by 0.1×              |
+| `D` | Faster by 0.1×              |
+| `R` | Reset to 1×                 |
+| `Z` | Rewind 10 seconds           |
+| `X` | Advance 10 seconds          |
 | `V` | Show or hide the controller |
 
 Every key and amount can be changed. Shortcuts are single keys without modifiers, and they do nothing while you type in a text field.

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { SyncCoordinator } from './coordinator';
@@ -11,8 +11,12 @@ type Message = { type: string; payload?: any };
 const mockSendMessage = vi.fn();
 vi.spyOn(browser.tabs, 'sendMessage').mockImplementation(mockSendMessage);
 const frameIds = new Map<number, number>();
-vi.spyOn(browser.webNavigation, 'getAllFrames').mockImplementation(async ({ tabId }) => [{ frameId: frameIds.get(tabId) ?? 0 }] as never);
-vi.spyOn(browser.tabs, 'get').mockImplementation(async id => ({ id, title: `Tab ${id}`, url: 'https://example.com/' }) as never);
+vi.spyOn(browser.webNavigation, 'getAllFrames').mockImplementation(
+  async ({ tabId }) => [{ frameId: frameIds.get(tabId) ?? 0 }] as never,
+);
+vi.spyOn(browser.tabs, 'get').mockImplementation(
+  async id => ({ id, title: `Tab ${id}`, url: 'https://example.com/' }) as never,
+);
 
 const transport = createTransport(new MpvClient({ onEvent: () => {}, onFileChanged: () => {} }));
 const activations = new Map<number, SyncPositionResponse>();
@@ -33,12 +37,18 @@ function sent(type: string) {
     .map(([tabId, message, options]) => ({ tabId, payload: message.payload, frameId: options?.frameId }));
 }
 
-const event = (action: string, extra: object = {}) => ({ action, position: 10, timestamp: Date.now(), rate: 1, ...extra }) as never;
+const event = (action: string, extra: object = {}) =>
+  ({ action, position: 10, timestamp: Date.now(), rate: 1, ...extra }) as never;
 
 describe('SyncCoordinator', () => {
   let coordinator: SyncCoordinator;
 
-  function startPair(tabA: number, tabB: number, positionA: Partial<SyncPositionResponse> = {}, positionB: Partial<SyncPositionResponse> = {}) {
+  function startPair(
+    tabA: number,
+    tabB: number,
+    positionA: Partial<SyncPositionResponse> = {},
+    positionB: Partial<SyncPositionResponse> = {},
+  ) {
     activations.set(tabA, position(positionA));
     activations.set(tabB, position(positionB));
     return coordinator.start(tabA, tabB);
@@ -80,8 +90,9 @@ describe('SyncCoordinator', () => {
     it('waits for an earlier asynchronous stop before starting another pair', async () => {
       await startPair(1, 2);
       const deactivation = Promise.withResolvers<{ success: true }>();
-      mockSendMessage.mockImplementation(async (tabId, message) => message.type === 'SYNC_DEACTIVATE'
-        ? deactivation.promise : respond(tabId, message));
+      mockSendMessage.mockImplementation(async (tabId, message) =>
+        message.type === 'SYNC_DEACTIVATE' ? deactivation.promise : respond(tabId, message),
+      );
       const stopped = coordinator.stop('tab was removed');
       const replacement = startPair(3, 4);
       await vi.advanceTimersByTimeAsync(0);
@@ -96,8 +107,9 @@ describe('SyncCoordinator', () => {
     it('does not create a replacement after stop arrives during teardown', async () => {
       await startPair(1, 2);
       const deactivation = Promise.withResolvers<{ success: true }>();
-      mockSendMessage.mockImplementation(async (tabId, message) => message.type === 'SYNC_DEACTIVATE'
-        ? deactivation.promise : respond(tabId, message));
+      mockSendMessage.mockImplementation(async (tabId, message) =>
+        message.type === 'SYNC_DEACTIVATE' ? deactivation.promise : respond(tabId, message),
+      );
       const replacement = startPair(3, 4);
       const rejected = expect(replacement).rejects.toThrow('cancelled');
       const stopped = coordinator.stop('user stopped sync');
@@ -119,12 +131,17 @@ describe('SyncCoordinator', () => {
       late.resolve({ success: true, ...position() });
       await rejection;
       expect(coordinator.getStatus().active).toBe(false);
-      expect(sent('SYNC_DEACTIVATE').map(call => [call.tabId, call.frameId])).toEqual([[1, 0], [2, 0]]);
+      expect(sent('SYNC_DEACTIVATE').map(call => [call.tabId, call.frameId])).toEqual([
+        [1, 0],
+        [2, 0],
+      ]);
     });
 
     it('cancels startup and rolls back if stop arrives during activation', async () => {
       const late = Promise.withResolvers<unknown>();
-      mockSendMessage.mockImplementation(async (tabId, message) => message.type === 'SYNC_ACTIVATE' ? late.promise : respond(tabId, message));
+      mockSendMessage.mockImplementation(async (tabId, message) =>
+        message.type === 'SYNC_ACTIVATE' ? late.promise : respond(tabId, message),
+      );
       const rejection = expect(coordinator.start(1, 2)).rejects.toThrow('cancelled');
       await vi.waitFor(() => expect(sent('SYNC_ACTIVATE')).toHaveLength(2));
       const stopped = coordinator.stop('user stopped sync');
@@ -135,7 +152,7 @@ describe('SyncCoordinator', () => {
       expect(sent('SYNC_DEACTIVATE').map(call => call.tabId)).toEqual([1, 2]);
     });
 
-    it('matches B to A\'s speed and play state before syncing', async () => {
+    it("matches B to A's speed and play state before syncing", async () => {
       await startPair(1, 2, { playbackRate: 1.5, paused: true }, { paused: false });
       expect(sent('SYNC_RATE')).toEqual([{ tabId: 2, payload: { rate: 1.5 }, frameId: 0 }]);
       expect(sent('SYNC_PAUSE')).toEqual([{ tabId: 2, payload: {}, frameId: 0 }]);
@@ -143,7 +160,9 @@ describe('SyncCoordinator', () => {
 
     it('refuses a second start while one is in progress', async () => {
       const late = Promise.withResolvers<unknown>();
-      mockSendMessage.mockImplementation(async (tabId, message) => message.type === 'SYNC_ACTIVATE' ? late.promise : respond(tabId, message));
+      mockSendMessage.mockImplementation(async (tabId, message) =>
+        message.type === 'SYNC_ACTIVATE' ? late.promise : respond(tabId, message),
+      );
       const first = coordinator.start(1, 2);
       await expect(coordinator.start(3, 4)).rejects.toThrow('already starting');
       late.resolve({ success: true, ...position() });
@@ -181,11 +200,16 @@ describe('SyncCoordinator', () => {
 
     it('nudges the offset, refuses non-finite updates, and refuses once sync ended', async () => {
       await startPair(1, 2, {}, { currentTime: 5 });
-      mockSendMessage.mockImplementation(async (tabId, message) => message.type === 'SYNC_GET_POSITION'
-        ? position({ currentTime: 10, paused: true }) : respond(tabId, message));
+      mockSendMessage.mockImplementation(async (tabId, message) =>
+        message.type === 'SYNC_GET_POSITION' ? position({ currentTime: 10, paused: true }) : respond(tabId, message),
+      );
       coordinator.nudgeOffset(0.5);
       expect(coordinator.getStatus()).toMatchObject({ offset: 5.5 });
-      await vi.waitFor(() => expect(sent('SYNC_DRIFT_CORRECT')).toEqual([{ tabId: 2, payload: { method: 'seek', position: 15.5 }, frameId: 0 }]));
+      await vi.waitFor(() =>
+        expect(sent('SYNC_DRIFT_CORRECT')).toEqual([
+          { tabId: 2, payload: { method: 'seek', position: 15.5 }, frameId: 0 },
+        ]),
+      );
       expect(() => coordinator.nudgeOffset(NaN)).toThrow('valid offset');
       expect(coordinator.getStatus()).toMatchObject({ offset: 5.5 });
       await coordinator.stop('user stopped sync');
@@ -227,17 +251,25 @@ describe('SyncCoordinator', () => {
       { from: 2, to: 1, action: 'pause', target: 5, type: 'SYNC_PAUSE' },
       { from: 1, to: 2, action: 'seek', target: 15, type: 'SYNC_SEEK' },
       { from: 2, to: 1, action: 'seek', position: 3, target: 0, type: 'SYNC_SEEK' },
-    ])('relays $action from $from to $to with its offset', async ({ from, to, action, target, type, position = 10 }) => {
-      await coordinator.handleSyncEvent(from, event(action, { position }));
-      expect(sent(type)).toEqual([{ tabId: to, payload: { position: target }, frameId: 0 }]);
-    });
+    ])(
+      'relays $action from $from to $to with its offset',
+      async ({ from, to, action, target, type, position = 10 }) => {
+        await coordinator.handleSyncEvent(from, event(action, { position }));
+        expect(sent(type)).toEqual([{ tabId: to, payload: { position: target }, frameId: 0 }]);
+      },
+    );
 
     it('tells the other side where the source was and how fast it played', async () => {
       await coordinator.handleSyncEvent(1, event('play', { rate: 2, timestamp: 1234 }));
-      expect(sent('SYNC_PLAY')).toEqual([{ tabId: 2, payload: { from: { position: 15, rate: 2, timestamp: 1234 } }, frameId: 0 }]);
+      expect(sent('SYNC_PLAY')).toEqual([
+        { tabId: 2, payload: { from: { position: 15, rate: 2, timestamp: 1234 } }, frameId: 0 },
+      ]);
     });
 
-    it.each([[1, 2, 1.5], [2, 1, 0.5]])('relays rate changes from %s to %s at %sx', async (from, to, rate) => {
+    it.each([
+      [1, 2, 1.5],
+      [2, 1, 0.5],
+    ])('relays rate changes from %s to %s at %sx', async (from, to, rate) => {
       await coordinator.handleSyncEvent(from, event('ratechange', { rate }));
       expect(sent('SYNC_RATE')).toEqual([{ tabId: to, payload: { rate }, frameId: 0 }]);
     });
@@ -295,7 +327,10 @@ describe('SyncCoordinator', () => {
       mockSendMessage.mockClear();
       await coordinator.handleSyncEvent(1, event('buffering_end'));
       await vi.advanceTimersByTimeAsync(300);
-      expect(sent('SYNC_PLAY')).toEqual([{ tabId: 1, payload: {}, frameId: 0 }, { tabId: 2, payload: {}, frameId: 0 }]);
+      expect(sent('SYNC_PLAY')).toEqual([
+        { tabId: 1, payload: {}, frameId: 0 },
+        { tabId: 2, payload: {}, frameId: 0 },
+      ]);
     });
 
     it('cancels automatic buffering resume when the user pauses', async () => {
@@ -315,7 +350,12 @@ describe('SyncCoordinator', () => {
     });
 
     it('starts with an already stalled source without extrapolating its frozen clock', async () => {
-      await startPair(3, 4, { currentTime: 10, timestamp: 1000, buffering: true }, { currentTime: 20, timestamp: 2000, paused: true });
+      await startPair(
+        3,
+        4,
+        { currentTime: 10, timestamp: 1000, buffering: true },
+        { currentTime: 20, timestamp: 2000, paused: true },
+      );
       expect(coordinator.getStatus()).toMatchObject({ offset: 10 });
       expect(sent('SYNC_PAUSE')).toContainEqual({ tabId: 4, payload: { buffering: true, position: 20 }, frameId: 0 });
     });
@@ -331,9 +371,9 @@ describe('SyncCoordinator', () => {
       await coordinator.handleSyncEvent(1, event('buffering_start'));
       await coordinator.handleSyncEvent(2, event('buffering_start'));
       await restartWorker();
-      mockSendMessage.mockImplementation(async (tabId, message) => message.type === 'SYNC_GET_POSITION'
-        ? position({ currentTime: 10, paused: true })
-        : respond(tabId, message));
+      mockSendMessage.mockImplementation(async (tabId, message) =>
+        message.type === 'SYNC_GET_POSITION' ? position({ currentTime: 10, paused: true }) : respond(tabId, message),
+      );
       await vi.advanceTimersByTimeAsync(2100);
       expect(sent('SYNC_PLAY')).toHaveLength(2);
     });
@@ -387,7 +427,10 @@ describe('SyncCoordinator', () => {
     it('does not send a stale drift correction to a replacement session', async () => {
       let resolveOld!: (position: unknown) => void;
       mockSendMessage.mockImplementation((tabId, message) => {
-        if (message.type === 'SYNC_GET_POSITION' && tabId === 1) return new Promise(resolve => { resolveOld = resolve; });
+        if (message.type === 'SYNC_GET_POSITION' && tabId === 1)
+          return new Promise(resolve => {
+            resolveOld = resolve;
+          });
         if (message.type === 'SYNC_GET_POSITION') return Promise.resolve(position({ currentTime: 20 }));
         return Promise.resolve(respond(tabId, message));
       });
@@ -406,19 +449,22 @@ describe('SyncCoordinator', () => {
     });
 
     it.each(['connection rejection', 'content failure'])('stops sync after repeated %s', async failure => {
-      if (failure === 'connection rejection') mockSendMessage.mockRejectedValue(new Error('Could not establish connection'));
+      if (failure === 'connection rejection')
+        mockSendMessage.mockRejectedValue(new Error('Could not establish connection'));
       else mockSendMessage.mockResolvedValue({ success: false, error: 'No active sync agent' });
       for (let i = 0; i < 5; i++) await coordinator.handleSyncEvent(1, event('pause'));
       expect(coordinator.getStatus().active).toBe(false);
     });
 
     it.each([false, {}, { currentTime: 1, paused: false, buffering: false, playbackRate: 0, timestamp: 1 }])(
-      'ends sync after repeated malformed position replies: %j', async response => {
+      'ends sync after repeated malformed position replies: %j',
+      async response => {
         mockSendMessage.mockResolvedValue(response);
         await vi.advanceTimersByTimeAsync(10000);
         expect(coordinator.getStatus().active).toBe(false);
         expect(sent('SYNC_DRIFT_CORRECT')).toEqual([]);
-      });
+      },
+    );
 
     it('bounds unanswered position requests without overlapping drift polls', async () => {
       mockSendMessage.mockReset();
@@ -430,7 +476,8 @@ describe('SyncCoordinator', () => {
 
     it('does not let healthy peer responses reset failures for a dead endpoint', async () => {
       mockSendMessage.mockImplementation(async (tabId: number, message: Message) =>
-        message.type === 'SYNC_GET_POSITION' && tabId === 2 ? null : respond(tabId, message));
+        message.type === 'SYNC_GET_POSITION' && tabId === 2 ? null : respond(tabId, message),
+      );
       for (let i = 0; i < 5; i++) await vi.advanceTimersByTimeAsync(2000);
       expect(coordinator.getStatus().active).toBe(false);
     });

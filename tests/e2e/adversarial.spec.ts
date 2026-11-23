@@ -1,5 +1,5 @@
-import { test, expect, openVideo, openUI, rate, setSettings, rpc, tabId, launchExtension } from './fixtures/extension';
 import { DEFAULT_SETTINGS } from '../../lib/settings/schema';
+import { expect, launchExtension, openUI, openVideo, rate, rpc, setSettings, tabId, test } from './fixtures/extension';
 
 test('large controller buttons remain reachable inside a small player', async ({ extension }, testInfo) => {
   await setSettings(extension.worker, { controllerButtonSize: 24, controllerOpacity: 1 });
@@ -8,7 +8,8 @@ test('large controller buttons remain reachable inside a small player', async ({
     (player as HTMLElement).style.width = '320px';
     (player as HTMLElement).style.height = '180px';
     const video = player.querySelector('video')!;
-    video.width = 320; video.height = 180;
+    video.width = 320;
+    video.height = 180;
   });
   await page.locator('.hare-speed').focus();
   await page.screenshot({ path: testInfo.outputPath('small-player.png') });
@@ -24,13 +25,21 @@ test('large controller buttons remain reachable inside a small player', async ({
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
 });
 
-test('sync offset controls work in both directions and preserve the selected step when reopened', async ({ extension }) => {
+test('sync offset controls work in both directions and preserve the selected step when reopened', async ({
+  extension,
+}) => {
   const a = await openVideo(extension.context, '?offset-a');
   const b = await openVideo(extension.context, '?offset-b');
-  await a.locator('video').evaluate((v: HTMLVideoElement) => { v.currentTime = 10; });
-  await b.locator('video').evaluate((v: HTMLVideoElement) => { v.currentTime = 15; });
+  await a.locator('video').evaluate((v: HTMLVideoElement) => {
+    v.currentTime = 10;
+  });
+  await b.locator('video').evaluate((v: HTMLVideoElement) => {
+    v.currentTime = 15;
+  });
   const popup = await openUI(extension, 'popup', a);
-  expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({ success: true });
+  expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({
+    success: true,
+  });
   const step = popup.getByRole('combobox', { name: 'Nudge step' });
   await step.selectOption('0.5');
   await popup.getByRole('button', { name: 'Shift B later', exact: true }).click();
@@ -54,7 +63,9 @@ test('sync offset controls work in both directions and preserve the selected ste
   await popup.evaluate(() => {
     const api = (globalThis as any).chrome.runtime;
     const send = api.sendMessage.bind(api);
-    (globalThis as any).restoreSyncStatus = () => { api.sendMessage = send; };
+    (globalThis as any).restoreSyncStatus = () => {
+      api.sendMessage = send;
+    };
     api.sendMessage = (message: any) => {
       if (message.type !== 'GET_SYNC_STATUS') return send(message);
       (globalThis as any).syncStatusFailed = true;
@@ -78,15 +89,21 @@ test('sync recovers buffering after the real extension service worker is termina
   const a = await openVideo(extension.context, '?worker-a');
   const b = await openVideo(extension.context, '?worker-b');
   const popup = await openUI(extension, 'popup', a);
-  expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({ success: true });
+  expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({
+    success: true,
+  });
   await a.locator('video').evaluate((v: HTMLVideoElement) => v.play());
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
   await a.locator('video').evaluate(v => v.dispatchEvent(new Event('waiting')));
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
-  await expect.poll(() => popup.evaluate(async () => {
-    const state = await (globalThis as any).chrome.storage.session.get('syncSession');
-    return state.syncSession.bufferingSide;
-  })).toBe('A');
+  await expect
+    .poll(() =>
+      popup.evaluate(async () => {
+        const state = await (globalThis as any).chrome.storage.session.get('syncSession');
+        return state.syncSession.bufferingSide;
+      }),
+    )
+    .toBe('A');
   const cdp = await extension.context.newCDPSession(a);
   const versions = new Map<string, { versionId: string; scriptURL: string; runningStatus: string }>();
   const stoppedVersions = new Set<string>();
@@ -97,8 +114,12 @@ test('sync recovers buffering after the real extension service worker is termina
     }
   });
   await cdp.send('ServiceWorker.enable');
-  await expect.poll(() => [...versions.values()].some(v => v.scriptURL.includes(extension.id) && v.runningStatus === 'running')).toBe(true);
-  const version = [...versions.values()].find(v => v.scriptURL.includes(extension.id) && v.runningStatus === 'running')!;
+  await expect
+    .poll(() => [...versions.values()].some(v => v.scriptURL.includes(extension.id) && v.runningStatus === 'running'))
+    .toBe(true);
+  const version = [...versions.values()].find(
+    v => v.scriptURL.includes(extension.id) && v.runningStatus === 'running',
+  )!;
   stoppedVersions.clear();
   await cdp.send('ServiceWorker.stopWorker', { versionId: version.versionId });
   // Chromium can retain the DevTools target while replacing its worker execution context.
@@ -110,7 +131,9 @@ test('sync recovers buffering after the real extension service worker is termina
   await a.bringToFront();
   await a.keyboard.press('d');
   await expect.poll(() => rate(b)).toBeCloseTo(1.1);
-  await a.locator('video').evaluate((v: HTMLVideoElement) => { v.currentTime = 20; });
+  await a.locator('video').evaluate((v: HTMLVideoElement) => {
+    v.currentTime = 20;
+  });
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeCloseTo(20, 1);
   expect((await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(true);
   await cdp.detach();
@@ -120,8 +143,15 @@ test('browser restart preserves settings and clears the old sync session', async
   const a = await openVideo(extension.context, '?restart-a');
   const b = await openVideo(extension.context, '?restart-b');
   const popup = await openUI(extension, 'popup', a);
-  expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({ success: true });
-  await setSettings(extension.worker, { startHidden: true, enableAudio: true, controllerOpacity: 0.65, blacklist: 'example.com' });
+  expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({
+    success: true,
+  });
+  await setSettings(extension.worker, {
+    startHidden: true,
+    enableAudio: true,
+    controllerOpacity: 0.65,
+    blacklist: 'example.com',
+  });
   await extension.context.close();
   const context = await launchExtension(testInfo.outputPath('profile'));
   try {
@@ -132,7 +162,9 @@ test('browser restart preserves settings and clears the old sync session', async
     await expect(ui.getByRole('slider', { name: 'Controller opacity' })).toHaveValue('0.65');
     await expect(ui.locator('#blacklist')).toHaveValue('example.com');
     await expect(ui.getByRole('checkbox', { name: /Include audio-only/ })).toBeChecked();
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 });
 
 test('settings conflicts preserve numeric drafts and discard reloads the saved values', async ({ extension }) => {
@@ -156,7 +188,9 @@ test('settings initial load failure has a working retry and defaults reset can b
   await options.addInitScript(() => {
     const api = (globalThis as any).chrome.storage.sync;
     const original = api.get.bind(api);
-    (globalThis as any).restoreStorageGet = () => { api.get = original; };
+    (globalThis as any).restoreStorageGet = () => {
+      api.get = original;
+    };
     api.get = () => Promise.reject(new Error('Injected read failure'));
   });
   await options.goto(`chrome-extension://${extension.id}/options.html`);
@@ -175,7 +209,9 @@ test('settings initial load failure has a working retry and defaults reset can b
   await expect(options.getByRole('button', { name: 'Save settings' })).toBeDisabled();
 });
 
-test('shortcut capture rejects duplicates and modifiers, clears keys, and supports custom seek steps', async ({ extension }) => {
+test('shortcut capture rejects duplicates and modifiers, clears keys, and supports custom seek steps', async ({
+  extension,
+}) => {
   const video = await openVideo(extension.context);
   const options = await openUI(extension, 'options');
   const key = options.getByRole('button', { name: 'Change shortcut for Increase speed', exact: true });
@@ -203,8 +239,16 @@ test('shortcut capture rejects duplicates and modifiers, clears keys, and suppor
   await options.getByRole('button', { name: 'Save settings' }).click();
   await expect(key).toHaveText('Unbound');
   // The label updates before the save lands; wait for storage so the page has the cleared key.
-  await expect.poll(() => extension.worker.evaluate(async () => (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings']
-    .keyBindings.find((binding: { action: string }) => binding.action === 'faster').key)).toBe('');
+  await expect
+    .poll(() =>
+      extension.worker.evaluate(
+        async () =>
+          (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings'].keyBindings.find(
+            (binding: { action: string }) => binding.action === 'faster',
+          ).key,
+      ),
+    )
+    .toBe('');
   await video.keyboard.press('k');
   expect(await rate(video)).toBeCloseTo(1.1);
 });
@@ -230,7 +274,9 @@ test('sync candidates recover from missing tabs and setup can be cancelled', asy
   expect((await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(false);
 });
 
-test('real video playback stays controllable in picture-in-picture and after returning', async ({ extension }, testInfo) => {
+test('real video playback stays controllable in picture-in-picture and after returning', async ({
+  extension,
+}, testInfo) => {
   const video = await openVideo(extension.context, '?visual');
   expect(await video.locator('video').evaluate((v: HTMLVideoElement) => v.videoWidth)).toBe(160);
   await video.evaluate(() => {
@@ -276,17 +322,23 @@ test('forced shortcuts override page listeners but never intercept typing or com
   const page = await openVideo(extension.context);
   await page.evaluate(() => {
     (globalThis as any).siteKeys = 0;
-    document.addEventListener('keydown', () => { (globalThis as any).siteKeys++; });
+    document.addEventListener('keydown', () => {
+      (globalThis as any).siteKeys++;
+    });
   });
   await page.keyboard.press('d');
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
   expect(await page.evaluate(() => (globalThis as any).siteKeys)).toBe(1);
-  await setSettings(extension.worker, { keyBindings: DEFAULT_SETTINGS.keyBindings.map(binding => ({ ...binding, force: true })) });
+  await setSettings(extension.worker, {
+    keyBindings: DEFAULT_SETTINGS.keyBindings.map(binding => ({ ...binding, force: true })),
+  });
   // Settings reach the page asynchronously.
-  await expect.poll(async () => {
-    await page.keyboard.press('r');
-    return rate(page);
-  }).toBe(1);
+  await expect
+    .poll(async () => {
+      await page.keyboard.press('r');
+      return rate(page);
+    })
+    .toBe(1);
   const seen = await page.evaluate(() => (globalThis as any).siteKeys);
   await page.keyboard.press('d');
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
@@ -294,7 +346,11 @@ test('forced shortcuts override page listeners but never intercept typing or com
   await page.getByRole('textbox', { name: 'Comment' }).fill('d');
   await page.getByRole('textbox', { name: 'Comment' }).press('d');
   await expect(page.getByRole('textbox', { name: 'Comment' })).toHaveValue('dd');
-  await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyD', key: 'd', isComposing: true, bubbles: true })));
+  await page.evaluate(() =>
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { code: 'KeyD', key: 'd', isComposing: true, bubbles: true }),
+    ),
+  );
   expect(await rate(page)).toBeCloseTo(1.1);
 });
 
@@ -312,7 +368,9 @@ test('oversized settings and failed reset preserve saved data and recover', asyn
   await options.evaluate(() => {
     const api = (globalThis as any).chrome.storage.sync;
     const original = api.set.bind(api);
-    (globalThis as any).restoreStorageSet = () => { api.set = original; };
+    (globalThis as any).restoreStorageSet = () => {
+      api.set = original;
+    };
     api.set = () => Promise.reject(new Error('Injected reset failure'));
   });
   options.once('dialog', dialog => dialog.accept());
@@ -332,11 +390,18 @@ test('popup reports site rate limiting', async ({ extension }) => {
   const popup = await openUI(extension, 'popup', page);
   await popup.getByRole('button', { name: 'Set speed to 1.5×', exact: true }).click();
   await expect.poll(() => rate(page)).toBe(1.5);
-  await page.locator('video').first().evaluate((video: HTMLVideoElement) => {
-    window.addEventListener('ratechange', event => {
-      if (event.target === video && video.playbackRate > 1.5) video.playbackRate = 1.5;
-    }, { capture: true });
-  });
+  await page
+    .locator('video')
+    .first()
+    .evaluate((video: HTMLVideoElement) => {
+      window.addEventListener(
+        'ratechange',
+        event => {
+          if (event.target === video && video.playbackRate > 1.5) video.playbackRate = 1.5;
+        },
+        { capture: true },
+      );
+    });
   await popup.getByRole('button', { name: 'Set speed to 2×', exact: true }).click();
   await expect(popup.getByText('This player limited or blocked the requested speed.', { exact: true })).toBeVisible();
   await expect.poll(() => rate(page)).toBe(1.5);
@@ -346,7 +411,9 @@ test('buffering signals pause the partner and recovery never overrides a deliber
   const a = await openVideo(extension.context, '?buffer-a');
   const b = await openVideo(extension.context, '?buffer-b');
   const popup = await openUI(extension, 'popup', a);
-  expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({ success: true });
+  expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({
+    success: true,
+  });
   await a.locator('video').evaluate((v: HTMLVideoElement) => v.play());
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
   await a.locator('video').evaluate(v => v.dispatchEvent(new Event('waiting')));
@@ -354,11 +421,20 @@ test('buffering signals pause the partner and recovery never overrides a deliber
   await a.locator('video').evaluate(v => v.dispatchEvent(new Event('playing')));
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
   // Run B ahead unnoticed, as a slow machine does, so the next buffering pause must seek it.
-  await popup.evaluate(async tabId => {
-    await (globalThis as any).chrome.tabs.sendMessage(tabId, { type: 'SYNC_DRIFT_CORRECT', payload: { method: 'rate', rateFactor: 1, durationMs: 200 } }, { frameId: 0 });
-  }, await tabId(popup, b));
+  await popup.evaluate(
+    async tabId => {
+      await (globalThis as any).chrome.tabs.sendMessage(
+        tabId,
+        { type: 'SYNC_DRIFT_CORRECT', payload: { method: 'rate', rateFactor: 1, durationMs: 200 } },
+        { frameId: 0 },
+      );
+    },
+    await tabId(popup, b),
+  );
   const initialTime = await a.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime);
-  await expect.poll(() => a.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(initialTime + 0.2);
+  await expect
+    .poll(() => a.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime))
+    .toBeGreaterThan(initialTime + 0.2);
   await a.locator('video').evaluate(v => v.dispatchEvent(new Event('waiting')));
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   await a.locator('video').evaluate((v: HTMLVideoElement) => v.pause());
@@ -373,7 +449,9 @@ test('a stale stop from an unrelated content frame cannot end the active pair', 
   const b = await openVideo(extension.context, '?pair-b');
   const unrelated = await openVideo(extension.context, '?unrelated');
   const popup = await openUI(extension, 'popup', a);
-  expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({ success: true });
+  expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB: await tabId(popup, b) })).toEqual({
+    success: true,
+  });
   const cdp = await extension.context.newCDPSession(unrelated);
   let contentContext: number | undefined;
   cdp.on('Runtime.executionContextCreated', ({ context }) => {
@@ -381,7 +459,12 @@ test('a stale stop from an unrelated content frame cannot end the active pair', 
   });
   await cdp.send('Runtime.enable');
   await expect.poll(() => contentContext).toBeDefined();
-  const result = await cdp.send('Runtime.evaluate', { contextId: contentContext, expression: "chrome.runtime.sendMessage({type:'STOP_SYNC'})", awaitPromise: true, returnByValue: true });
+  const result = await cdp.send('Runtime.evaluate', {
+    contextId: contentContext,
+    expression: "chrome.runtime.sendMessage({type:'STOP_SYNC'})",
+    awaitPromise: true,
+    returnByValue: true,
+  });
   expect(result.result.value).toEqual({ success: true });
   expect((await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(true);
   await a.keyboard.press('d');
@@ -392,8 +475,12 @@ test('a stale stop from an unrelated content frame cannot end the active pair', 
 test('periodic drift correction repairs a displaced playing follower', async ({ extension }) => {
   const a = await openVideo(extension.context, '?drift-a');
   const b = await openVideo(extension.context, '?drift-b');
-  await a.locator('video').evaluate((v: HTMLVideoElement) => { v.currentTime = 20; });
-  await b.locator('video').evaluate((v: HTMLVideoElement) => { v.currentTime = 20; });
+  await a.locator('video').evaluate((v: HTMLVideoElement) => {
+    v.currentTime = 20;
+  });
+  await b.locator('video').evaluate((v: HTMLVideoElement) => {
+    v.currentTime = 20;
+  });
   const popup = await openUI(extension, 'popup', a);
   const tabIdB = await tabId(popup, b);
   expect(await rpc(popup, 'START_SYNC', { tabIdA: await tabId(popup, a), tabIdB })).toEqual({ success: true });
@@ -401,12 +488,23 @@ test('periodic drift correction repairs a displaced playing follower', async ({ 
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
   // Displace B through the agent's no-echo command so the coordinator must detect drift.
   await popup.evaluate(async tabId => {
-    await (globalThis as any).chrome.tabs.sendMessage(tabId, { type: 'SYNC_DRIFT_CORRECT', payload: { method: 'seek', position: 15 } }, { frameId: 0 });
+    await (globalThis as any).chrome.tabs.sendMessage(
+      tabId,
+      { type: 'SYNC_DRIFT_CORRECT', payload: { method: 'seek', position: 15 } },
+      { frameId: 0 },
+    );
   }, tabIdB);
-  await expect.poll(async () => {
-    const [left, right] = await Promise.all([a, b].map(page => page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)));
-    return Math.abs(left - right);
-  }, { timeout: 7000 }).toBeLessThan(0.2);
+  await expect
+    .poll(
+      async () => {
+        const [left, right] = await Promise.all(
+          [a, b].map(page => page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)),
+        );
+        return Math.abs(left - right);
+      },
+      { timeout: 7000 },
+    )
+    .toBeLessThan(0.2);
   expect((await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(true);
 });
 
@@ -432,13 +530,17 @@ test('native buffer starvation recovers while paused and fatal media errors end 
     await new Promise(resolve => source.addEventListener('sourceopen', resolve, { once: true }));
     const buffer = source.addSourceBuffer('video/webm; codecs="vp8"');
     const data = await (await fetch('/motion.webm')).arrayBuffer();
-    const append = () => new Promise(resolve => {
-      buffer.addEventListener('updateend', resolve, { once: true });
-      buffer.appendBuffer(data);
-    });
+    const append = () =>
+      new Promise(resolve => {
+        buffer.addEventListener('updateend', resolve, { once: true });
+        buffer.appendBuffer(data);
+      });
     await append();
     video.currentTime = 11.5;
-    (window as any).refill = async () => { buffer.timestampOffset = 12; await append(); };
+    (window as any).refill = async () => {
+      buffer.timestampOffset = 12;
+      await append();
+    };
     (window as any).failMedia = () => source.endOfStream('decode');
   });
   await expect.poll(() => a.locator('video').evaluate((v: HTMLVideoElement) => v.readyState)).toBeGreaterThanOrEqual(3);
@@ -449,9 +551,18 @@ test('native buffer starvation recovers while paused and fatal media errors end 
   await expect.poll(() => a.locator('video').evaluate((v: HTMLVideoElement) => v.readyState)).toBeLessThan(3);
   await expect.poll(() => b.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   // A second stall pauses the first source too; paused media recovers with canplay, not playing.
-  await popup.evaluate(async tab => (globalThis as any).chrome.tabs.sendMessage(tab, {
-    type: 'SYNC_PAUSE', payload: { buffering: true },
-  }, { frameId: 0 }), aId);
+  await popup.evaluate(
+    async tab =>
+      (globalThis as any).chrome.tabs.sendMessage(
+        tab,
+        {
+          type: 'SYNC_PAUSE',
+          payload: { buffering: true },
+        },
+        { frameId: 0 },
+      ),
+    aId,
+  );
   await expect.poll(() => a.locator('video').evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   await a.evaluate(() => (window as any).refill());
   await expect.poll(() => a.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(12.05);

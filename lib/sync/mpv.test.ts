@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MpvClient } from './mpv';
 
 let state: { file: string; time: number; paused: boolean; buffering: boolean; speed: number; title: string };
@@ -9,13 +9,16 @@ const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
   const reply = eventReplies.shift();
   if (reply) return Response.json(reply);
   // Like mpv, hold the request until there is news or the sync stops.
-  return new Promise<Response>((_, reject) => init.signal!.addEventListener('abort', () => reject(new Error('aborted'))));
+  return new Promise<Response>((_, reject) =>
+    init.signal!.addEventListener('abort', () => reject(new Error('aborted'))),
+  );
 });
 
-const sentChanges = () => fetchMock.mock.calls
-  .map(([url]) => new URL(url))
-  .filter(url => url.pathname === '/set')
-  .map(url => Object.fromEntries(url.searchParams));
+const sentChanges = () =>
+  fetchMock.mock.calls
+    .map(([url]) => new URL(url))
+    .filter(url => url.pathname === '/set')
+    .map(url => Object.fromEntries(url.searchParams));
 
 describe('mpv client', () => {
   const onEvent = vi.fn();
@@ -77,18 +80,21 @@ describe('mpv client', () => {
     expect(sentChanges()).toEqual([{ speed: '1.02' }, { speed: '1' }]);
   });
 
-  it.each(['SYNC_DEACTIVATE', 'SYNC_SEEK'] as const)('restores intended speed when %s cancels a correction', async type => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    state.speed = 1.5;
-    await mpv.handle({ type: 'SYNC_ACTIVATE' });
-    await mpv.handle({ type: 'SYNC_DRIFT_CORRECT', payload: { method: 'rate', rateFactor: 0.02, durationMs: 3000 } });
-    await mpv.handle(type === 'SYNC_DEACTIVATE' ? { type } : { type, payload: { position: 20 } });
-    const expected = [{ speed: '1.52' }, { speed: '1.5' }];
-    expect(sentChanges().slice(0, 2)).toEqual(expected);
-    const count = sentChanges().length;
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(sentChanges()).toHaveLength(count);
-  });
+  it.each(['SYNC_DEACTIVATE', 'SYNC_SEEK'] as const)(
+    'restores intended speed when %s cancels a correction',
+    async type => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      state.speed = 1.5;
+      await mpv.handle({ type: 'SYNC_ACTIVATE' });
+      await mpv.handle({ type: 'SYNC_DRIFT_CORRECT', payload: { method: 'rate', rateFactor: 0.02, durationMs: 3000 } });
+      await mpv.handle(type === 'SYNC_DEACTIVATE' ? { type } : { type, payload: { position: 20 } });
+      const expected = [{ speed: '1.52' }, { speed: '1.5' }];
+      expect(sentChanges().slice(0, 2)).toEqual(expected);
+      const count = sentChanges().length;
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(sentChanges()).toHaveLength(count);
+    },
+  );
 
   it('keeps a new intended speed when it replaces a correction', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });

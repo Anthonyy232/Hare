@@ -1,6 +1,6 @@
+import type { Settings } from '../settings/schema';
 import { SOURCE_CHANGE_EVENTS, VideoController } from './controller';
 import { ObserverPool } from './observer-pool';
-import type { Settings } from '../settings/schema';
 import type { SiteHandler } from './site-handlers';
 
 // Media can disappear without a mutation the observers see, e.g. inside closed shadow roots.
@@ -25,8 +25,7 @@ export class MediaRegistry {
   }
 
   connectedControllers(): VideoController[] {
-    return [...this.entries.values()].flatMap(({ controller }) =>
-      controller?.media.isConnected ? [controller] : []);
+    return [...this.entries.values()].flatMap(({ controller }) => (controller?.media.isConnected ? [controller] : []));
   }
 
   rescan(): void {
@@ -57,7 +56,11 @@ export class MediaRegistry {
   }
 
   private createObserver(): ObserverPool {
-    return new ObserverPool(media => this.consider(media), () => this.removeDisconnected(), this.settings.enableAudio);
+    return new ObserverPool(
+      media => this.consider(media),
+      () => this.removeDisconnected(),
+      this.settings.enableAudio,
+    );
   }
 
   private removeDisconnected(): void {
@@ -85,10 +88,14 @@ export class MediaRegistry {
     const controller = new VideoController(media, this.settings, this.siteHandler);
     this.entries.set(media, { listeners, controller });
     for (const type of SOURCE_CHANGE_EVENTS) {
-      media.addEventListener(type, () => {
-        this.onSourceInvalidated(media);
-        if (!media.isConnected) this.remove(media);
-      }, { signal: listeners.signal });
+      media.addEventListener(
+        type,
+        () => {
+          this.onSourceInvalidated(media);
+          if (!media.isConnected) this.remove(media);
+        },
+        { signal: listeners.signal },
+      );
     }
   }
 

@@ -22,12 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   controllerOpacity: 0.3,
   controllerButtonSize: 14,
   keyBindings: defaultKeyBindings(),
-  blacklist: [
-    'instagram.com',
-    'x.com',
-    'twitter.com',
-    'imgur.com',
-    'teams.microsoft.com',
-    'meet.google.com',
-  ].join('\n'),
+  blacklist: ['instagram.com', 'x.com', 'twitter.com', 'imgur.com', 'teams.microsoft.com', 'meet.google.com'].join(
+    '\n',
+  ),
 };
