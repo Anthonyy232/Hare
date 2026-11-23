@@ -54,7 +54,7 @@ class FirefoxFlows(unittest.TestCase):
         cls.driver.execute_script("gBrowser.selectedBrowser.loadURI(Services.io.newURI(arguments[0]), "
                                   "{triggeringPrincipal:Services.scriptSecurityManager.getSystemPrincipal()})", BASE + "options.html")
         cls.driver.set_context("content")
-        WebDriverWait(cls.driver, 15).until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Core Settings"))
+        WebDriverWait(cls.driver, 15).until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Core settings"))
         cls.options_handle = cls.driver.current_window_handle
         cls.defaults = cls.driver.execute_async_script("const done=arguments[0];browser.storage.sync.get('hare-settings').then(x=>done(x['hare-settings']))")
         (OUTPUT / "environment.json").write_text(json.dumps(cls.driver.capabilities, indent=2))
@@ -182,12 +182,12 @@ class FirefoxFlows(unittest.TestCase):
         self.assertAlmostEqual(self.media("v.playbackRate"), 1.5)
 
     def test_settings_save_reset_and_audio(self):
-        self.fill(self.field("Reset Speed Target speed"), "1.75")
-        self.field("Reset Speed Target speed").send_keys(Keys.TAB)
-        self.button("Save Settings").click()
+        self.fill(self.field("Reset speed Target speed"), "1.75")
+        self.field("Reset speed Target speed").send_keys(Keys.TAB)
+        self.button("Save settings").click()
         self.until(lambda: "Settings saved" in self.body())
         self.d.refresh()
-        self.until(lambda: self.field("Reset Speed Target speed").get_attribute("value") == "1.75")
+        self.until(lambda: self.field("Reset speed Target speed").get_attribute("value") == "1.75")
         video = self.video("?settings")
         self.css("h1").click()
         self.d.switch_to.active_element.send_keys("r")
@@ -200,9 +200,9 @@ class FirefoxFlows(unittest.TestCase):
         self.patch(enabled=True, enableAudio=False)
         self.until(lambda: self.count() == 1)
         self.d.switch_to.window(self.options_handle)
-        self.button("Reset to Defaults").click()
+        self.button("Reset to defaults").click()
         self.d.switch_to.alert.accept()
-        self.until(lambda: self.field("Reset Speed Target speed").get_attribute("value") == "1")
+        self.until(lambda: self.field("Reset speed Target speed").get_attribute("value") == "1")
         self.d.switch_to.window(video)
         self.css("h1").click()
         self.d.switch_to.active_element.send_keys("r")
@@ -250,7 +250,7 @@ class FirefoxFlows(unittest.TestCase):
         self.until(lambda: len(self.d.find_elements(By.CSS_SELECTOR, ".candidate")) == 2)
         for item in self.d.find_elements(By.CSS_SELECTOR, ".candidate"):
             item.click()
-        self.button("Start Sync").click()
+        self.button("Start sync").click()
         self.until(lambda: self.rpc("GET_SYNC_STATUS")["active"])
         Select(self.css("select[aria-label='Nudge step']")).select_by_value("0.5")
         self.until(lambda: self.rpc("GET_SYNC_STATUS")["nudgeStep"] == .5)

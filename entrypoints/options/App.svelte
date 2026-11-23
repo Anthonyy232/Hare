@@ -119,7 +119,7 @@
     <main>
       <fieldset disabled={saving}>
         <section>
-          <h2>Core Settings</h2>
+          <h2>Core settings</h2>
           <div class="rows">
             <label class="check-row">
               <input
@@ -160,7 +160,7 @@
         </section>
 
         <section>
-          <h2>Controller Display</h2>
+          <h2>Controller display</h2>
           <div class="rows">
             <div class="slider-row">
               <span class="row-text">
@@ -211,7 +211,7 @@
         </section>
 
         <section>
-          <h2>Excluded Sites</h2>
+          <h2>Excluded sites</h2>
           <BlacklistEditor
             blacklist={settings.blacklist}
             errors={validationErrors}
@@ -236,10 +236,10 @@
         {#if error}<p class="save-error" role="alert">{error}</p>{/if}
         <span class="save-status" role="status">{saving ? 'Saving…' : hasUnsavedChanges ? 'Unsaved changes' : saved ? 'Settings saved' : 'All changes saved'}</span>
         <button class="btn secondary" onclick={reset} disabled={saving}>
-          Reset to Defaults
+          Reset to defaults
         </button>
         <button class="btn primary" onclick={save} disabled={saving || !hasUnsavedChanges || validationErrors.length > 0}>
-          Save Settings
+          Save settings
         </button>
       </div>
     </main>

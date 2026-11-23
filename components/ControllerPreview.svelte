@@ -1,6 +1,7 @@
 <script lang="ts">
   import controllerCSS from '../assets/controller.css?raw';
   import { applyAppearance, createControllerView } from '../lib/media/controller-view';
+  import { ACTIONS } from '../lib/settings/key-actions';
 
   let { opacity, size, startHidden }: { opacity: number; size: number; startHidden: boolean } = $props();
   let expanded = $state(false);
@@ -35,7 +36,7 @@
   <div class="preview-frame" role="img" aria-label={`Controller preview: ${expanded ? 'expanded at full opacity' : `at rest at ${Math.round(opacity * 100)}% opacity`}, ${size} pixel button size`}>
     <div class="preview-overlay" aria-hidden="true" inert use:preview={{ opacity, size, expanded }}></div>
   </div>
-  <p>{startHidden ? 'Starts hidden. Use the Show/Hide Controller shortcut to reveal it.' : 'Hover or focus the controller to reveal its buttons at full opacity.'}</p>
+  <p>{startHidden ? `Starts hidden. Use the ${ACTIONS.display.label} shortcut to reveal it.` : 'Hover or focus the controller to reveal its buttons at full opacity.'}</p>
 </div>
 
 <style>

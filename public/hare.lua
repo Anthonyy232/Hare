@@ -1,7 +1,7 @@
 -- Hare sync for mpv: lets the Hare browser extension keep this player in sync with a browser tab.
 -- Install: put this file in mpv's scripts folder
 --   Windows: %APPDATA%\mpv\scripts\    macOS and Linux: ~/.config/mpv/scripts/
--- Then open a video in mpv and choose it in Hare's Sync Mode list.
+-- Then open a video in mpv and choose it in Hare's Sync mode list.
 -- It also plays Hare's Open in video player links from sites that check where requests come from.
 
 local msg = require 'mp.msg'

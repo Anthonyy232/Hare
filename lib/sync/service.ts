@@ -6,7 +6,7 @@ import { createTransport, syncCandidates } from './transport';
 import { KEEPALIVE_PORT, MPV_TAB_ID } from './types';
 
 /**
- * Sync Mode's background side. Registers its browser listeners when created, so call it
+ * Sync mode's background side. Registers its browser listeners when created, so call it
  * synchronously while the background worker starts.
  */
 export function startSyncService() {

@@ -70,7 +70,7 @@
         nextSiteAction = includeSite(settings.blacklist, url.hostname) === null ? 'settings' : 'include';
         nextHint = nextSiteAction === 'include'
           ? 'Use Hare on this site to restore playback controls, including embedded players.'
-          : 'A broader domain or regular expression excludes this site. Edit Excluded sites in Settings to use Hare here.';
+          : 'A broader domain or regular expression excludes this site. Edit the excluded sites in Settings to use Hare here.';
         throw new Error('This site is excluded');
       }
       const frames = await getTabMedia(tabId);
@@ -136,7 +136,7 @@
         const tab = await browser.tabs.get(tabId!);
         if (tab.url !== actionUrl) throw new Error('The tab navigated. Try again on the new page.');
         const remaining = includeSite(settings.blacklist, new URL(actionUrl).hostname);
-        if (remaining === null) throw new Error('A broader rule excludes this site. Edit Excluded sites in Settings.');
+        if (remaining === null) throw new Error('A broader rule excludes this site. Edit the excluded sites in Settings.');
         settings.blacklist = remaining;
       }
       await saveSettings(settings);
