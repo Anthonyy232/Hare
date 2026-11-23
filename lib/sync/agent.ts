@@ -26,7 +26,7 @@ export class SyncAgent implements SyncPlayer {
   private buffering: boolean;
   private destroyed = false;
   private seekDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly correction: RateCorrection;
+  private readonly correction: RateCorrection<void>;
   private readonly listeners = new AbortController();
 
   constructor(

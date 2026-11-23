@@ -176,14 +176,14 @@ describe('SyncAgent', () => {
 
   it('leaves user play observable after a no-op remote play', () => {
     (video as any)._paused = false;
-    agent.play();
+    void agent.play();
     video.dispatchEvent(new Event('play'));
     expect(sendEvent).toHaveBeenCalledTimes(1);
   });
 
   describe('coordinator-issued play buffering behavior', () => {
     it('reports real buffering during coordinator-initiated play', () => {
-      agent.play();
+      void agent.play();
       video.dispatchEvent(new Event('play'));
 
       video.dispatchEvent(new Event('waiting'));
@@ -208,7 +208,7 @@ describe('SyncAgent', () => {
     });
 
     it('ignores waiting after a remote pause', () => {
-      agent.play();
+      void agent.play();
       agent.pause(undefined, false);
       video.dispatchEvent(new Event('pause'));
       video.dispatchEvent(new Event('waiting'));

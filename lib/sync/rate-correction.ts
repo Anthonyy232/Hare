@@ -4,12 +4,13 @@ import { logger } from '../logger';
  * A short speed-up or slow-down that drift correction layers over a player's chosen rate.
  * Seeks end it early (restore); a newly chosen rate replaces it (setBase).
  */
-export class RateCorrection {
+/** `R` is what applying a rate returns: nothing for a page player, a request for mpv. */
+export class RateCorrection<R extends void | Promise<unknown>> {
   private timer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private baseRate: number,
-    private readonly applyRate: (rate: number) => void | Promise<unknown>,
+    private readonly applyRate: (rate: number) => R,
   ) {}
 
   /** The rate the player runs at without a correction. */
@@ -17,7 +18,7 @@ export class RateCorrection {
     return this.baseRate;
   }
 
-  apply(rateFactor: number, durationMs: number): void | Promise<unknown> {
+  apply(rateFactor: number, durationMs: number): R {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = undefined;
@@ -29,7 +30,7 @@ export class RateCorrection {
   }
 
   /** Ends a running correction at the chosen rate. */
-  restore(): void | Promise<unknown> {
+  restore(): R | undefined {
     if (this.timer === undefined) return;
     clearTimeout(this.timer);
     this.timer = undefined;

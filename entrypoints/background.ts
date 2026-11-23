@@ -29,13 +29,11 @@ export default defineBackground(() => {
     return true;
   });
 
-  browser.runtime.onInstalled.addListener(async details => {
+  browser.runtime.onInstalled.addListener(details => {
     if (details.reason !== 'install') return;
-    try {
-      // Preserve settings already synced from another installation.
-      await saveSettings(await loadSettings());
-    } catch (error) {
-      logger.error('Could not initialize settings; existing storage was preserved:', error);
-    }
+    // Preserve settings already synced from another installation.
+    loadSettings()
+      .then(saveSettings)
+      .catch(error => logger.error('Could not initialize settings; existing storage was preserved:', error));
   });
 });

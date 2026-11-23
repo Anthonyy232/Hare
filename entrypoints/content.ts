@@ -128,12 +128,14 @@ export default defineContentScript({
       inBackForwardCache = true;
       reconcile();
     };
-    const handlePageShow = async (event: PageTransitionEvent) => {
+    const handlePageShow = (event: PageTransitionEvent) => {
       if (!event.persisted || cleanedUp) return;
       // Cleared first so a pagehide during the read puts the page back in the cache.
       inBackForwardCache = false;
-      settings = await readSettings();
-      reconcile();
+      void readSettings().then(stored => {
+        settings = stored;
+        reconcile();
+      });
     };
     ctx.onInvalidated(cleanup);
     window.addEventListener('pagehide', handlePageHide);

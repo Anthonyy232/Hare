@@ -10,7 +10,7 @@ let writes = Promise.resolve();
 // Local storage survives updates: Firefox can keep pre-update pages running after their
 // performance resource lists have filled up, leaving these records as the only source.
 async function manifests(tabId: number): Promise<string[]> {
-  const stored = (await browser.storage.local.get(key(tabId))) as Record<string, string[] | undefined>;
+  const stored = await browser.storage.local.get<Record<string, string[] | undefined>>(key(tabId));
   return stored[key(tabId)] ?? [];
 }
 

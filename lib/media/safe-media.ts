@@ -6,7 +6,10 @@ const mediaProto = HTMLMediaElement.prototype;
 
 const currentTimeDescriptor = Object.getOwnPropertyDescriptor(mediaProto, 'currentTime')!;
 const playbackRateDescriptor = Object.getOwnPropertyDescriptor(mediaProto, 'playbackRate')!;
+// Called with .call on each element, so they never rely on a bound this.
+// oxlint-disable-next-line typescript/unbound-method
 const playMethod = mediaProto.play;
+// oxlint-disable-next-line typescript/unbound-method
 const pauseMethod = mediaProto.pause;
 
 export function clampSeekTime(media: HTMLMediaElement, value: number): number {
@@ -29,7 +32,7 @@ export function clampSeekTime(media: HTMLMediaElement, value: number): number {
 
 export const safeMedia = {
   getCurrentTime(media: HTMLMediaElement): number {
-    return currentTimeDescriptor.get!.call(media);
+    return currentTimeDescriptor.get!.call(media) as number;
   },
 
   setCurrentTime(media: HTMLMediaElement, value: number): void {
@@ -37,7 +40,7 @@ export const safeMedia = {
   },
 
   getPlaybackRate(media: HTMLMediaElement): number {
-    return playbackRateDescriptor.get!.call(media);
+    return playbackRateDescriptor.get!.call(media) as number;
   },
 
   setPlaybackRate(media: HTMLMediaElement, value: number): void {
