@@ -26,11 +26,11 @@
     "@typescript/native": "npm:typescript@^7.0.2",
     "@wxt-dev/module-svelte": "^2.0.5",
     "happy-dom": "^21.0.4",
-    "svelte": "^5.57.3",
+    "svelte": "^5.59.1",
     "svelte-check": "^4.7.8",
     "typescript": "^6.0.3",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0",
+    "vitest": "^5.1.1",
     "wxt": "^0.21.5"
   },
   "engines": {
