@@ -62,7 +62,7 @@ async function capture(scheme) {
       // The live on-page controller at 1.50x; build.cjs draws it expanded on the video mock.
       const html = await a.locator('hare-controller').evaluate(({ shadowRoot }) =>
         `<style>\n${shadowRoot.adoptedStyleSheets.flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText)).join('\n')}\n</style>\n${shadowRoot.innerHTML}`);
-      if (!html.includes('1.50x')) throw new Error('Controller is not at 1.50x');
+      if (!html.includes('1.50×')) throw new Error('Controller is not at 1.50×');
       fs.writeFileSync(`${out}/controller.html`, html + '\n');
     }
 
