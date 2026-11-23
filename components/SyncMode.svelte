@@ -147,7 +147,7 @@
   });
 </script>
 
-<section class="sync-section" aria-label="Video sync">
+<section class="sync-section" aria-label="Sync mode">
   {#if message}<div class="sync-error" role="alert">{message}</div>{/if}
   {#if active}
     <div class="sync-active">

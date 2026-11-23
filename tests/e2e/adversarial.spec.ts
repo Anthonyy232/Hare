@@ -138,7 +138,7 @@ test('browser restart preserves settings and clears the old sync session', async
 test('settings conflicts preserve numeric drafts and discard reloads the saved values', async ({ extension }) => {
   const first = await openUI(extension, 'options');
   const second = await openUI(extension, 'options');
-  const draft = first.getByRole('spinbutton', { name: 'Reset speed Target speed' });
+  const draft = first.getByRole('spinbutton', { name: 'Target speed for Reset speed' });
   await draft.fill('1.75');
   await second.getByRole('slider', { name: 'Controller opacity' }).fill('0.6');
   await second.getByRole('button', { name: 'Save settings' }).click();
@@ -190,8 +190,8 @@ test('shortcut capture rejects duplicates and modifiers, clears keys, and suppor
   await expect(key).toHaveText('D');
   await key.click();
   await key.press('k');
-  await options.getByRole('spinbutton', { name: 'Advance Time step' }).fill('3.25');
-  await options.getByRole('spinbutton', { name: 'Advance Time step' }).press('Enter');
+  await options.getByRole('spinbutton', { name: 'Time step for Advance' }).fill('3.25');
+  await options.getByRole('spinbutton', { name: 'Time step for Advance' }).press('Enter');
   await options.getByRole('button', { name: 'Save settings' }).click();
   await expect(options.getByText('Settings saved', { exact: true })).toBeVisible();
   await video.bringToFront();

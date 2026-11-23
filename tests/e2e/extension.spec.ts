@@ -246,7 +246,7 @@ test('appearance preview follows drafts and shortcut controls fit narrow setting
   await shortcut.press('k');
   await expect(shortcut).toHaveText('K');
   await shortcut.click();
-  await options.getByRole('spinbutton', { name: 'Decrease speed Speed step' }).click();
+  await options.getByRole('spinbutton', { name: 'Speed step for Decrease speed' }).click();
   await expect(shortcut).toHaveAttribute('aria-pressed', 'false');
 });
 
@@ -281,7 +281,7 @@ test('settings save follows value drafts and invalid patterns are explained', as
   const page = await openUI(extension, 'options');
   const save = page.getByRole('button', { name: 'Save settings' });
   await expect(save).toBeDisabled();
-  await page.getByRole('spinbutton', { name: 'Reset speed Target speed' }).fill('1.5');
+  await page.getByRole('spinbutton', { name: 'Target speed for Reset speed' }).fill('1.5');
   await page.locator('h1').click();
   await expect(save).toBeEnabled();
   await save.click();
@@ -371,7 +371,7 @@ test('popup follows navigation in its target tab before restoring a site', async
 
 test('shortcut value drafts can be committed with Enter and cancelled with Escape', async ({ extension }) => {
   const options = await openUI(extension, 'options');
-  const target = options.getByRole('spinbutton', { name: 'Reset speed Target speed' });
+  const target = options.getByRole('spinbutton', { name: 'Target speed for Reset speed' });
   await target.fill('1.75');
   await target.press('Escape');
   await expect(target).toHaveValue('1');

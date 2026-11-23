@@ -134,7 +134,7 @@
                 value={binding.value} step="0.01"
                 min={action.value.min}
                 max={action.value.max}
-                aria-label={`${action.label} ${action.value.label}`}
+                aria-label={`${action.value.label} for ${action.label}`}
                 onkeydown={(event) => {
                   if (event.key !== 'Enter' && event.key !== 'Escape') return;
                   event.preventDefault();
