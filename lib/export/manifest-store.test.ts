@@ -34,7 +34,7 @@ describe('recorded stream manifests', () => {
     for (let i = 0; i < 22; i++) recordManifest(1, `https://media.test/${i}.mpd`);
     recordManifest(1, 'https://media.test/5.mpd');
     expect(await findManifest(1, [])).toBe('https://media.test/21.mpd');
-    const { 'manifests-1': stored } = (await browser.storage.local.get('manifests-1')) as Record<string, string[]>;
+    const { 'manifests-1': stored } = await browser.storage.local.get<Record<string, string[]>>('manifests-1');
     expect(stored).toHaveLength(20);
     expect(stored[0]).toBe('https://media.test/2.mpd');
   });

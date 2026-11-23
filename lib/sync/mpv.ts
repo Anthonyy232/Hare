@@ -29,7 +29,7 @@ interface MpvEvents {
 export class MpvClient implements SyncPlayer {
   private fileTitle = 'mpv';
   private file: string | null = null;
-  private correction: RateCorrection | null = null;
+  private correction: RateCorrection<Promise<unknown>> | null = null;
   private listener: AbortController | null = null;
 
   constructor(
@@ -121,7 +121,7 @@ export class MpvClient implements SyncPlayer {
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
     if (!response.ok) throw new Error(`mpv replied ${response.status}.`);
-    return response.json();
+    return response.json() as Promise<T>;
   }
 
   private async state(path = '/state'): Promise<SyncPositionResponse> {
