@@ -1,6 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { isBlacklisted, normalizeSettings, loadSettings, saveSettings, watchSettings, validateBlacklist, includeSite } from './settings';
+import { isBlacklisted, normalizeSettings, loadSettings, saveSettings, watchSettings, validateBlacklist, includeSite, siteBlock } from './settings';
 import type { KeyBinding } from './key-actions';
 import { DEFAULT_SETTINGS } from './schema';
 
@@ -123,6 +123,18 @@ describe('site exclusions', () => {
 
     it.each(['example.com', '/^player/'])('cannot include a site that %s still excludes', rule => {
         expect(includeSite(`${rule}\nplayer.example.com`, 'player.example.com')).toBeNull();
+    });
+
+    it('asks to turn Hare on before anything else', () => {
+        expect(siteBlock({ ...DEFAULT_SETTINGS, enabled: false }, 'chrome://extensions')?.action).toBe('enable');
+        expect(siteBlock(DEFAULT_SETTINGS, 'chrome://extensions')?.action).toBeNull();
+    });
+
+    it('offers to include an excluded site only when no broader rule excludes it', () => {
+        const settings = { ...DEFAULT_SETTINGS, blacklist: 'player.example.com\n/^cdn\\./' };
+        expect(siteBlock(settings, 'https://player.example.com/watch')?.action).toBe('include');
+        expect(siteBlock(settings, 'https://cdn.example.com/')?.action).toBe('settings');
+        expect(siteBlock(settings, 'https://example.com/')).toBeNull();
     });
 
     it('handles mixed content and empty lines', () => {

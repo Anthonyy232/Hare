@@ -4,8 +4,7 @@
   import SyncMode from "../../components/SyncMode.svelte";
   import logo from "../../assets/logo.svg";
   import { clampSpeed, sameSpeed } from "../../lib/speed";
-  import { isHarePage } from "../../lib/hostname";
-  import { loadSettings, saveSettings, isBlacklisted, includeSite } from "../../lib/settings/settings";
+  import { loadSettings, saveSettings, includeSite, siteBlock, type SiteAction } from "../../lib/settings/settings";
   import { getTabMedia, setTabSpeed } from "../../lib/messaging";
   import { exportToPlayer } from "../../lib/export/player-export";
 
@@ -32,7 +31,7 @@
   let tabId: number | null = null;
   let tabUrl = '';
   let siteLabel = $state('Current tab');
-  let siteAction: 'enable' | 'include' | 'settings' | null = $state(null);
+  let siteAction: SiteAction | null = $state(null);
   let toastTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function showToast(message: string, error = true) {
@@ -56,22 +55,11 @@
       // Without the tabs permission, protected pages can omit their URL entirely.
       const url = tabUrl ? new URL(tabUrl) : null;
       siteLabel = url ? (url.protocol === 'file:' ? 'Local file' : url.hostname || 'Current tab') : 'Browser page';
-      const settings = await loadSettings();
-      if (!settings.enabled) {
-        nextSiteAction = 'enable';
-        nextHint = 'Enable Hare to control playback.';
-        throw new Error('Hare is turned off');
-      }
-      if (!url || !isHarePage(tabUrl)) {
-        nextHint = 'Open a regular webpage with video or audio.';
-        throw new Error('Hare cannot run on this browser page');
-      }
-      if (isBlacklisted(settings.blacklist, url.hostname)) {
-        nextSiteAction = includeSite(settings.blacklist, url.hostname) === null ? 'settings' : 'include';
-        nextHint = nextSiteAction === 'include'
-          ? 'Use Hare on this site to restore playback controls, including embedded players.'
-          : 'A broader domain or regular expression excludes this site. Edit the excluded sites in Settings to use Hare here.';
-        throw new Error('This site is excluded');
+      const block = siteBlock(await loadSettings(), tabUrl);
+      if (block) {
+        nextHint = block.hint;
+        nextSiteAction = block.action;
+        throw new Error(block.reason);
       }
       const frames = await getTabMedia(tabId);
       const result = summarize(frames.flatMap(frame => frame.speeds));
