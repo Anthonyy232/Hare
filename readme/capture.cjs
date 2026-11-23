@@ -50,12 +50,12 @@ async function capture(scheme) {
     };
     await shot('popup');
 
-    await popup.getByRole('button', { name: 'Sync Mode' }).click();
+    await popup.getByRole('button', { name: 'Sync mode' }).click();
     const candidates = popup.locator('.candidate');
     await candidates.nth(1).waitFor();
     await candidates.nth(0).click();
     await candidates.nth(1).click();
-    await popup.getByRole('button', { name: 'Start Sync' }).waitFor();
+    await popup.getByRole('button', { name: 'Start sync' }).waitFor();
     await shot('sync-setup');
 
     if (scheme === 'light') {
