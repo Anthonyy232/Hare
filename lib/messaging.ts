@@ -1,6 +1,11 @@
 import { browser } from 'wxt/browser';
 import type { HareMessage, Reply } from './messages';
 
+/** The reply to a request whose handler threw. */
+export function failureReply(error: unknown) {
+  return { success: false, error: error instanceof Error ? error.message : String(error) } as const;
+}
+
 export async function withTimeout<T>(request: Promise<T>, timeoutMs = 2500): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

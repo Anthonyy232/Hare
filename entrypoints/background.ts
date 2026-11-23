@@ -3,6 +3,7 @@ import { logger } from '../lib/logger';
 import { startSyncService } from '../lib/sync/service';
 import { findManifest, watchManifests } from '../lib/export/manifest-store';
 import type { HareMessage, Replies } from '../lib/messages';
+import { failureReply } from '../lib/messaging';
 
 export default defineBackground(() => {
   const sync = startSyncService();
@@ -21,7 +22,7 @@ export default defineBackground(() => {
     };
     void handle().then(sendResponse, error => {
       logger.warn('Extension request failed:', error);
-      sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
+      sendResponse(failureReply(error));
     });
     return true;
   });
