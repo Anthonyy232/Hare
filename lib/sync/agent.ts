@@ -33,7 +33,7 @@ export class SyncAgent implements SyncPlayer {
     private readonly controller: SyncedController,
     private readonly sendEvent: (event: SyncEventPayload) => void,
   ) {
-    const media = this.media = controller.media;
+    const media = (this.media = controller.media);
     this.correction = new RateCorrection(controller.intendedSpeed, rate => controller.applyTransientRate(rate));
     this.buffering = !media.paused && media.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
     controller.setIntendedSpeedListener(rate => this.handleIntendedSpeed(rate));
@@ -75,8 +75,9 @@ export class SyncAgent implements SyncPlayer {
   private handleSeeked(): void {
     // A seek within buffered data never drops readyState, so 'canplay' won't follow.
     if (this.media.paused && this.media.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) this.handleReady();
-    const remoteSeek = this.pendingSeekPosition !== null
-      && Math.abs(safeMedia.getCurrentTime(this.media) - this.pendingSeekPosition) < IN_SYNC_SECONDS;
+    const remoteSeek =
+      this.pendingSeekPosition !== null &&
+      Math.abs(safeMedia.getCurrentTime(this.media) - this.pendingSeekPosition) < IN_SYNC_SECONDS;
     this.pendingSeekPosition = null;
     if (remoteSeek) return;
     if (this.seekDebounceTimer) clearTimeout(this.seekDebounceTimer);

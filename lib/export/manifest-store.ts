@@ -10,7 +10,7 @@ let writes = Promise.resolve();
 // Local storage survives updates: Firefox can keep pre-update pages running after their
 // performance resource lists have filled up, leaving these records as the only source.
 async function manifests(tabId: number): Promise<string[]> {
-  const stored = await browser.storage.local.get(key(tabId)) as Record<string, string[] | undefined>;
+  const stored = (await browser.storage.local.get(key(tabId))) as Record<string, string[] | undefined>;
   return stored[key(tabId)] ?? [];
 }
 
@@ -20,8 +20,12 @@ function write(operation: () => Promise<void>): void {
 
 /** Records the manifests each tab requests, for as long as the tab shows the same page. Call it while the background worker starts. */
 export function watchManifests(): void {
-  browser.webRequest.onCompleted.addListener(({ tabId, url }) => recordManifest(tabId, url), { urls: MANIFEST_URL_PATTERNS });
-  browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => { if (frameId === 0) forgetManifests(tabId); });
+  browser.webRequest.onCompleted.addListener(({ tabId, url }) => recordManifest(tabId, url), {
+    urls: MANIFEST_URL_PATTERNS,
+  });
+  browser.webNavigation.onCommitted.addListener(({ tabId, frameId }) => {
+    if (frameId === 0) forgetManifests(tabId);
+  });
   browser.tabs.onRemoved.addListener(forgetManifests);
   browser.runtime.onStartup.addListener(forgetAllManifests);
 }
@@ -49,12 +53,18 @@ export function forgetAllManifests(): void {
 
 export async function findManifest(tabId: number, pageManifests: string[]): Promise<string | null> {
   await writes;
-  const urls = [...new Set([...pageManifests, ...await manifests(tabId)])].slice(-MAX_MANIFESTS);
-  const texts = await Promise.all(urls.map(async url => {
-    try {
-      return await (await fetch(url, { signal: AbortSignal.timeout(2500) })).text();
-    } catch { return ''; }
-  }));
+  const urls = [...new Set([...pageManifests, ...(await manifests(tabId))])].slice(-MAX_MANIFESTS);
+  const texts = await Promise.all(
+    urls.map(async url => {
+      try {
+        return await (await fetch(url, { signal: AbortSignal.timeout(2500) })).text();
+      } catch {
+        return '';
+      }
+    }),
+  );
   // HLS players request single-quality playlists after the master listing all qualities.
-  return urls.findLast((_, i) => texts[i].includes('#EXT-X-STREAM-INF') || texts[i].includes('<MPD')) ?? urls.at(-1) ?? null;
+  return (
+    urls.findLast((_, i) => texts[i].includes('#EXT-X-STREAM-INF') || texts[i].includes('<MPD')) ?? urls.at(-1) ?? null
+  );
 }

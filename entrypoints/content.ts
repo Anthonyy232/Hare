@@ -1,18 +1,18 @@
-import { loadSettings, watchSettings, isBlacklisted } from '../lib/settings/settings';
-import { DEFAULT_SETTINGS, type Settings } from '../lib/settings/schema';
-import type { VideoController } from '../lib/media/controller';
-import { MediaRegistry } from '../lib/media/registry';
-import { listenForShortcuts } from '../lib/media/keybinds';
-import { bridgeCrossFramePointers } from '../lib/media/cross-frame-pointer';
-import { listenForParentActions } from '../lib/media/frame-actions';
-import { getSiteHandler } from '../lib/media/site-handlers';
-import { primaryMedia } from '../lib/media/detector';
 import { describeStream } from '../lib/export/stream';
-import { SyncEndpoint } from '../lib/sync/endpoint';
-import type { HareMessage, Replies } from '../lib/messages';
-import { logger } from '../lib/logger';
 import { HARE_MATCHES } from '../lib/hostname';
+import { logger } from '../lib/logger';
+import type { VideoController } from '../lib/media/controller';
+import { bridgeCrossFramePointers } from '../lib/media/cross-frame-pointer';
+import { primaryMedia } from '../lib/media/detector';
+import { listenForParentActions } from '../lib/media/frame-actions';
+import { listenForShortcuts } from '../lib/media/keybinds';
+import { MediaRegistry } from '../lib/media/registry';
+import { getSiteHandler } from '../lib/media/site-handlers';
+import type { HareMessage, Replies } from '../lib/messages';
 import { failureReply, sendToBackground, withTimeout } from '../lib/messaging';
+import { DEFAULT_SETTINGS, type Settings } from '../lib/settings/schema';
+import { isBlacklisted, loadSettings, watchSettings } from '../lib/settings/settings';
+import { SyncEndpoint } from '../lib/sync/endpoint';
 
 export default defineContentScript({
   matches: HARE_MATCHES,
@@ -22,15 +22,18 @@ export default defineContentScript({
 
   async main(ctx) {
     const sync = new SyncEndpoint();
-    const readSettings = (): Promise<Settings> => loadSettings().catch(error => {
-      logger.warn('Failed to load settings:', error);
-      return structuredClone(DEFAULT_SETTINGS);
-    });
+    const readSettings = (): Promise<Settings> =>
+      loadSettings().catch(error => {
+        logger.warn('Failed to load settings:', error);
+        return structuredClone(DEFAULT_SETTINGS);
+      });
 
     let settings = await readSettings();
     // Embedded frames also honor the top page's exclusion.
-    const pageHostname = await withTimeout(sendToBackground({ type: 'GET_PAGE_CONTEXT' }))
-      .then(reply => reply.hostname ?? location.hostname, () => location.hostname);
+    const pageHostname = await withTimeout(sendToBackground({ type: 'GET_PAGE_CONTEXT' })).then(
+      reply => reply.hostname ?? location.hostname,
+      () => location.hostname,
+    );
 
     let inBackForwardCache = false;
     let cleanedUp = false;
@@ -39,8 +42,12 @@ export default defineContentScript({
     const connectedControllers = (): VideoController[] => running?.registry.connectedControllers() ?? [];
 
     const reconcile = (): void => {
-      const shouldRun = settings.enabled && !inBackForwardCache && !cleanedUp
-        && !isBlacklisted(settings.blacklist, location.hostname) && !isBlacklisted(settings.blacklist, pageHostname);
+      const shouldRun =
+        settings.enabled &&
+        !inBackForwardCache &&
+        !cleanedUp &&
+        !isBlacklisted(settings.blacklist, location.hostname) &&
+        !isBlacklisted(settings.blacklist, pageHostname);
       if (running && !shouldRun) {
         running.stopInput();
         sync.deactivate(true);

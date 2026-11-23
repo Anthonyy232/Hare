@@ -1,6 +1,6 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { VideoController } from './controller';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../settings/schema';
+import { VideoController } from './controller';
 import { safeMedia } from './safe-media';
 import { getSiteHandler } from './site-handlers';
 
@@ -13,17 +13,27 @@ describe('controller', () => {
     video = document.querySelector('video')!;
     controller = new VideoController(video, structuredClone(DEFAULT_SETTINGS), getSiteHandler('example.com'));
   });
-  afterEach(() => { controller.destroy(); vi.restoreAllMocks(); vi.useRealTimers(); });
+  afterEach(() => {
+    controller.destroy();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
   it('does not throw or notify sync when a player rejects a rate', () => {
-    const listener = vi.fn(); controller.setIntendedSpeedListener(listener);
-    vi.spyOn(safeMedia, 'setPlaybackRate').mockImplementation(() => { throw new Error('Unsupported speed'); });
+    const listener = vi.fn();
+    controller.setIntendedSpeedListener(listener);
+    vi.spyOn(safeMedia, 'setPlaybackRate').mockImplementation(() => {
+      throw new Error('Unsupported speed');
+    });
     expect(() => controller.setSpeed(0.07)).not.toThrow();
     expect(controller.intendedSpeed).toBe(1);
     expect(listener).not.toHaveBeenCalled();
-    expect(document.querySelector('hare-controller')!.shadowRoot!.querySelector('.hare-osd')!.textContent).toBe('Speed control blocked');
+    expect(document.querySelector('hare-controller')!.shadowRoot!.querySelector('.hare-osd')!.textContent).toBe(
+      'Speed control blocked',
+    );
   });
   it('stops controlling the media once destroyed', async () => {
-    const callback = vi.fn(); controller.setIntendedSpeedListener(callback);
+    const callback = vi.fn();
+    controller.setIntendedSpeedListener(callback);
     controller.setSpeed(2);
     controller.destroy();
     await vi.advanceTimersByTimeAsync(6000);
@@ -35,7 +45,8 @@ describe('controller', () => {
     expect(callback).toHaveBeenCalledTimes(1);
   });
   it('does not mount inside a video matching a player selector', () => {
-    controller.destroy(); video.className = 'vjs-tech';
+    controller.destroy();
+    video.className = 'vjs-tech';
     controller = new VideoController(video, structuredClone(DEFAULT_SETTINGS), getSiteHandler('example.com'));
     expect(video.querySelector('hare-controller')).toBeNull();
     expect(video.parentElement!.querySelector('hare-controller')).not.toBeNull();
@@ -47,13 +58,26 @@ describe('controller', () => {
     expect(video.playbackRate).toBe(2);
   });
   it('keeps the blocked warning when a shortcut speed is refused', () => {
-    vi.spyOn(safeMedia, 'setPlaybackRate').mockImplementation(() => { throw new Error('refused'); });
+    vi.spyOn(safeMedia, 'setPlaybackRate').mockImplementation(() => {
+      throw new Error('refused');
+    });
     controller.perform('faster', 0.1);
-    expect(document.querySelector('hare-controller')!.shadowRoot!.querySelector('.hare-osd')!.textContent).toBe('Speed control blocked');
+    expect(document.querySelector('hare-controller')!.shadowRoot!.querySelector('.hare-osd')!.textContent).toBe(
+      'Speed control blocked',
+    );
   });
   it('honors distinct forward/backward button steps', () => {
-    controller.updateSettings({ ...DEFAULT_SETTINGS, keyBindings: DEFAULT_SETTINGS.keyBindings.map(binding => ({ ...binding, value: binding.action === 'slower' ? 0.25 : binding.value })) });
-    document.querySelector('hare-controller')!.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="slower"]')!.click();
+    controller.updateSettings({
+      ...DEFAULT_SETTINGS,
+      keyBindings: DEFAULT_SETTINGS.keyBindings.map(binding => ({
+        ...binding,
+        value: binding.action === 'slower' ? 0.25 : binding.value,
+      })),
+    });
+    document
+      .querySelector('hare-controller')!
+      .shadowRoot!.querySelector<HTMLButtonElement>('[data-action="slower"]')!
+      .click();
     expect(controller.speed).toBe(0.75);
   });
   it('restores shared parent styles only after the last controller is removed', () => {
@@ -61,7 +85,8 @@ describe('controller', () => {
     const parent = video.parentElement!;
     parent.style.position = 'static';
     controller = new VideoController(video, structuredClone(DEFAULT_SETTINGS), getSiteHandler('example.com'));
-    const secondVideo = document.createElement('video'); parent.append(secondVideo);
+    const secondVideo = document.createElement('video');
+    parent.append(secondVideo);
     const second = new VideoController(secondVideo, structuredClone(DEFAULT_SETTINGS), getSiteHandler('example.com'));
     controller.destroy();
     expect(parent.style.position).toBe('relative');

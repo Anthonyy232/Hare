@@ -2,7 +2,7 @@ import type { HareMessage, Reply } from '../messages';
 import { IN_SYNC_SECONDS, positionAt } from './types';
 
 const SYNC_COMMANDS = ['SYNC_PAUSE', 'SYNC_PLAY', 'SYNC_SEEK', 'SYNC_RATE', 'SYNC_DRIFT_CORRECT'] as const;
-export type SyncCommand = Extract<HareMessage, { type: typeof SYNC_COMMANDS[number] }>;
+export type SyncCommand = Extract<HareMessage, { type: (typeof SYNC_COMMANDS)[number] }>;
 
 /** Move to `position`, unless the player is already within `tolerance` seconds of it. */
 export interface SeekTarget {

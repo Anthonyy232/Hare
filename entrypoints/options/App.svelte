@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import KeybindEditor from "../../components/KeybindEditor.svelte";
-  import BlacklistEditor from "../../components/BlacklistEditor.svelte";
-  import ControllerPreview from "../../components/ControllerPreview.svelte";
-  import logo from "../../assets/logo.svg";
+  import { onMount } from 'svelte';
+  import logo from '../../assets/logo.svg';
+  import BlacklistEditor from '../../components/BlacklistEditor.svelte';
+  import ControllerPreview from '../../components/ControllerPreview.svelte';
+  import KeybindEditor from '../../components/KeybindEditor.svelte';
+  import { BUTTON_SIZE_RANGE, OPACITY_RANGE, type Settings } from '../../lib/settings/schema';
   import {
     loadSettings,
-    saveSettings,
     resetSettings,
-    watchSettings,
+    saveSettings,
     validateBlacklist,
-  } from "../../lib/settings/settings";
-  import { OPACITY_RANGE, BUTTON_SIZE_RANGE, type Settings } from "../../lib/settings/schema";
+    watchSettings,
+  } from '../../lib/settings/settings';
 
   const SAVE_FEEDBACK_MS = 2000;
   let settings: Settings | null = $state(null);

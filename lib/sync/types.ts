@@ -52,10 +52,19 @@ interface PlaybackPoint {
 }
 
 /** Without a position, pause and play leave the player where it is. */
-export interface SyncPausePayload { position?: number; buffering?: boolean }
-export interface SyncPlayPayload { from?: PlaybackPoint }
-export interface SyncSeekPayload { position: number }
-export interface SyncRatePayload { rate: number }
+export interface SyncPausePayload {
+  position?: number;
+  buffering?: boolean;
+}
+export interface SyncPlayPayload {
+  from?: PlaybackPoint;
+}
+export interface SyncSeekPayload {
+  position: number;
+}
+export interface SyncRatePayload {
+  rate: number;
+}
 
 export type DriftCorrectPayload =
   | { method: 'seek'; position: number }
@@ -74,13 +83,13 @@ export interface SyncPositionResponse {
 export type SyncStatusResponse =
   | { active: false }
   | {
-    active: true;
-    videoA: { title: string };
-    videoB: { title: string };
-    offset: number;
-    nudgeStep: number;
-  };
+      active: true;
+      videoA: { title: string };
+      videoB: { title: string };
+      offset: number;
+      nudgeStep: number;
+    };
 
 export function positionAt(position: number, rate: number, timestamp: number, now = Date.now()): number {
-  return position + rate * (now - timestamp) / 1000;
+  return position + (rate * (now - timestamp)) / 1000;
 }

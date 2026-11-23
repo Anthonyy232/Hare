@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { findManifest, forgetAllManifests, forgetManifests, recordManifest } from './manifest-store';
@@ -8,7 +8,13 @@ describe('recorded stream manifests', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('waits for pending recordings and prefers a master playlist over later variants', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(url.includes('master') ? '#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1920x1080' : '#EXTM3U')));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async (url: string) =>
+          new Response(url.includes('master') ? '#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1920x1080' : '#EXTM3U'),
+      ),
+    );
     recordManifest(1, 'https://media.test/master.m3u8');
     recordManifest(1, 'https://media.test/variant.m3u8');
     expect(await findManifest(1, [])).toBe('https://media.test/master.m3u8');
@@ -28,7 +34,7 @@ describe('recorded stream manifests', () => {
     for (let i = 0; i < 22; i++) recordManifest(1, `https://media.test/${i}.mpd`);
     recordManifest(1, 'https://media.test/5.mpd');
     expect(await findManifest(1, [])).toBe('https://media.test/21.mpd');
-    const { 'manifests-1': stored } = await browser.storage.local.get('manifests-1') as Record<string, string[]>;
+    const { 'manifests-1': stored } = (await browser.storage.local.get('manifests-1')) as Record<string, string[]>;
     expect(stored).toHaveLength(20);
     expect(stored[0]).toBe('https://media.test/2.mpd');
   });

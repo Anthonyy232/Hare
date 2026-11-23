@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SPEED, sameSpeed } from "../lib/speed";
+  import { SPEED, sameSpeed } from '../lib/speed';
 
   interface Props {
     speed: number;

@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import SpeedControl from "../../components/SpeedControl.svelte";
-  import SyncMode from "../../components/SyncMode.svelte";
-  import logo from "../../assets/logo.svg";
-  import { clampSpeed, sameSpeed } from "../../lib/speed";
-  import { loadSettings, saveSettings, includeSite, siteBlock, type SiteAction } from "../../lib/settings/settings";
-  import { getTabMedia, setTabSpeed } from "../../lib/messaging";
-  import { exportToPlayer } from "../../lib/export/player-export";
+  import { onMount } from 'svelte';
+  import logo from '../../assets/logo.svg';
+  import SpeedControl from '../../components/SpeedControl.svelte';
+  import SyncMode from '../../components/SyncMode.svelte';
+  import { exportToPlayer } from '../../lib/export/player-export';
+  import { getTabMedia, setTabSpeed } from '../../lib/messaging';
+  import { includeSite, loadSettings, type SiteAction, saveSettings, siteBlock } from '../../lib/settings/settings';
+  import { clampSpeed, sameSpeed } from '../../lib/speed';
 
   interface MediaSummary {
     videoCount: number;

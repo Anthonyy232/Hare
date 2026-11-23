@@ -2,7 +2,7 @@
   import controllerCSS from '../assets/controller.css?raw';
   import { applyAppearance, createControllerView } from '../lib/media/controller-view';
   import { ACTIONS } from '../lib/settings/key-actions';
-  import { SPEED, formatSpeed } from '../lib/speed';
+  import { formatSpeed, SPEED } from '../lib/speed';
 
   let { opacity, size, startHidden }: { opacity: number; size: number; startHidden: boolean } = $props();
   let expanded = $state(false);

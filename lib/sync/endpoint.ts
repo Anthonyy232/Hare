@@ -1,4 +1,4 @@
-import { browser, type Browser } from 'wxt/browser';
+import { type Browser, browser } from 'wxt/browser';
 import type { VideoController } from '../media/controller';
 import { primaryMedia } from '../media/detector';
 import type { HareMessage, Replies } from '../messages';
@@ -24,11 +24,13 @@ export class SyncEndpoint {
   /** Replies to sync's messages; null for messages that aren't sync's. */
   handle(message: HareMessage, findControllers: () => VideoController[]): Promise<Replies[keyof Replies]> | null {
     switch (message.type) {
-      case 'SYNC_ACTIVATE': return Promise.resolve(this.activate(findControllers()));
+      case 'SYNC_ACTIVATE':
+        return Promise.resolve(this.activate(findControllers()));
       case 'SYNC_DEACTIVATE':
         this.deactivate(false);
         return Promise.resolve({ success: true });
-      case 'SYNC_GET_POSITION': return Promise.resolve(this.agent?.getPosition() ?? null);
+      case 'SYNC_GET_POSITION':
+        return Promise.resolve(this.agent?.getPosition() ?? null);
       default:
         if (!isSyncCommand(message)) return null;
         return this.agent ? runSyncCommand(this.agent, message) : Promise.resolve({ success: false });
@@ -45,9 +47,13 @@ export class SyncEndpoint {
 
   private activate(controllers: VideoController[]): Replies['SYNC_ACTIVATE'] {
     this.deactivate(false);
-    const controller = primaryMedia(controllers.filter(({ media }) => media.isConnected && media.readyState >= HTMLMediaElement.HAVE_METADATA));
+    const controller = primaryMedia(
+      controllers.filter(({ media }) => media.isConnected && media.readyState >= HTMLMediaElement.HAVE_METADATA),
+    );
     if (!controller) return { success: false, error: 'This tab has no media.' };
-    this.agent = new SyncAgent(controller, event => { sendToBackground({ type: 'SYNC_EVENT', payload: event }).catch(() => {}); });
+    this.agent = new SyncAgent(controller, event => {
+      sendToBackground({ type: 'SYNC_EVENT', payload: event }).catch(() => {});
+    });
     this.startKeepAlive();
     // Report the user's chosen speed: the media may be mid drift correction.
     return { success: true, ...this.agent.getPosition(), playbackRate: controller.intendedSpeed };
@@ -58,7 +64,11 @@ export class SyncEndpoint {
     this.timers = [
       setInterval(() => this.openPort(), KEEPALIVE_RECONNECT_MS),
       setInterval(() => {
-        try { this.port?.postMessage({ type: 'PING' }); } catch { this.port = null; }
+        try {
+          this.port?.postMessage({ type: 'PING' });
+        } catch {
+          this.port = null;
+        }
       }, KEEPALIVE_PING_MS),
     ];
   }
@@ -68,7 +78,9 @@ export class SyncEndpoint {
     try {
       const port = browser.runtime.connect({ name: KEEPALIVE_PORT });
       // Let the next rotation reconnect; immediate retries can loop during unload.
-      port.onDisconnect.addListener(() => { if (this.port === port) this.port = null; });
+      port.onDisconnect.addListener(() => {
+        if (this.port === port) this.port = null;
+      });
       this.port = port;
     } catch {
       this.port = null;

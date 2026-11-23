@@ -6,9 +6,7 @@ import type { ActionTarget, PointerTarget } from './controller-contracts';
  * frame above a cross-origin player, and host overlays can catch clicks meant for its controller.
  * A shortcut goes to every controller in the frame; a button press goes to the controller it was on.
  */
-type FrameAction =
-  | { action: KeyAction; value: number }
-  | { action: KeyAction; controllerId: string };
+type FrameAction = { action: KeyAction; value: number } | { action: KeyAction; controllerId: string };
 
 const MARKER = '__hareAction';
 
@@ -42,7 +40,9 @@ export function listenForParentActions(getControllers: () => PointerTarget[]): (
     if (window.parent === window || event.source !== window.parent || !isFrameAction(event.data)) return;
     const message = event.data;
     if ('controllerId' in message) {
-      getControllers().find(controller => controller.id === message.controllerId)?.press(message.action);
+      getControllers()
+        .find(controller => controller.id === message.controllerId)
+        ?.press(message.action);
     } else {
       dispatchAction(getControllers(), message.action, message.value);
     }

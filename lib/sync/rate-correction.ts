@@ -21,8 +21,9 @@ export class RateCorrection {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = undefined;
-      (async () => this.applyRate(this.baseRate))()
-        .catch(error => logger.debug('Could not restore the rate after a drift correction:', error));
+      (async () => this.applyRate(this.baseRate))().catch(error =>
+        logger.debug('Could not restore the rate after a drift correction:', error),
+      );
     }, durationMs);
     return this.applyRate(this.baseRate + rateFactor);
   }

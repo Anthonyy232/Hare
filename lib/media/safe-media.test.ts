@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { clampSeekTime, safeMedia } from './safe-media';
 
 describe('media boundaries', () => {
@@ -11,7 +11,9 @@ describe('media boundaries', () => {
   it('clamps live media and gaps to the nearest seekable range', () => {
     const video = document.createElement('video');
     Object.defineProperty(video, 'duration', { value: Infinity });
-    Object.defineProperty(video, 'seekable', { value: { length: 2, start: (i: number) => [100, 130][i], end: (i: number) => [110, 150][i] } });
+    Object.defineProperty(video, 'seekable', {
+      value: { length: 2, start: (i: number) => [100, 130][i], end: (i: number) => [110, 150][i] },
+    });
     expect(clampSeekTime(video, 0)).toBe(100);
     expect(clampSeekTime(video, 115)).toBe(110);
     expect(clampSeekTime(video, 125)).toBe(130);

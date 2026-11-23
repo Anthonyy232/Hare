@@ -1,8 +1,14 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { exportToPlayer } from './player-export';
 
-const media = { src: 'https://media.test/video.mp4', page: 'https://site.test/watch', encrypted: false, time: 12, manifests: [] };
+const media = {
+  src: 'https://media.test/video.mp4',
+  page: 'https://site.test/watch',
+  encrypted: false,
+  time: 12,
+  manifests: [],
+};
 
 describe('export to desktop player', () => {
   beforeEach(() => {
@@ -25,7 +31,9 @@ describe('export to desktop player', () => {
   it('writes a playable playlist and opens a download that already completed', async () => {
     expect(await exportToPlayer(1)).toBe('opened');
     const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
-    expect(await blob.text()).toBe('#EXTM3U\n#EXTINF:-1,My Movie\n#EXTVLCOPT:http-referrer=https://site.test/\n#EXTVLCOPT:start-time=12\nhttps://media.test/video.mp4\n');
+    expect(await blob.text()).toBe(
+      '#EXTM3U\n#EXTINF:-1,My Movie\n#EXTVLCOPT:http-referrer=https://site.test/\n#EXTVLCOPT:start-time=12\nhttps://media.test/video.mp4\n',
+    );
     expect(browser.downloads.open).toHaveBeenCalledWith(7);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:playlist');
   });
@@ -50,7 +58,9 @@ describe('export to desktop player', () => {
     ['the page itself for protected media', true, 'https://site.test/watch'],
   ])('opens %s', async (_, encrypted, url) => {
     vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ ...media, src: null, encrypted } as never);
-    const findManifest = vi.spyOn(browser.runtime, 'sendMessage').mockResolvedValue({ url: 'https://media.test/master.m3u8' } as never);
+    const findManifest = vi
+      .spyOn(browser.runtime, 'sendMessage')
+      .mockResolvedValue({ url: 'https://media.test/master.m3u8' } as never);
     await exportToPlayer(1);
     const blob = vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob;
     expect((await blob.text()).trimEnd().split('\n').at(-1)).toBe(url);

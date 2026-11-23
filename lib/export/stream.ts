@@ -23,6 +23,9 @@ export function describeStream(media: HTMLMediaElement): StreamInfo | null {
     encrypted: media.mediaKeys !== null,
     time: Number.isFinite(media.duration) ? media.currentTime : 0,
     // Covers players that started before Hare's background could see their requests.
-    manifests: performance.getEntriesByType('resource').map(entry => entry.name).filter(name => MANIFEST_URL.test(name)),
+    manifests: performance
+      .getEntriesByType('resource')
+      .map(entry => entry.name)
+      .filter(name => MANIFEST_URL.test(name)),
   };
 }

@@ -1,5 +1,15 @@
-import type { DriftCorrectPayload, SyncCandidate, SyncEventPayload, SyncPausePayload, SyncPlayPayload, SyncPositionResponse, SyncRatePayload, SyncSeekPayload, SyncStatusResponse } from './sync/types';
 import type { StreamInfo } from './export/stream';
+import type {
+  DriftCorrectPayload,
+  SyncCandidate,
+  SyncEventPayload,
+  SyncPausePayload,
+  SyncPlayPayload,
+  SyncPositionResponse,
+  SyncRatePayload,
+  SyncSeekPayload,
+  SyncStatusResponse,
+} from './sync/types';
 
 export type HareMessage =
   | { type: 'GET_PAGE_CONTEXT' }
@@ -52,4 +62,3 @@ export interface Replies {
 }
 
 export type Reply<M extends HareMessage> = Replies[M['type']];
-

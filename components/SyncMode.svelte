@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { MPV_TAB_ID, NUDGE_STEPS, type SyncCandidate, type SyncStatusResponse } from "../lib/sync/types";
-  import type { HareMessage } from "../lib/messages";
-  import { sendToBackground } from "../lib/messaging";
-  import { browser } from "wxt/browser";
+  import { onMount } from 'svelte';
+  import { browser } from 'wxt/browser';
+  import type { HareMessage } from '../lib/messages';
+  import { sendToBackground } from '../lib/messaging';
+  import { MPV_TAB_ID, NUDGE_STEPS, type SyncCandidate, type SyncStatusResponse } from '../lib/sync/types';
 
   let { onExpandedChange }: { onExpandedChange: (expanded: boolean) => void } = $props();
 
@@ -18,10 +18,10 @@
   const active = $derived.by(() => syncStatus?.active ? syncStatus : null);
   const offsetDisplay = $derived(offsetLabel(active?.offset ?? 0));
   const expanded = $derived(showSetup || active !== null);
-  const message = $derived(error ?? (showSetup && !loading && candidates.length < 2 ? "Play media in at least two tabs to sync them." : null));
+  const message = $derived(error ?? (showSetup && !loading && candidates.length < 2 ? 'Play media in at least two tabs to sync them.' : null));
   $effect(() => { onExpandedChange(expanded); });
 
-  const scriptsFolder = navigator.userAgent.includes("Windows") ? "%APPDATA%\\mpv\\scripts" : "~/.config/mpv/scripts";
+  const scriptsFolder = navigator.userAgent.includes('Windows') ? '%APPDATA%\\mpv\\scripts' : '~/.config/mpv/scripts';
   let copied = $state(false);
   const mpvFound = $derived(candidates.some(candidate => candidate.tabId === MPV_TAB_ID));
 
@@ -29,7 +29,7 @@
   $effect(() => {
     if (!showSetup || mpvFound) return;
     const timer = setInterval(async () => {
-      const found = await sendToBackground({ type: "GET_MPV_CANDIDATE" }).catch(() => null);
+      const found = await sendToBackground({ type: 'GET_MPV_CANDIDATE' }).catch(() => null);
       if (!found || loading || mpvFound) return;
       candidates = [...candidates, found];
     }, 2000);
@@ -50,7 +50,7 @@
 
   async function refreshSyncStatus() {
     try {
-      syncStatus = await sendToBackground({ type: "GET_SYNC_STATUS" });
+      syncStatus = await sendToBackground({ type: 'GET_SYNC_STATUS' });
     } catch {
       // A failed poll does not mean the session ended; keep Stop available.
     }
@@ -60,10 +60,10 @@
     loading = true;
     error = null;
     try {
-      candidates = await sendToBackground({ type: "GET_SYNC_CANDIDATES" });
+      candidates = await sendToBackground({ type: 'GET_SYNC_CANDIDATES' });
       selectedTabs = selectedTabs.filter(id => candidates.some(candidate => candidate.tabId === id));
     } catch {
-      error = "Could not find tabs with media. Try again.";
+      error = 'Could not find tabs with media. Try again.';
       candidates = [];
     } finally {
       loading = false;
@@ -81,7 +81,7 @@
   async function startSync() {
     starting = true;
     const started = await changeSync(
-      { type: "START_SYNC", payload: { tabIdA: selectedTabs[0], tabIdB: selectedTabs[1] } },
+      { type: 'START_SYNC', payload: { tabIdA: selectedTabs[0], tabIdB: selectedTabs[1] } },
       'Could not start sync. Try again.',
     );
     if (started) {
@@ -134,10 +134,10 @@
 
   function offsetLabel(offset: number): { magnitude: string; direction: string } {
     const absMs = Math.round(Math.abs(offset) * 1000);
-    if (absMs === 0) return { magnitude: "in sync", direction: "" };
+    if (absMs === 0) return { magnitude: 'in sync', direction: '' };
     const magnitude =
       absMs < 1000 ? `${absMs} ms` : `${(absMs / 1000).toFixed(3)} s`;
-    return { magnitude, direction: offset > 0 ? "ahead" : "behind" };
+    return { magnitude, direction: offset > 0 ? 'ahead' : 'behind' };
   }
 
   onMount(() => {
