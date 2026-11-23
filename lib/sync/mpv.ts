@@ -157,7 +157,8 @@ export class MpvClient implements SyncPlayer {
 
   private listen(): void {
     if (this.listener) return;
-    const listener = (this.listener = new AbortController());
+    const listener = new AbortController();
+    this.listener = listener;
     void (async () => {
       let after = -1; // The first reply only reports where mpv's event list is.
       while (!listener.signal.aborted) {

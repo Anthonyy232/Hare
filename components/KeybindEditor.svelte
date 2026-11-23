@@ -120,7 +120,7 @@
               {:else if binding.key}{formatKey(binding.key)}
               {:else}Unbound{/if}
             </button>
-            <button type="button" class="key-clear" title="Clear shortcut"
+            <button class="key-clear" title="Clear shortcut"
               aria-label={`Clear shortcut for ${action.label}`}
               disabled={!binding.key} onclick={() => { editingIndex = null; patch(index, { key: '' }); }}
             ><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>

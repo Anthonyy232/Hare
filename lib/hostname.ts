@@ -12,5 +12,5 @@ export function normalizeHost(hostname: string): string {
 
 export function matchesDomain(hostname: string, domain: string): boolean {
   const host = normalizeHost(hostname);
-  return host === domain || host.endsWith('.' + domain);
+  return host === domain || host.endsWith(`.${domain}`);
 }

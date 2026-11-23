@@ -17,7 +17,7 @@ async function mpvState(): Promise<{ time: number; paused: boolean; speed: numbe
 /** Sends a command the way a user's key press would, bypassing Hare. */
 function mpvCommand(...command: unknown[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const socket = net.connect(pipe, () => socket.end(JSON.stringify({ command }) + '\n', resolve));
+    const socket = net.connect(pipe, () => socket.end(`${JSON.stringify({ command })}\n`, resolve));
     socket.on('error', reject);
   });
 }

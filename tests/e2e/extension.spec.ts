@@ -145,14 +145,14 @@ async function openInPlayer(popup: Page): Promise<string> {
 
 test('popup opens the master playlist loaded by a player worker in the default player', async ({ extension }) => {
   const page = await extension.context.newPage();
-  await page.goto(fixture + '?hls=worker');
+  await page.goto(`${fixture}?hls=worker`);
   await expect(page.locator('hare-controller')).toHaveCount(1);
   expect(await openInPlayer(await openUI(extension, 'popup', page))).toBe(masterPlaylist);
 });
 
 test('popup finds a playlist the page loaded before Hare started watching', async ({ extension }) => {
   const page = await extension.context.newPage();
-  await page.goto(fixture + '?hls');
+  await page.goto(`${fixture}?hls`);
   await expect(page.locator('hare-controller')).toHaveCount(1);
   const popup = await openUI(extension, 'popup', page);
   // Forget what the background saw, as when Hare is installed after the page loads.
@@ -540,7 +540,7 @@ test('cached page lifecycle restores a single working controller', async ({ exte
   await expect(page.locator('hare-controller')).toHaveCount(1);
   await page.keyboard.press('d');
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
-  await page.goto(fixture + '?empty');
+  await page.goto(`${fixture}?empty`);
   await page.goBack({ waitUntil: 'commit' });
   await expect(page.locator('hare-controller')).toHaveCount(1);
 });

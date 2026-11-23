@@ -16,6 +16,7 @@ export async function launchExtension(profile: string) {
 }
 
 export const test = base.extend<{ extension: { context: BrowserContext; worker: Worker; id: string } }>({
+  // biome-ignore lint/correctness/noEmptyPattern: Playwright reads a fixture's dependencies from this pattern.
   extension: async ({}, use, testInfo) => {
     const context = await launchExtension(testInfo.outputPath('profile'));
     try {

@@ -62,7 +62,12 @@ export default defineContentScript({
           bridgeCrossFramePointers(connectedControllers),
           listenForParentActions(connectedControllers),
         ];
-        running = { registry, stopInput: () => stops.forEach(stop => stop()) };
+        running = {
+          registry,
+          stopInput: () => {
+            for (const stop of stops) stop();
+          },
+        };
       } else {
         running?.registry.updateSettings(settings);
       }

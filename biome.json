@@ -1,12 +1,38 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-  "files": { "includes": ["**", "!site", "!**/package-lock.json"] },
-  "html": { "experimentalFullSupportEnabled": true },
-  "formatter": { "indentStyle": "space", "lineWidth": 120 },
-  "javascript": { "formatter": { "quoteStyle": "single", "arrowParentheses": "asNeeded" } },
-  "yaml": { "formatter": { "quoteStyle": "single" } },
-  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!site", "!**/package-lock.json"]
+  },
+  "html": {
+    "experimentalFullSupportEnabled": true
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "lineWidth": 120
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "arrowParentheses": "asNeeded"
+    }
+  },
+  "yaml": {
+    "formatter": {
+      "quoteStyle": "single"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
   "linter": {
     "rules": {
       "preset": "recommended",
@@ -14,18 +40,34 @@
         "useButtonType": "off",
         "useSemanticElements": "off"
       },
-      "complexity": { "noImportantStyles": "off" },
+      "complexity": {
+        "noImportantStyles": "off"
+      },
       "style": {
         "noNonNullAssertion": "off",
         "noDescendingSpecificity": "off"
       },
-      "suspicious": { "noConfusingVoidType": "off" }
+      "suspicious": {
+        "noConfusingVoidType": "off"
+      }
     }
   },
   "overrides": [
     {
       "includes": ["**/*.test.ts", "tests/**"],
-      "linter": { "rules": { "suspicious": { "noExplicitAny": "off" } } }
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["tests/e2e/fixtures/**"],
+      "linter": {
+        "enabled": false
+      }
     }
   ]
 }

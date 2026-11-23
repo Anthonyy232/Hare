@@ -44,15 +44,15 @@ function isValidReply(message: HareMessage, result: unknown): boolean {
   if (result == null || typeof result !== 'object') return false;
   const reply = result as Record<string, unknown>;
   if (message.type !== 'SYNC_GET_POSITION') return reply.success === true;
-  const isFinite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+  const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
   return (
-    isFinite(reply.currentTime) &&
+    isFiniteNumber(reply.currentTime) &&
     reply.currentTime >= 0 &&
     typeof reply.paused === 'boolean' &&
     typeof reply.buffering === 'boolean' &&
-    isFinite(reply.playbackRate) &&
+    isFiniteNumber(reply.playbackRate) &&
     reply.playbackRate > 0 &&
-    isFinite(reply.timestamp) &&
+    isFiniteNumber(reply.timestamp) &&
     reply.timestamp >= 0
   );
 }

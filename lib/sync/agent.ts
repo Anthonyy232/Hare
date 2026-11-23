@@ -33,7 +33,8 @@ export class SyncAgent implements SyncPlayer {
     private readonly controller: SyncedController,
     private readonly sendEvent: (event: SyncEventPayload) => void,
   ) {
-    const media = (this.media = controller.media);
+    this.media = controller.media;
+    const media = this.media;
     this.correction = new RateCorrection(controller.intendedSpeed, rate => controller.applyTransientRate(rate));
     this.buffering = !media.paused && media.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
     controller.setIntendedSpeedListener(rate => this.handleIntendedSpeed(rate));
