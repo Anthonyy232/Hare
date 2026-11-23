@@ -108,7 +108,7 @@ test('iframe media is controllable from the parent page and the popup', async ({
 test('controller buttons expand on keyboard focus and hidden display can be restored', async ({ extension }) => {
   const page = await openVideo(extension.context);
   await page.locator('.hare-speed').focus();
-  await expect(page.getByRole('button', { name: 'Faster', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Increase speed', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Hide controller', exact: true }).click();
   await expect(page.locator('.hare-speed')).toBeHidden();
   await page.keyboard.press('v');
@@ -515,8 +515,8 @@ test('controller stays visible in a fullscreen player and restores its mount', a
   await page.locator('#player').evaluate(element => element.requestFullscreen());
   await expect(page.locator('#player > hare-controller')).toHaveCount(1);
   await page.locator('.hare-speed').focus();
-  await expect(page.getByRole('button', { name: 'Faster', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Faster', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Increase speed', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Increase speed', exact: true }).click();
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
   await page.screenshot({ path: testInfo.outputPath('controller-fullscreen.png') });
   await page.evaluate(() => document.exitFullscreen());

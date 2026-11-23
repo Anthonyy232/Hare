@@ -20,7 +20,7 @@ test('large controller buttons remain reachable inside a small player', async ({
     expect(rect.x + rect.width).toBeLessThanOrEqual(player.x + player.width);
     expect(rect.y + rect.height).toBeLessThanOrEqual(player.y + player.height);
   }
-  await page.getByRole('button', { name: 'Faster', exact: true }).click();
+  await page.getByRole('button', { name: 'Increase speed', exact: true }).click();
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
 });
 
@@ -418,8 +418,8 @@ test('keyboard playback control survives browser-native video fullscreen', async
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
   await page.evaluate(() => document.exitFullscreen());
   await page.locator('.hare-speed').focus();
-  await expect(page.getByRole('button', { name: 'Faster', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Faster', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Increase speed', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Increase speed', exact: true }).click();
   await expect.poll(() => rate(page)).toBeCloseTo(1.2);
 });
 
