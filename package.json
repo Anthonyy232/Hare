@@ -15,9 +15,11 @@
     "test": "vitest",
     "test:e2e": "playwright test",
     "pretest:e2e": "npm run build",
+    "lint": "biome ci",
+    "format": "biome check --write",
     "type-check": "svelte-check --tsconfig ./tsconfig.json --tsgo",
     "test:unit": "vitest run",
-    "check": "npm run type-check && npm run test:unit && npm run build && npm run build:firefox"
+    "check": "npm run lint && npm run type-check && npm run test:unit && npm run build && npm run build:firefox"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
