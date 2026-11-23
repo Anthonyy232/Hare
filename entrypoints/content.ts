@@ -12,7 +12,7 @@ import { SyncEndpoint } from '../lib/sync/endpoint';
 import type { HareMessage, Replies } from '../lib/messages';
 import { logger } from '../lib/logger';
 import { HARE_MATCHES } from '../lib/hostname';
-import { sendToBackground, withTimeout } from '../lib/messaging';
+import { failureReply, sendToBackground, withTimeout } from '../lib/messaging';
 
 export default defineContentScript({
   matches: HARE_MATCHES,
@@ -93,7 +93,7 @@ export default defineContentScript({
     const messageListener = (message: HareMessage, _sender: unknown, sendResponse: (reply: unknown) => void): true => {
       handleMessage(message).then(sendResponse, error => {
         logger.error('Message error:', error, message);
-        sendResponse({ success: false, error: String(error) });
+        sendResponse(failureReply(error));
       });
       return true;
     };

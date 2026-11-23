@@ -2,6 +2,7 @@
   import controllerCSS from '../assets/controller.css?raw';
   import { applyAppearance, createControllerView } from '../lib/media/controller-view';
   import { ACTIONS } from '../lib/settings/key-actions';
+  import { SPEED, formatSpeed } from '../lib/speed';
 
   let { opacity, size, startHidden }: { opacity: number; size: number; startHidden: boolean } = $props();
   let expanded = $state(false);
@@ -14,7 +15,8 @@
       .hare-controller:hover, .hare-controller:focus-within { opacity: var(--hare-opacity); }
       .hare-controls { display: var(--preview-controls) !important; }
     `;
-    const { controllerEl: controller } = createControllerView();
+    const { controllerEl: controller, speedDisplay } = createControllerView();
+    speedDisplay.textContent = formatSpeed(SPEED.DEFAULT);
     shadow.append(style, controller);
     function update(value: typeof values) {
       applyAppearance(controller, value.expanded ? 1 : value.opacity, value.size);
@@ -46,7 +48,7 @@
   button { padding: 0.25rem 0.625rem; border: 0; border-radius: var(--inner-radius); background: transparent; color: var(--color-text-secondary); font-size: 0.75rem; }
   button[aria-pressed="true"] { background: var(--color-accent-fill); color: #fff; }
   /* Stands in for a video frame, so it stays dark in both themes. */
-  .preview-frame { min-height: 100px; display: flex; align-items: center; padding: 1rem; overflow-x: auto; border-radius: var(--radius); background: radial-gradient(ellipse at 85% 90%, #34505f, transparent 75%), linear-gradient(135deg, #222e3c, #1a2732); }
+  .preview-frame { min-height: 6.25rem; display: flex; align-items: center; padding: 1rem; overflow-x: auto; border-radius: var(--radius); background: radial-gradient(ellipse at 85% 90%, #34505f, transparent 75%), linear-gradient(135deg, #222e3c, #1a2732); }
   .preview-overlay { min-width: 0; max-width: 100%; }
   p { margin: 0.5rem 0 0; font-size: 0.75rem; color: var(--color-text-muted); }
 </style>

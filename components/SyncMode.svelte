@@ -18,7 +18,7 @@
   const active = $derived.by(() => syncStatus?.active ? syncStatus : null);
   const offsetDisplay = $derived(offsetLabel(active?.offset ?? 0));
   const expanded = $derived(showSetup || active !== null);
-  const message = $derived(error ?? (showSetup && !loading && candidates.length < 2 ? "Need at least 2 tabs with videos" : null));
+  const message = $derived(error ?? (showSetup && !loading && candidates.length < 2 ? "Play media in at least two tabs to sync them." : null));
   $effect(() => { onExpandedChange(expanded); });
 
   const scriptsFolder = navigator.userAgent.includes("Windows") ? "%APPDATA%\\mpv\\scripts" : "~/.config/mpv/scripts";
@@ -63,7 +63,7 @@
       candidates = await sendToBackground({ type: "GET_SYNC_CANDIDATES" });
       selectedTabs = selectedTabs.filter(id => candidates.some(candidate => candidate.tabId === id));
     } catch {
-      error = "Failed to find video tabs";
+      error = "Could not find tabs with media. Try again.";
       candidates = [];
     } finally {
       loading = false;
@@ -82,7 +82,7 @@
     starting = true;
     const started = await changeSync(
       { type: "START_SYNC", payload: { tabIdA: selectedTabs[0], tabIdB: selectedTabs[1] } },
-      'Failed to start sync',
+      'Could not start sync. Try again.',
     );
     if (started) {
       showSetup = false;
@@ -207,7 +207,7 @@
   {:else if showSetup}
     <div class="sync-setup">
       <div class="setup-header">
-        <span>Select 2 tabs to sync</span>
+        <span>Select two tabs to sync</span>
         <span>
           <button class="btn ghost" onclick={loadCandidates} disabled={loading}>Refresh</button>
           <button class="btn ghost" onclick={cancelSetup} disabled={loading}>Cancel</button>
@@ -308,7 +308,7 @@
 
   .sync-tabs, .candidate-list { display: flex; flex-direction: column; }
   /* Full-width rows, like the popup's other rows. */
-  .candidate-list { max-height: 200px; margin-inline: -1.25rem; overflow-y: auto; }
+  .candidate-list { max-height: 12.5rem; margin-inline: -1.25rem; overflow-y: auto; }
   .sync-tab { display: flex; align-items: center; gap: 0.625rem; padding: 0.375rem 0; font-size: 0.8125rem; }
   .sync-tab + .sync-tab, .candidate + .candidate { border-top: 1px solid var(--color-divider); }
   .tab-label { flex-shrink: 0; font: 600 0.75rem var(--font-mono); color: var(--color-accent); }

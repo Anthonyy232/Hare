@@ -163,12 +163,12 @@
   .help-text { margin-top: 1rem; }
   .help-text strong { color: var(--color-text); font-weight: 600; }
   .shortcut-list { list-style: none; padding: 0; margin: 0; }
-  .shortcut-row { display: grid; grid-template-columns: minmax(130px, 1fr) 150px 130px 174px; align-items: end; gap: 18px; padding: 0.875rem 0; border-bottom: 1px solid var(--color-divider); }
+  .shortcut-row { display: grid; grid-template-columns: minmax(8.125rem, 1fr) 9.375rem 8.125rem 10.875rem; align-items: end; gap: 1.125rem; padding: 0.875rem 0; border-bottom: 1px solid var(--color-divider); }
   h3 { margin: 0; padding-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500; }
   .shortcut-field { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; min-width: 0; }
   .field-label { font-size: 0.6875rem; color: var(--color-text-muted); }
   .key-cell, .value-control { display: flex; align-items: center; gap: 0.375rem; }
-  .key-cell { width: 100%; max-width: 150px; }
+  .key-cell { width: 100%; max-width: 9.375rem; }
   .key-btn, .value-input { min-height: 2.25rem; font: 600 0.8125rem var(--font-mono); }
   /* A thicker bottom edge reads as a keycap. */
   .key-btn { flex: 1; min-width: 0; padding: 0.375rem 0.625rem; border-bottom-width: 3px; overflow-wrap: anywhere; }
@@ -182,8 +182,8 @@
   .override-label { display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.5rem; font-size: 0.8125rem; color: var(--color-text-secondary); cursor: pointer; }
   input[type="checkbox"] { width: 1.125rem; height: 1.125rem; margin: 0; flex-shrink: 0; cursor: pointer; }
   .binding-error { padding: 0.625rem 0.75rem; margin: 0.5rem 0; border-radius: var(--radius); background: var(--color-danger-soft); color: var(--color-danger-text); font-size: 0.8125rem; }
-  @media (max-width: 800px) {
-    .shortcut-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 20px; }
+  @media (max-width: 50rem) {
+    .shortcut-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.75rem 1.25rem; }
     h3, .override-label { grid-column: 1 / -1; padding-bottom: 0; }
   }
 </style>

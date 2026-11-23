@@ -296,7 +296,7 @@ class FirefoxFlows(unittest.TestCase):
         rect = self.css("video").rect
         for button in self.css("hare-controller").shadow_root.find_elements(By.CSS_SELECTOR, ".hare-btn"):
             self.assertLessEqual(button.rect["x"] + button.rect["width"], rect["x"] + rect["width"] + 1)
-        self.controller("[aria-label='Faster']").click()
+        self.controller("[aria-label='Increase speed']").click()
         self.until(lambda: abs(self.media("v.playbackRate") - 1.1) < .001)
         start = speed.rect
         ActionChains(self.d).click_and_hold(speed).move_by_offset(0, 60).perform()

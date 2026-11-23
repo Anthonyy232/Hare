@@ -1,7 +1,7 @@
 import { storage } from '#imports';
 import { BUTTON_SIZE_RANGE, DEFAULT_SETTINGS, OPACITY_RANGE, type Settings } from './schema';
 import { clampBindingValue, isKeyAction, type KeyBinding, type KeyAction } from './key-actions';
-import { matchesDomain, normalizeHost } from '../hostname';
+import { isHarePage, matchesDomain, normalizeHost } from '../hostname';
 
 const STORAGE_KEY = 'hare-settings';
 // chrome.storage.sync's per-item quota.
@@ -115,4 +115,17 @@ export function includeSite(blacklist: string, hostname: string): string | null 
     .filter(({ rule }) => rule?.type !== 'domain' || rule.pattern !== host)
     .map(({ line }) => line).join('\n');
   return isBlacklisted(remaining, hostname) ? null : remaining;
+}
+
+export type SiteAction = 'enable' | 'include' | 'settings';
+
+/** Why Hare can't run on a page, with the step that would let it, or null when it can. */
+export function siteBlock(settings: Settings, url: string): { reason: string; hint: string; action: SiteAction | null } | null {
+  if (!settings.enabled) return { reason: 'Hare is turned off', hint: 'Enable Hare to control playback.', action: 'enable' };
+  if (!isHarePage(url)) return { reason: 'Hare cannot run on this browser page', hint: 'Open a regular webpage with video or audio.', action: null };
+  const { hostname } = new URL(url);
+  if (!isBlacklisted(settings.blacklist, hostname)) return null;
+  return includeSite(settings.blacklist, hostname) === null
+    ? { reason: 'This site is excluded', hint: 'A broader domain or regular expression excludes this site. Edit the excluded sites in Settings to use Hare here.', action: 'settings' }
+    : { reason: 'This site is excluded', hint: 'Use Hare on this site to restore playback controls, including embedded players.', action: 'include' };
 }

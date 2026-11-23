@@ -4,8 +4,7 @@
   import SyncMode from "../../components/SyncMode.svelte";
   import logo from "../../assets/logo.svg";
   import { clampSpeed, sameSpeed } from "../../lib/speed";
-  import { isHarePage } from "../../lib/hostname";
-  import { loadSettings, saveSettings, isBlacklisted, includeSite } from "../../lib/settings/settings";
+  import { loadSettings, saveSettings, includeSite, siteBlock, type SiteAction } from "../../lib/settings/settings";
   import { getTabMedia, setTabSpeed } from "../../lib/messaging";
   import { exportToPlayer } from "../../lib/export/player-export";
 
@@ -28,16 +27,16 @@
   let statusRequest: Promise<void> | null = null;
   let error: string | null = $state(null);
   let hint = $state('');
-  let toast: string | null = $state(null);
+  let toast: { message: string; error: boolean } | null = $state(null);
   let tabId: number | null = null;
   let tabUrl = '';
   let siteLabel = $state('Current tab');
-  let siteAction: 'enable' | 'include' | 'settings' | null = $state(null);
+  let siteAction: SiteAction | null = $state(null);
   let toastTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  function showToast(message: string) {
+  function showToast(message: string, error = true) {
     if (toastTimeout) clearTimeout(toastTimeout);
-    toast = message;
+    toast = { message, error };
     toastTimeout = setTimeout(() => { toast = null; }, TOAST_MS);
   }
 
@@ -56,22 +55,11 @@
       // Without the tabs permission, protected pages can omit their URL entirely.
       const url = tabUrl ? new URL(tabUrl) : null;
       siteLabel = url ? (url.protocol === 'file:' ? 'Local file' : url.hostname || 'Current tab') : 'Browser page';
-      const settings = await loadSettings();
-      if (!settings.enabled) {
-        nextSiteAction = 'enable';
-        nextHint = 'Enable Hare to control playback.';
-        throw new Error('Hare is turned off');
-      }
-      if (!url || !isHarePage(tabUrl)) {
-        nextHint = 'Open a regular webpage with video or audio.';
-        throw new Error('Hare cannot run on this browser page');
-      }
-      if (isBlacklisted(settings.blacklist, url.hostname)) {
-        nextSiteAction = includeSite(settings.blacklist, url.hostname) === null ? 'settings' : 'include';
-        nextHint = nextSiteAction === 'include'
-          ? 'Use Hare on this site to restore playback controls, including embedded players.'
-          : 'A broader domain or regular expression excludes this site. Edit the excluded sites in Settings to use Hare here.';
-        throw new Error('This site is excluded');
+      const block = siteBlock(await loadSettings(), tabUrl);
+      if (block) {
+        nextHint = block.hint;
+        nextSiteAction = block.action;
+        throw new Error(block.reason);
       }
       const frames = await getTabMedia(tabId);
       const result = summarize(frames.flatMap(frame => frame.speeds));
@@ -115,7 +103,7 @@
     if (!await browser.permissions.request({ permissions: ['downloads', 'downloads.open'] })) return;
     busy = true;
     try {
-      if (await exportToPlayer(tabId) === 'saved') showToast('Saved hare.m3u to Downloads. Open it to play.');
+      if (await exportToPlayer(tabId) === 'saved') showToast('Saved hare.m3u to Downloads. Open it to play.', false);
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not open the video.');
     } finally { busy = false; }
@@ -222,7 +210,7 @@
   {/if}
 
   {#if toast}
-    <div class="toast" role="alert">{toast}</div>
+    <div class="toast" class:error={toast.error} role={toast.error ? 'alert' : 'status'}>{toast.message}</div>
   {/if}
 </div>
 
@@ -288,10 +276,11 @@
     right: 0.75rem;
     padding: 0.625rem 0.875rem;
     border-radius: var(--radius);
-    background: var(--color-danger);
-    color: #fff;
+    background: var(--color-text);
+    color: var(--color-surface);
     font-size: 0.8125rem;
     font-weight: 500;
     z-index: 100;
   }
+  .toast.error { background: var(--color-danger); color: #fff; }
 </style>

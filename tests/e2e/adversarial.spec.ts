@@ -20,7 +20,7 @@ test('large controller buttons remain reachable inside a small player', async ({
     expect(rect.x + rect.width).toBeLessThanOrEqual(player.x + player.width);
     expect(rect.y + rect.height).toBeLessThanOrEqual(player.y + player.height);
   }
-  await page.getByRole('button', { name: 'Faster', exact: true }).click();
+  await page.getByRole('button', { name: 'Increase speed', exact: true }).click();
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
 });
 
@@ -190,8 +190,8 @@ test('shortcut capture rejects duplicates and modifiers, clears keys, and suppor
   await expect(key).toHaveText('D');
   await key.click();
   await key.press('k');
-  await options.getByRole('spinbutton', { name: 'Advance Seconds' }).fill('3.25');
-  await options.getByRole('spinbutton', { name: 'Advance Seconds' }).press('Enter');
+  await options.getByRole('spinbutton', { name: 'Advance Time step' }).fill('3.25');
+  await options.getByRole('spinbutton', { name: 'Advance Time step' }).press('Enter');
   await options.getByRole('button', { name: 'Save settings' }).click();
   await expect(options.getByText('Settings saved', { exact: true })).toBeVisible();
   await video.bringToFront();
@@ -213,7 +213,7 @@ test('sync candidates recover from missing tabs and setup can be cancelled', asy
   const a = await openVideo(extension.context, '?candidate-a');
   const popup = await openUI(extension, 'popup', a);
   await popup.getByRole('button', { name: 'Sync mode' }).click();
-  await expect(popup.getByRole('alert')).toContainText('at least 2');
+  await expect(popup.getByRole('alert')).toContainText('at least two');
   // Setup polls for mpv and lists whatever it gets back.
   expect(await rpc(popup, 'GET_MPV_CANDIDATE')).toBeNull();
   const b = await openVideo(extension.context, '?candidate-b');
@@ -418,8 +418,8 @@ test('keyboard playback control survives browser-native video fullscreen', async
   await expect.poll(() => rate(page)).toBeCloseTo(1.1);
   await page.evaluate(() => document.exitFullscreen());
   await page.locator('.hare-speed').focus();
-  await expect(page.getByRole('button', { name: 'Faster', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Faster', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Increase speed', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Increase speed', exact: true }).click();
   await expect.poll(() => rate(page)).toBeCloseTo(1.2);
 });
 
