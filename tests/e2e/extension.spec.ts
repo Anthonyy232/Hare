@@ -100,7 +100,7 @@ test('iframe media is controllable from the parent page and the popup', async ({
   await expect(frame.locator('hare-controller')).toHaveCount(1);
   await page.locator('h1').click();
   await page.keyboard.press('d');
-  await expect(frame.locator('.hare-speed')).toHaveText('1.10x');
+  await expect(frame.locator('.hare-speed')).toHaveText('1.10×');
   const popup = await openUI(extension, 'popup', page);
   await expect(popup.locator('.speed-display')).toContainText('1.10');
 });
