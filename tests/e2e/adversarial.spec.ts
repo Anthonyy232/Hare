@@ -190,8 +190,8 @@ test('shortcut capture rejects duplicates and modifiers, clears keys, and suppor
   await expect(key).toHaveText('D');
   await key.click();
   await key.press('k');
-  await options.getByRole('spinbutton', { name: 'Advance Seconds' }).fill('3.25');
-  await options.getByRole('spinbutton', { name: 'Advance Seconds' }).press('Enter');
+  await options.getByRole('spinbutton', { name: 'Advance Time step' }).fill('3.25');
+  await options.getByRole('spinbutton', { name: 'Advance Time step' }).press('Enter');
   await options.getByRole('button', { name: 'Save settings' }).click();
   await expect(options.getByText('Settings saved', { exact: true })).toBeVisible();
   await video.bringToFront();
