@@ -15,6 +15,10 @@ export function clampSpeed(speed: number): number {
   return Math.round(clampRate(speed) * 100) / 100;
 }
 
+export function formatSpeed(speed: number): string {
+  return `${speed.toFixed(2)}×`;
+}
+
 /** Speeds that display the same are the same, whatever float noise a player adds. */
 export function sameSpeed(a: number, b: number): boolean {
   return Math.abs(a - b) < 0.005;

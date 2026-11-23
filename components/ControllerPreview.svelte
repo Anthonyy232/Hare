@@ -2,6 +2,7 @@
   import controllerCSS from '../assets/controller.css?raw';
   import { applyAppearance, createControllerView } from '../lib/media/controller-view';
   import { ACTIONS } from '../lib/settings/key-actions';
+  import { SPEED, formatSpeed } from '../lib/speed';
 
   let { opacity, size, startHidden }: { opacity: number; size: number; startHidden: boolean } = $props();
   let expanded = $state(false);
@@ -14,7 +15,8 @@
       .hare-controller:hover, .hare-controller:focus-within { opacity: var(--hare-opacity); }
       .hare-controls { display: var(--preview-controls) !important; }
     `;
-    const { controllerEl: controller } = createControllerView();
+    const { controllerEl: controller, speedDisplay } = createControllerView();
+    speedDisplay.textContent = formatSpeed(SPEED.DEFAULT);
     shadow.append(style, controller);
     function update(value: typeof values) {
       applyAppearance(controller, value.expanded ? 1 : value.opacity, value.size);
