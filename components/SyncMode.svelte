@@ -307,7 +307,8 @@
   .setup-hint { margin: 0; font-size: 0.75rem; color: var(--color-text-muted); }
 
   .sync-tabs, .candidate-list { display: flex; flex-direction: column; }
-  .candidate-list { max-height: 200px; overflow-y: auto; }
+  /* Full-width rows, like the popup's other rows. */
+  .candidate-list { max-height: 200px; margin-inline: -1.25rem; overflow-y: auto; }
   .sync-tab { display: flex; align-items: center; gap: 0.625rem; padding: 0.375rem 0; font-size: 0.8125rem; }
   .sync-tab + .sync-tab, .candidate + .candidate { border-top: 1px solid var(--color-divider); }
   .tab-label { flex-shrink: 0; font: 600 0.75rem var(--font-mono); color: var(--color-accent); }
@@ -326,7 +327,7 @@
     align-items: center;
     gap: 0.5rem;
     width: 100%;
-    padding: 0.5rem 0.25rem;
+    padding: 0.5rem 1.25rem;
     border: 0;
     background: transparent;
     font-size: 0.8125rem;
