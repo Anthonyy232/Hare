@@ -9,12 +9,12 @@ interface ActionDefinition {
 }
 
 export const ACTIONS = {
-  slower: { label: 'Decrease Speed', defaultKey: 'KeyS', defaultValue: SPEED.STEP, repeat: true, value: { label: 'Speed step', unit: '×', min: 0.01, max: SPEED.MAX } },
-  faster: { label: 'Increase Speed', defaultKey: 'KeyD', defaultValue: SPEED.STEP, repeat: true, value: { label: 'Speed step', unit: '×', min: 0.01, max: SPEED.MAX } },
+  slower: { label: 'Decrease speed', defaultKey: 'KeyS', defaultValue: SPEED.STEP, repeat: true, value: { label: 'Speed step', unit: '×', min: 0.01, max: SPEED.MAX } },
+  faster: { label: 'Increase speed', defaultKey: 'KeyD', defaultValue: SPEED.STEP, repeat: true, value: { label: 'Speed step', unit: '×', min: 0.01, max: SPEED.MAX } },
   rewind: { label: 'Rewind', defaultKey: 'KeyZ', defaultValue: 10, repeat: true, value: { label: 'Seconds', unit: 'sec', min: 0.01, max: 86400 } },
   advance: { label: 'Advance', defaultKey: 'KeyX', defaultValue: 10, repeat: true, value: { label: 'Seconds', unit: 'sec', min: 0.01, max: 86400 } },
-  reset: { label: 'Reset Speed', defaultKey: 'KeyR', defaultValue: SPEED.DEFAULT, repeat: false, value: { label: 'Target speed', unit: '×', min: SPEED.MIN, max: SPEED.MAX } },
-  display: { label: 'Show/Hide Controller', defaultKey: 'KeyV', defaultValue: 0, repeat: false, value: null },
+  reset: { label: 'Reset speed', defaultKey: 'KeyR', defaultValue: SPEED.DEFAULT, repeat: false, value: { label: 'Target speed', unit: '×', min: SPEED.MIN, max: SPEED.MAX } },
+  display: { label: 'Show/hide controller', defaultKey: 'KeyV', defaultValue: 0, repeat: false, value: null },
 } satisfies Record<string, ActionDefinition>;
 
 export type KeyAction = keyof typeof ACTIONS;

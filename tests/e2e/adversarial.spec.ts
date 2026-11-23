@@ -64,7 +64,7 @@ test('sync offset controls work in both directions and preserve the selected ste
   await expect.poll(() => popup.evaluate(() => (globalThis as any).syncStatusFailed)).toBe(true);
   await expect(popup.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
   await popup.getByRole('button', { name: 'Stop', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Sync Mode' })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Sync mode' })).toBeVisible();
   await popup.evaluate(() => (globalThis as any).restoreSyncStatus());
   const stoppedStatus = await rpc(popup, 'GET_SYNC_STATUS');
   expect(stoppedStatus.active).toBe(false);
@@ -138,17 +138,17 @@ test('browser restart preserves settings and clears the old sync session', async
 test('settings conflicts preserve numeric drafts and discard reloads the saved values', async ({ extension }) => {
   const first = await openUI(extension, 'options');
   const second = await openUI(extension, 'options');
-  const draft = first.getByRole('spinbutton', { name: 'Reset Speed Target speed' });
+  const draft = first.getByRole('spinbutton', { name: 'Reset speed Target speed' });
   await draft.fill('1.75');
   await second.getByRole('slider', { name: 'Controller opacity' }).fill('0.6');
-  await second.getByRole('button', { name: 'Save Settings' }).click();
+  await second.getByRole('button', { name: 'Save settings' }).click();
   await expect(second.getByText('Settings saved', { exact: true })).toBeVisible();
   await expect(first.getByRole('alert')).toContainText('Settings were changed in another tab');
   await expect(draft).toHaveValue('1.75');
   await first.getByRole('button', { name: 'Discard local changes' }).click();
   await expect(draft).toHaveValue('1');
   await expect(first.getByRole('slider', { name: 'Controller opacity' })).toHaveValue('0.6');
-  await expect(first.getByRole('button', { name: 'Save Settings' })).toBeDisabled();
+  await expect(first.getByRole('button', { name: 'Save settings' })).toBeDisabled();
 });
 
 test('settings initial load failure has a working retry and defaults reset can be cancelled', async ({ extension }) => {
@@ -164,21 +164,21 @@ test('settings initial load failure has a working retry and defaults reset can b
   await options.evaluate(() => (globalThis as any).restoreStorageGet());
   await options.getByRole('button', { name: 'Try again' }).click();
   await options.locator('#blacklist').fill('example.com');
-  await options.getByRole('button', { name: 'Save Settings' }).click();
+  await options.getByRole('button', { name: 'Save settings' }).click();
   await expect(options.getByText('Settings saved', { exact: true })).toBeVisible();
   options.once('dialog', dialog => dialog.dismiss());
-  await options.getByRole('button', { name: 'Reset to Defaults' }).click();
+  await options.getByRole('button', { name: 'Reset to defaults' }).click();
   await expect(options.locator('#blacklist')).toHaveValue('example.com');
   options.once('dialog', dialog => dialog.accept());
-  await options.getByRole('button', { name: 'Reset to Defaults' }).click();
+  await options.getByRole('button', { name: 'Reset to defaults' }).click();
   await expect(options.locator('#blacklist')).not.toHaveValue('example.com');
-  await expect(options.getByRole('button', { name: 'Save Settings' })).toBeDisabled();
+  await expect(options.getByRole('button', { name: 'Save settings' })).toBeDisabled();
 });
 
 test('shortcut capture rejects duplicates and modifiers, clears keys, and supports custom seek steps', async ({ extension }) => {
   const video = await openVideo(extension.context);
   const options = await openUI(extension, 'options');
-  const key = options.getByRole('button', { name: 'Change shortcut for Increase Speed', exact: true });
+  const key = options.getByRole('button', { name: 'Change shortcut for Increase speed', exact: true });
   await key.click();
   await key.press('s');
   await expect(options.getByRole('alert')).toContainText('already assigned');
@@ -192,15 +192,15 @@ test('shortcut capture rejects duplicates and modifiers, clears keys, and suppor
   await key.press('k');
   await options.getByRole('spinbutton', { name: 'Advance Seconds' }).fill('3.25');
   await options.getByRole('spinbutton', { name: 'Advance Seconds' }).press('Enter');
-  await options.getByRole('button', { name: 'Save Settings' }).click();
+  await options.getByRole('button', { name: 'Save settings' }).click();
   await expect(options.getByText('Settings saved', { exact: true })).toBeVisible();
   await video.bringToFront();
   await video.keyboard.press('k');
   await expect.poll(() => rate(video)).toBeCloseTo(1.1);
   await video.keyboard.press('x');
   await expect.poll(() => video.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeCloseTo(3.25);
-  await options.getByRole('button', { name: 'Clear shortcut for Increase Speed', exact: true }).click();
-  await options.getByRole('button', { name: 'Save Settings' }).click();
+  await options.getByRole('button', { name: 'Clear shortcut for Increase speed', exact: true }).click();
+  await options.getByRole('button', { name: 'Save settings' }).click();
   await expect(key).toHaveText('Unbound');
   // The label updates before the save lands; wait for storage so the page has the cleared key.
   await expect.poll(() => extension.worker.evaluate(async () => (await (globalThis as any).chrome.storage.sync.get('hare-settings'))['hare-settings']
@@ -212,7 +212,7 @@ test('shortcut capture rejects duplicates and modifiers, clears keys, and suppor
 test('sync candidates recover from missing tabs and setup can be cancelled', async ({ extension }) => {
   const a = await openVideo(extension.context, '?candidate-a');
   const popup = await openUI(extension, 'popup', a);
-  await popup.getByRole('button', { name: 'Sync Mode' }).click();
+  await popup.getByRole('button', { name: 'Sync mode' }).click();
   await expect(popup.getByRole('alert')).toContainText('at least 2');
   // Setup polls for mpv and lists whatever it gets back.
   expect(await rpc(popup, 'GET_MPV_CANDIDATE')).toBeNull();
@@ -224,9 +224,9 @@ test('sync candidates recover from missing tabs and setup can be cancelled', asy
   await b.close();
   await popup.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(popup.locator('.candidate')).toHaveCount(1);
-  await expect(popup.getByRole('button', { name: 'Start Sync', exact: true })).toBeDisabled();
+  await expect(popup.getByRole('button', { name: 'Start sync', exact: true })).toBeDisabled();
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(popup.getByRole('button', { name: 'Sync Mode' })).toBeVisible();
+  await expect(popup.getByRole('button', { name: 'Sync mode' })).toBeVisible();
   expect((await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(false);
 });
 
@@ -303,11 +303,11 @@ test('oversized settings and failed reset preserve saved data and recover', asyn
   const blacklist = options.locator('#blacklist');
   const longList = Array.from({ length: 500 }, (_, i) => `excluded-${i}.example.com`).join('\n');
   await blacklist.fill(longList);
-  await options.getByRole('button', { name: 'Save Settings', exact: true }).click();
+  await options.getByRole('button', { name: 'Save settings', exact: true }).click();
   await expect(options.getByRole('alert')).toContainText('too large to sync');
   await expect(blacklist).toHaveValue(longList);
   await blacklist.fill('saved.example.com');
-  await options.getByRole('button', { name: 'Save Settings', exact: true }).click();
+  await options.getByRole('button', { name: 'Save settings', exact: true }).click();
   await expect(options.getByText('Settings saved', { exact: true })).toBeVisible();
   await options.evaluate(() => {
     const api = (globalThis as any).chrome.storage.sync;
@@ -316,12 +316,12 @@ test('oversized settings and failed reset preserve saved data and recover', asyn
     api.set = () => Promise.reject(new Error('Injected reset failure'));
   });
   options.once('dialog', dialog => dialog.accept());
-  await options.getByRole('button', { name: 'Reset to Defaults', exact: true }).click();
+  await options.getByRole('button', { name: 'Reset to defaults', exact: true }).click();
   await expect(options.getByRole('alert')).toContainText('Could not reset settings');
   await expect(blacklist).toHaveValue('saved.example.com');
   await options.evaluate(() => (globalThis as any).restoreStorageSet());
   options.once('dialog', dialog => dialog.accept());
-  await options.getByRole('button', { name: 'Reset to Defaults', exact: true }).click();
+  await options.getByRole('button', { name: 'Reset to defaults', exact: true }).click();
   await expect(blacklist).toHaveValue(DEFAULT_SETTINGS.blacklist);
   await options.reload();
   await expect(blacklist).toHaveValue(DEFAULT_SETTINGS.blacklist);

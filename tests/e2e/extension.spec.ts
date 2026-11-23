@@ -167,7 +167,7 @@ test('popup commits complete decimal input and reflects actual media speed', asy
   await popup.locator('h1').click();
   expect(await rate(page)).toBe(1.75);
   await expect(input).toHaveValue('1.75');
-  await popup.getByRole('button', { name: 'Reset speed to 1.0x' }).click();
+  await popup.getByRole('button', { name: 'Reset speed to 1×' }).click();
   await expect.poll(() => rate(page)).toBe(1);
   await popup.locator('.popup').screenshot({ path: testInfo.outputPath('popup.png') });
   const results = await new AxeBuilder({ page: popup }).analyze();
@@ -227,10 +227,10 @@ test('appearance preview follows drafts and shortcut controls fit narrow setting
   await expect(preview).toHaveCSS('opacity', '1');
   await expect(options.locator('.preview-overlay .hare-controls')).toBeVisible();
   await options.screenshot({ path: testInfo.outputPath('settings-desktop.png'), fullPage: true });
-  await options.getByRole('button', { name: 'Save Settings' }).click();
+  await options.getByRole('button', { name: 'Save settings' }).click();
   await expect(video.locator('.hare-controller')).toHaveCSS('font-size', '20px');
   await options.setViewportSize({ width: 390, height: 844 });
-  const override = options.getByRole('checkbox', { name: 'Override site shortcut for Reset Speed', exact: true });
+  const override = options.getByRole('checkbox', { name: 'Override site shortcut for Reset speed', exact: true });
   await override.check();
   await expect.poll(() => options.locator('.shortcut-row').evaluateAll(rows => rows.every(row => row.scrollWidth <= row.clientWidth))).toBe(true);
   await expect.poll(() => options.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -238,7 +238,7 @@ test('appearance preview follows drafts and shortcut controls fit narrow setting
   const results = await new AxeBuilder({ page: options }).analyze();
   expect(results.violations).toEqual([]);
   await options.setViewportSize({ width: 320, height: 720 });
-  const shortcut = options.getByRole('button', { name: 'Change shortcut for Decrease Speed', exact: true });
+  const shortcut = options.getByRole('button', { name: 'Change shortcut for Decrease speed', exact: true });
   await shortcut.click();
   await expect(shortcut).toHaveText('Press a key…');
   await expect.poll(() => options.locator('.shortcut-row').evaluateAll(rows => rows.every(row => row.scrollWidth <= row.clientWidth))).toBe(true);
@@ -246,7 +246,7 @@ test('appearance preview follows drafts and shortcut controls fit narrow setting
   await shortcut.press('k');
   await expect(shortcut).toHaveText('K');
   await shortcut.click();
-  await options.getByRole('spinbutton', { name: 'Decrease Speed Speed step' }).click();
+  await options.getByRole('spinbutton', { name: 'Decrease speed Speed step' }).click();
   await expect(shortcut).toHaveAttribute('aria-pressed', 'false');
 });
 
@@ -255,7 +255,7 @@ test('sync selection preserves a pair, permits swapping roles, and explains dese
   await openVideo(extension.context, '?b');
   await openVideo(extension.context, '?c');
   const popup = await openUI(extension, 'popup', a);
-  await popup.getByRole('button', { name: 'Sync Mode' }).click();
+  await popup.getByRole('button', { name: 'Sync mode' }).click();
   const candidates = popup.locator('.candidate');
   await expect(candidates).toHaveCount(3);
   await candidates.nth(0).click();
@@ -273,15 +273,15 @@ test('sync selection preserves a pair, permits swapping roles, and explains dese
   await popup.locator('.popup').screenshot({ path: testInfo.outputPath('sync-setup.png') });
   const results = await new AxeBuilder({ page: popup }).analyze();
   expect(results.violations).toEqual([]);
-  await popup.getByRole('button', { name: 'Start Sync', exact: true }).click();
+  await popup.getByRole('button', { name: 'Start sync', exact: true }).click();
   await expect(popup.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
 });
 
 test('settings save follows value drafts and invalid patterns are explained', async ({ extension }, testInfo) => {
   const page = await openUI(extension, 'options');
-  const save = page.getByRole('button', { name: 'Save Settings' });
+  const save = page.getByRole('button', { name: 'Save settings' });
   await expect(save).toBeDisabled();
-  await page.getByRole('spinbutton', { name: 'Reset Speed Target speed' }).fill('1.5');
+  await page.getByRole('spinbutton', { name: 'Reset speed Target speed' }).fill('1.5');
   await page.locator('h1').click();
   await expect(save).toBeEnabled();
   await save.click();
@@ -306,11 +306,11 @@ test('settings save failure keeps the draft editable and retry succeeds', async 
     const original = api.set.bind(api);
     api.set = () => { api.set = original; return Promise.reject(new Error('Storage temporarily unavailable')); };
   });
-  await page.getByRole('button', { name: 'Save Settings' }).click();
+  await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByRole('alert')).toContainText('Storage temporarily unavailable');
   await expect(page.getByText('Unsaved changes', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Save Settings' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Save Settings' }).click();
+  await expect(page.getByRole('button', { name: 'Save settings' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByText('Settings saved', { exact: true })).toBeVisible();
 });
 
@@ -371,14 +371,14 @@ test('popup follows navigation in its target tab before restoring a site', async
 
 test('shortcut value drafts can be committed with Enter and cancelled with Escape', async ({ extension }) => {
   const options = await openUI(extension, 'options');
-  const target = options.getByRole('spinbutton', { name: 'Reset Speed Target speed' });
+  const target = options.getByRole('spinbutton', { name: 'Reset speed Target speed' });
   await target.fill('1.75');
   await target.press('Escape');
   await expect(target).toHaveValue('1');
-  await expect(options.getByRole('button', { name: 'Save Settings' })).toBeDisabled();
+  await expect(options.getByRole('button', { name: 'Save settings' })).toBeDisabled();
   await target.fill('1.75');
   await target.press('Enter');
-  await options.getByRole('button', { name: 'Save Settings' }).click();
+  await options.getByRole('button', { name: 'Save settings' }).click();
   await expect(options.getByText('Settings saved', { exact: true })).toBeVisible();
   await options.reload();
   await expect(target).toHaveValue('1.75');
@@ -527,12 +527,12 @@ test('failed sync startup stays in setup with an actionable error', async ({ ext
   const a = await openVideo(extension.context, '?a');
   const b = await openVideo(extension.context, '?b');
   const popup = await openUI(extension, 'popup', a);
-  await popup.getByRole('button', { name: 'Sync Mode' }).click();
+  await popup.getByRole('button', { name: 'Sync mode' }).click();
   await expect(popup.locator('.candidate')).toHaveCount(2);
   await popup.locator('.candidate').nth(0).click();
   await popup.locator('.candidate').nth(1).click();
   await b.close();
-  await popup.getByRole('button', { name: 'Start Sync', exact: true }).click();
+  await popup.getByRole('button', { name: 'Start sync', exact: true }).click();
   await expect(popup.getByRole('alert')).toBeVisible();
   await expect(popup.getByRole('button', { name: 'Refresh', exact: true })).toBeEnabled();
   expect((await rpc(popup, 'GET_SYNC_STATUS')).active).toBe(false);

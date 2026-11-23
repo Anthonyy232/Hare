@@ -75,7 +75,7 @@ test.describe('mpv', () => {
     await mpvCommand('stop');
     const popup = await openUI(extension, 'popup');
     await extension.context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    await popup.getByRole('button', { name: 'Sync Mode' }).click();
+    await popup.getByRole('button', { name: 'Sync mode' }).click();
     await popup.getByText('Sync with mpv').click();
     const download = popup.waitForEvent('download');
     await popup.getByRole('link', { name: 'Download hare.lua' }).click();

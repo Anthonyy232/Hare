@@ -100,8 +100,8 @@
     class="btn ghost"
     {disabled}
     onclick={() => onSpeedChange(SPEED.DEFAULT)}
-    title="Reset to 1.0x"
-    aria-label="Reset speed to 1.0x">Reset</button
+    title="Reset to 1×"
+    aria-label="Reset speed to 1×">Reset</button
   >
 </div>
 </div>

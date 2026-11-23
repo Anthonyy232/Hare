@@ -15,7 +15,7 @@ Hare is a browser extension that sets the playback speed of any HTML5 video or a
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/readme/feature-speed-dark.png">
-  <img src=".github/readme/feature-speed-light.png" alt="01. Speed, one key away. The Hare popup at 1.50× with presets from 0.75× to 2×, a stepper, Sync Mode and Open in video player.">
+  <img src=".github/readme/feature-speed-light.png" alt="01. Speed, one key away. The Hare popup at 1.50× with presets from 0.75× to 2×, a stepper, Sync mode and Open in video player.">
 </picture>
 
 | Key | Action |
@@ -35,30 +35,30 @@ The on-page controller shows the current speed, can be dragged anywhere on the p
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/readme/feature-sync-dark.png">
-  <img src=".github/readme/feature-sync-light.png" alt="02. Two tabs, one timeline. Sync Mode with two tabs selected as A and B, ready to start.">
+  <img src=".github/readme/feature-sync-light.png" alt="02. Two tabs, one timeline. Sync mode with two tabs selected as A and B, ready to start.">
 </picture>
 
-Sync Mode pairs media in two tabs so they play, pause, seek and change speed together. It suits a second camera angle, a commentary track, or a reaction video next to its source.
+Sync mode pairs media in two tabs so they play, pause, seek and change speed together. It suits a second camera angle, a commentary track, or a reaction video next to its source.
 
 1. Load media in two tabs and cue each to the moment you want to pair.
-2. Open **Sync Mode** and select tab A, then tab B. **Swap A / B** changes their roles.
-3. Press **Start Sync**.
+2. Open **Sync mode** and select tab A, then tab B. **Swap A / B** changes their roles.
+3. Press **Start sync**.
 
 A sets the playback speed and play or pause state. B keeps its starting offset, which you can fine-tune with the offset buttons. Closing a paired tab, replacing its media, or turning Hare off ends the session. Each tab syncs one video, preferring playing media and then the larger player.
 
-**Sync with mpv.** Open **Sync with mpv** in the Sync Mode list, download [hare.lua](public/hare.lua), and move it to mpv's scripts folder (`%APPDATA%\mpv\scripts` on Windows, `~/.config/mpv/scripts` on macOS and Linux). After that, any video you open in [mpv](https://mpv.io) appears in the list. The script needs an mpv build that uses LuaJIT, which most do. Only one mpv window can be paired at a time, and opening another file in mpv ends the session. The script listens on `127.0.0.1:42730` and only answers requests from browser extensions.
+**Sync with mpv.** Open **Sync with mpv** in the Sync mode list, download [hare.lua](public/hare.lua), and move it to mpv's scripts folder (`%APPDATA%\mpv\scripts` on Windows, `~/.config/mpv/scripts` on macOS and Linux). After that, any video you open in [mpv](https://mpv.io) appears in the list. The script needs an mpv build that uses LuaJIT, which most do. Only one mpv window can be paired at a time, and opening another file in mpv ends the session. The script listens on `127.0.0.1:42730` and only answers requests from browser extensions.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/readme/feature-settings-dark.png">
   <img src=".github/readme/feature-settings-light.png" alt="03. Tuned to you. The Hare settings page with core settings and controller display options.">
 </picture>
 
-- **Core Settings**: turn Hare on or off, include audio-only media, or start with the controller hidden.
-- **Controller Display**: opacity and button size, with a live preview.
+- **Core settings**: turn Hare on or off, include audio-only media, or start with the controller hidden.
+- **Controller display**: opacity and button size, with a live preview.
 - **Keybindings**: each shortcut's key and amount. **Override site shortcut** wins when a site uses the same key.
-- **Excluded Sites**: domains, URLs, or `/regular expressions/`, also applied to players embedded in those pages. Defaults: Instagram, X/Twitter, Imgur, Teams and Google Meet.
+- **Excluded sites**: domains, URLs, or `/regular expressions/`, also applied to players embedded in those pages. Defaults: Instagram, X/Twitter, Imgur, Teams and Google Meet.
 
-Click **Save Settings** to apply changes to open pages. Settings follow you across devices through your browser's sync, and the popup and settings page follow your browser's light or dark theme.
+Click **Save settings** to apply changes to open pages. Settings follow you across devices through your browser's sync, and the popup and settings page follow your browser's light or dark theme.
 
 On an excluded site, **Use Hare on this site** in the popup removes that site's exclusion. Broader domain or regular expression rules stay and can be edited in Settings.
 

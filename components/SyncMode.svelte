@@ -262,7 +262,7 @@
           disabled={selectedTabs.length !== 2}
           onclick={startSync}
         >
-          Start Sync
+          Start sync
         </button>
       {/if}
       {#if !mpvFound}
@@ -283,7 +283,7 @@
   {:else}
     <button class="row-btn" onclick={openSetup}>
       <span class="sync-entry">
-        Sync Mode
+        Sync mode
         <span class="sync-description">Keep two video tabs playing together</span>
       </span>
       <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
