@@ -122,7 +122,8 @@
             </button>
             <button type="button" class="key-clear" title="Clear shortcut"
               aria-label={`Clear shortcut for ${action.label}`}
-              disabled={!binding.key} onclick={() => { editingIndex = null; patch(index, { key: '' }); }}>×</button>
+              disabled={!binding.key} onclick={() => { editingIndex = null; patch(index, { key: '' }); }}
+            ><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
           </div>
         </div>
         <div class="shortcut-field">
@@ -174,7 +175,7 @@
   .key-btn:hover { border-color: var(--color-accent-line); }
   .key-btn.listening { color: #fff; border-color: var(--color-accent-fill-hover); background: var(--color-accent-fill); }
   .key-btn.unbound { color: var(--color-text-muted); border-style: dashed; }
-  .key-clear { width: 1.75rem; height: 2.25rem; flex-shrink: 0; border: 0; border-radius: var(--radius); background: transparent; font-size: 1.125rem; color: var(--color-text-muted); }
+  .key-clear { display: grid; place-items: center; width: 1.75rem; height: 2.25rem; flex-shrink: 0; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--color-text-muted); }
   .key-clear:hover:not(:disabled) { color: var(--color-danger-text); background: var(--color-danger-soft); }
   .value-input { width: 5.125rem; padding: 0.375rem 0.5rem; font-variant-numeric: tabular-nums; }
   .unit { font-size: 0.75rem; color: var(--color-text-muted); }
