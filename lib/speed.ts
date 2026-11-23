@@ -1,3 +1,5 @@
+import { clamp } from './math';
+
 export const SPEED = {
   MIN: 0.07,
   MAX: 16,
@@ -7,7 +9,7 @@ export const SPEED = {
 
 /** Limits a rate to what browsers accept. */
 export function clampRate(rate: number): number {
-  return Math.max(SPEED.MIN, Math.min(SPEED.MAX, rate));
+  return clamp(rate, SPEED.MIN, SPEED.MAX);
 }
 
 /** A speed the user chooses: a rate rounded to the 0.01 Hare displays. Drift corrections use finer rates. */

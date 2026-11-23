@@ -1,4 +1,5 @@
 import { SPEED } from '../speed';
+import { clamp } from '../math';
 
 interface ActionDefinition {
   label: string;
@@ -38,7 +39,7 @@ export function isKeyAction(value: unknown): value is KeyAction {
 
 export function clampBindingValue(action: KeyAction, value: number): number {
   const bounds = ACTIONS[action].value;
-  return bounds ? Math.max(bounds.min, Math.min(bounds.max, value)) : value;
+  return bounds ? clamp(value, bounds.min, bounds.max) : value;
 }
 
 export function defaultKeyBindings(): KeyBinding[] {

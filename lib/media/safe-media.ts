@@ -1,3 +1,5 @@
+import { clamp } from '../math';
+
 /** Media accessors that sites can't intercept by overriding properties on the element. */
 
 const mediaProto = HTMLMediaElement.prototype;
@@ -22,7 +24,7 @@ export function clampSeekTime(media: HTMLMediaElement, value: number): number {
     }
     return closest;
   }
-  return Math.max(0, Number.isFinite(media.duration) ? Math.min(media.duration, value) : value);
+  return clamp(value, 0, Number.isFinite(media.duration) ? media.duration : Infinity);
 }
 
 export const safeMedia = {

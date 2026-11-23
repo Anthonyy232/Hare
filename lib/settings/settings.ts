@@ -2,6 +2,7 @@ import { storage } from '#imports';
 import { BUTTON_SIZE_RANGE, DEFAULT_SETTINGS, OPACITY_RANGE, type Settings } from './schema';
 import { clampBindingValue, isKeyAction, type KeyBinding, type KeyAction } from './key-actions';
 import { isHarePage, matchesDomain, normalizeHost } from '../hostname';
+import { clamp } from '../math';
 
 const STORAGE_KEY = 'hare-settings';
 // chrome.storage.sync's per-item quota.
@@ -10,8 +11,6 @@ const MAX_STORED_BYTES = 8192;
 const settingsStorage = storage.defineItem<Settings>(`sync:${STORAGE_KEY}`, {
   defaultValue: DEFAULT_SETTINGS,
 });
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 function normalizeKeyBindings(value: unknown): KeyBinding[] {
   const stored = new Map<KeyAction, KeyBinding>();

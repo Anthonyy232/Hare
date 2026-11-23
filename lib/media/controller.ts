@@ -1,4 +1,5 @@
 import { SPEED, clampRate, clampSpeed, formatSpeed, sameSpeed } from '../speed';
+import { clamp } from '../math';
 import type { Settings } from '../settings/schema';
 import type { KeyAction } from '../settings/key-actions';
 import type { HitmapButton, PointerTarget } from './controller-contracts';
@@ -17,8 +18,6 @@ function getStyleSheet(): CSSStyleSheet {
   }
   return sharedStyleSheet;
 }
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
 
 /** Events after which the media plays another source, or none. */
 export const SOURCE_CHANGE_EVENTS = ['loadstart', 'emptied', 'error'];
