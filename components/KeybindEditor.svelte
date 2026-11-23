@@ -177,7 +177,7 @@
   .key-btn.unbound { color: var(--color-text-muted); border-style: dashed; }
   .key-clear { display: grid; place-items: center; width: 1.75rem; height: 2.25rem; flex-shrink: 0; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--color-text-muted); }
   .key-clear:hover:not(:disabled) { color: var(--color-danger-text); background: var(--color-danger-soft); }
-  .value-input { width: 5.125rem; padding: 0.375rem 0.5rem; font-variant-numeric: tabular-nums; }
+  .value-input { width: 5.125rem; padding: 0.375rem 0.5rem; font-variant-numeric: tabular-nums; text-align: center; }
   .unit { font-size: 0.75rem; color: var(--color-text-muted); }
   .override-label { display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.5rem; font-size: 0.8125rem; color: var(--color-text-secondary); cursor: pointer; }
   input[type="checkbox"] { width: 1.125rem; height: 1.125rem; margin: 0; flex-shrink: 0; cursor: pointer; }
