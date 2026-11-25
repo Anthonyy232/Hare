@@ -4,6 +4,13 @@
 </picture>
 
 <p align="center">
+  <a href="https://github.com/Anthonyy232/Hare/releases/latest"><img src="https://img.shields.io/github/v/release/Anthonyy232/Hare?style=flat-square" alt="Latest release"></a>
+  <a href="https://github.com/Anthonyy232/Hare/releases"><img src="https://img.shields.io/github/downloads/Anthonyy232/Hare/total?style=flat-square" alt="Total downloads"></a>
+  <a href="https://github.com/Anthonyy232/Hare/actions/workflows/checks.yml"><img src="https://img.shields.io/github/actions/workflow/status/Anthonyy232/Hare/checks.yml?style=flat-square&label=CI" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Anthonyy232/Hare?style=flat-square" alt="License"></a>
+</p>
+
+<p align="center">
   <a href="https://addons.mozilla.org/firefox/addon/hare-video-controller/"><b>Get Hare for Firefox</b></a>
   &nbsp;·&nbsp;
   <a href="https://chromewebstore.google.com/detail/hare/ammjljaajbbpfeiiecicidpjnlagamkn"><b>Get Hare for Chrome and Edge</b></a>
@@ -91,7 +98,7 @@ The extension is built to `.output/firefox-mv3/` and matches the submitted packa
 
 ## Contributing
 
-Contributions are welcome. Read [AGENTS.md](AGENTS.md) before opening a pull request.
+Contributions are welcome. Report bugs in [issues](https://github.com/Anthonyy232/Hare/issues), suggest features in [Discussions](https://github.com/Anthonyy232/Hare/discussions), and read [AGENTS.md](AGENTS.md) before opening a pull request.
 
 If Hare is useful to you, you can support it through [GitHub Sponsors](https://github.com/sponsors/Anthonyy232).
 
