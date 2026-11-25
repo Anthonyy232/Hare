@@ -93,6 +93,8 @@ The extension is built to `.output/firefox-mv3/` and matches the submitted packa
 
 Contributions are welcome. Read [AGENTS.md](AGENTS.md) before opening a pull request.
 
+If Hare is useful to you, you can support it through [GitHub Sponsors](https://github.com/sponsors/Anthonyy232).
+
 ## License
 
 Copyright (c) 2026 Anthony La.
