@@ -1,4 +1,4 @@
-name: Publish to stores
+name: Store
 
 on:
   release:
